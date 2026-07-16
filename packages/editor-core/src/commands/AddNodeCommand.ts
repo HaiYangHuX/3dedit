@@ -1,17 +1,17 @@
-import type { SceneDocument, SceneNode } from '@digital-twin/scene-schema';
+import type { SceneNode } from '@digital-twin/scene-schema';
+import {
+  notifyDocumentChanged,
+  type EditorDocumentContext,
+} from '../context/EditorDocumentContext.js';
 import type { EditorCommand } from './types';
 
-interface DocumentContext {
-  document: SceneDocument;
-}
-
 /** 新增节点命令同时维护节点字典以及根节点或父节点的子项列表。 */
-export class AddNodeCommand implements EditorCommand<DocumentContext> {
+export class AddNodeCommand implements EditorCommand<EditorDocumentContext> {
   readonly label = '新增节点';
 
   constructor(private readonly node: SceneNode) {}
 
-  execute(context: DocumentContext): void {
+  execute(context: EditorDocumentContext): void {
     if (context.document.nodes[this.node.id]) {
       throw new Error(`节点已存在: ${this.node.id}`);
     }
@@ -29,15 +29,18 @@ export class AddNodeCommand implements EditorCommand<DocumentContext> {
     } else {
       context.document.rootNodeIds.push(this.node.id);
     }
+    notifyDocumentChanged(context);
   }
 
-  undo(context: DocumentContext): void {
+  undo(context: EditorDocumentContext): void {
     delete context.document.nodes[this.node.id];
     const siblings = this.node.parentId
       ? context.document.nodes[this.node.parentId]?.childIds
       : context.document.rootNodeIds;
-    if (!siblings) return;
-    const index = siblings.indexOf(this.node.id);
-    if (index >= 0) siblings.splice(index, 1);
+    if (siblings) {
+      const index = siblings.indexOf(this.node.id);
+      if (index >= 0) siblings.splice(index, 1);
+    }
+    notifyDocumentChanged(context);
   }
 }

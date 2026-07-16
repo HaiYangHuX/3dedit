@@ -15,6 +15,14 @@ export class CommandHistory<TContext> {
     return this.cursor !== this.savedCursor;
   }
 
+  get canUndo(): boolean {
+    return this.cursor > 0;
+  }
+
+  get canRedo(): boolean {
+    return this.cursor < this.commands.length;
+  }
+
   async execute(command: EditorCommand<TContext>): Promise<void> {
     await command.execute(this.context);
     this.commands.splice(this.cursor);
