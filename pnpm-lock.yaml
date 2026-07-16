@@ -55,6 +55,12 @@ importers:
       '@digital-twin/api-contracts':
         specifier: workspace:*
         version: link:../../packages/api-contracts
+      '@digital-twin/scene-schema':
+        specifier: workspace:*
+        version: link:../../packages/scene-schema
+      '@fastify/cors':
+        specifier: 11.3.0
+        version: 11.3.0
       '@fastify/static':
         specifier: 8.3.0
         version: 8.3.0
@@ -88,6 +94,9 @@ importers:
       rxjs:
         specifier: 7.8.2
         version: 7.8.2
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
     devDependencies:
       '@types/node':
         specifier: 24.0.0
@@ -938,6 +947,12 @@ packages:
     resolution:
       {
         integrity: sha512-LbLHBuSAdGdSFZYTLVA3+Ch2t+sA6nq3Ejc6XLAKiQ6ViS2qFnvicpj0htsx03FyYeLs04HfRNBsz/a8SvbcUw==,
+      }
+
+  '@fastify/cors@11.3.0':
+    resolution:
+      {
+        integrity: sha512-ggQGua+xHv1MvePbPr0v//xLYEsCXbWspquXCJS9Ot5YoRXq8J8ZWzHnxDBVnbtXosvistXo6LtNzOJswf64Fw==,
       }
 
   '@fastify/error@4.2.0':
@@ -5192,6 +5207,11 @@ snapshots:
   '@fastify/cors@11.2.0':
     dependencies:
       fastify-plugin: 5.1.0
+      toad-cache: 3.7.4
+
+  '@fastify/cors@11.3.0':
+    dependencies:
+      fastify-plugin: 6.0.0
       toad-cache: 3.7.4
 
   '@fastify/error@4.2.0': {}

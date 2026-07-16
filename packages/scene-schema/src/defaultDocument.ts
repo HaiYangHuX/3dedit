@@ -1,4 +1,4 @@
-import type { SceneDocument } from './schema';
+import type { SceneDocument } from './schema.js';
 
 /** 创建不含业务节点的可保存场景，供新建项目和测试复用。 */
 export function createDefaultSceneDocument(

@@ -1,4 +1,4 @@
-export { createDefaultSceneDocument } from './defaultDocument';
+export { createDefaultSceneDocument } from './defaultDocument.js';
 export {
   sceneDocumentSchema,
   sceneNodeSchema,
@@ -6,4 +6,4 @@ export {
   type SceneDocument,
   type SceneNode,
   type Transform,
-} from './schema';
+} from './schema.js';

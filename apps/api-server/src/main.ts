@@ -14,6 +14,7 @@ async function bootstrap(): Promise<void> {
     new FastifyAdapter(),
   );
   app.setGlobalPrefix('api');
+  app.enableCors({ origin: true });
   app.enableShutdownHooks();
 
   const swaggerConfig = new DocumentBuilder()
