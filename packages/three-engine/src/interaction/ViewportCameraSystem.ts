@@ -1,4 +1,4 @@
-import { PerspectiveCamera, Vector3, type QuaternionTuple } from 'three';
+import { Vector3, type PerspectiveCamera, type QuaternionTuple } from 'three';
 
 export type CameraView = 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom';
 

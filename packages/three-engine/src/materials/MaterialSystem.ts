@@ -18,12 +18,12 @@ import {
   NoColorSpace,
   RepeatWrapping,
   SRGBColorSpace,
-  Texture,
   TextureLoader,
   Vector2,
   type Material,
   type Object3D,
   type Side,
+  type Texture,
   type Wrapping,
 } from 'three';
 import type { AssetResolver, TextureAssetFormat } from '../assets/types.js';

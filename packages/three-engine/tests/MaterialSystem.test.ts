@@ -9,7 +9,6 @@ import {
   ClampToEdgeWrapping,
   Mesh,
   MeshBasicMaterial,
-  MeshPhongMaterial,
   MeshPhysicalMaterial,
   MeshStandardMaterial,
   MirroredRepeatWrapping,
@@ -17,6 +16,7 @@ import {
   RepeatWrapping,
   SRGBColorSpace,
   Texture,
+  type MeshPhongMaterial,
 } from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import { AssetLoader } from '../src/assets/AssetLoader.js';
