@@ -16,6 +16,7 @@ export type {
   AssetResolver,
   LoadedAsset,
   ModelAssetFormat,
+  TextureAssetFormat,
 } from './assets/types';
 export { SceneDocumentSystem } from './documents/SceneDocumentSystem';
 export { EditorEngine, type EditorEngineEventMap } from './EditorEngine';
@@ -35,6 +36,14 @@ export {
   ViewportDropSystem,
   type ViewportDropOptions,
 } from './interaction/ViewportDropSystem';
+export {
+  MaterialSystem,
+  StaleMaterialLoadError,
+  type MaterialApplyError,
+  type MaterialApplyReport,
+  type MaterialSystemOptions,
+  type TextureLoaderLike,
+} from './materials/MaterialSystem';
 export { disposeObject3D, ResourceTracker } from './ResourceTracker';
 export {
   RuntimeHostAdapter,

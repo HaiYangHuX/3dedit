@@ -1,7 +1,8 @@
 import type { AnimationClip, Object3D } from 'three';
 
 export type ModelAssetFormat = 'glb' | 'gltf' | 'fbx' | 'obj' | 'stl' | 'usdz';
-export type EngineAssetFormat = ModelAssetFormat | 'hdr';
+export type TextureAssetFormat = 'png' | 'jpg' | 'jpeg' | 'webp';
+export type EngineAssetFormat = ModelAssetFormat | TextureAssetFormat | 'hdr';
 
 export interface AssetDescriptor {
   assetId: string;

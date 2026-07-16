@@ -90,6 +90,11 @@ export class AssetLoader implements AssetLoaderLike {
       }
       case 'hdr':
         throw new Error('HDR 资源必须由 SceneSettingsSystem 加载');
+      case 'png':
+      case 'jpg':
+      case 'jpeg':
+      case 'webp':
+        throw new Error('图片资源必须由 MaterialSystem 加载');
     }
     abortIfNeeded(signal);
     loaded.root.name = descriptor.name;
