@@ -1,5 +1,33 @@
 export type { HealthResponse } from './health.js';
 export {
+  assetDetailSchema,
+  assetFileSchema,
+  assetFormatSchema,
+  assetKindSchema,
+  assetListResponseSchema,
+  assetMetadataSchema,
+  assetSchema,
+  assetStatusSchema,
+  completeUploadInputSchema,
+  createUploadInputSchema,
+  listAssetsQuerySchema,
+  updateAssetInputSchema,
+  uploadSessionSchema,
+} from './asset.js';
+export type {
+  Asset,
+  AssetDetail,
+  AssetFormat,
+  AssetKind,
+  AssetListResponse,
+  AssetStatus,
+  CompleteUploadInput,
+  CreateUploadInput,
+  ListAssetsQuery,
+  UpdateAssetInput,
+  UploadSession,
+} from './asset.js';
+export {
   copyProjectInputSchema,
   createProjectInputSchema,
   listProjectsQuerySchema,

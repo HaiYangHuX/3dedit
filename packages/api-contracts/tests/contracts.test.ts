@@ -1,8 +1,10 @@
 import { createDefaultSceneDocument } from '@digital-twin/scene-schema';
 import { describe, expect, it } from 'vitest';
 import {
+  completeUploadInputSchema,
   createProjectInputSchema,
   createSceneInputSchema,
+  createUploadInputSchema,
   reorderScenesInputSchema,
   saveSceneInputSchema,
   updateProjectInputSchema,
@@ -40,6 +42,45 @@ describe('项目与场景 API 契约', () => {
     });
     expect(() =>
       saveSceneInputSchema.parse({ baseRevision: -1, document }),
+    ).toThrow();
+  });
+});
+
+describe('资源上传 API 契约', () => {
+  const sha256 = 'a'.repeat(64);
+
+  it('从文件扩展名归一化资源格式与类型', () => {
+    expect(
+      createUploadInputSchema.parse({
+        fileName: 'Pump.GLB',
+        size: 6_000_000,
+        sha256,
+        mimeType: 'model/gltf-binary',
+      }),
+    ).toMatchObject({ format: 'glb', kind: 'model' });
+    expect(() =>
+      createUploadInputSchema.parse({
+        fileName: 'virus.exe',
+        size: 1,
+        sha256,
+        mimeType: 'application/octet-stream',
+      }),
+    ).toThrow();
+  });
+
+  it('拒绝重复的 multipart partNumber', () => {
+    expect(
+      completeUploadInputSchema.parse({
+        parts: [{ partNumber: 1, etag: 'etag-1' }],
+      }),
+    ).toBeDefined();
+    expect(() =>
+      completeUploadInputSchema.parse({
+        parts: [
+          { partNumber: 1, etag: 'etag-1' },
+          { partNumber: 1, etag: 'etag-2' },
+        ],
+      }),
     ).toThrow();
   });
 });
