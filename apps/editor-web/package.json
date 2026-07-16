@@ -10,6 +10,7 @@
     "typecheck": "vue-tsc -b --pretty false"
   },
   "dependencies": {
+    "@digital-twin/api-contracts": "workspace:*",
     "@digital-twin/editor-core": "workspace:*",
     "@digital-twin/scene-schema": "workspace:*",
     "@digital-twin/three-engine": "workspace:*",

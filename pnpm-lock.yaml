@@ -129,6 +129,9 @@ importers:
 
   apps/editor-web:
     dependencies:
+      '@digital-twin/api-contracts':
+        specifier: workspace:*
+        version: link:../../packages/api-contracts
       '@digital-twin/editor-core':
         specifier: workspace:*
         version: link:../../packages/editor-core
