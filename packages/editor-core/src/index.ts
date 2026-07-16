@@ -14,6 +14,10 @@ export {
   UpdateSceneSettingsCommand,
   type EditableSceneSettingsPatch,
 } from './commands/UpdateSceneSettingsCommand';
+export {
+  UpdateRuntimeConfigCommand,
+  type RuntimeConfigPatch,
+} from './commands/UpdateRuntimeConfigCommand';
 export type { EditorCommand } from './commands/types';
 export {
   rebuildAssetReferences,

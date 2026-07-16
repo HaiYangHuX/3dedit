@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { Asset } from '@digital-twin/api-contracts';
+import type { Asset, PublicationDetail } from '@digital-twin/api-contracts';
+import type { RuntimeConfigPatch } from '@digital-twin/editor-core';
 import type {
   SceneStats,
   SelectionState,
@@ -11,14 +12,18 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import EditorCanvas from '../components/EditorCanvas.vue';
 import AssetLibraryPanel from '../components/AssetLibraryPanel.vue';
 import NodeInspector from '../components/editor/NodeInspector.vue';
+import InteractionPanel from '../components/editor/InteractionPanel.vue';
+import RuntimeDiagnostics from '../components/editor/RuntimeDiagnostics.vue';
 import SceneSettingsInspector from '../components/editor/SceneSettingsInspector.vue';
 import SceneTree from '../components/editor/SceneTree.vue';
+import SocketTaskPanel from '../components/editor/SocketTaskPanel.vue';
 import {
   useEditorCommands,
   type EditorCanvasBridge,
 } from '../editor/useEditorCommands';
 import { useDocumentStore, type SaveState } from '../stores/document';
 import { useSelectionStore } from '../stores/selection';
+import { publicationApi } from '../api/publications';
 
 const props = withDefaults(
   defineProps<{ projectId?: string; sceneId?: string }>(),
@@ -35,6 +40,14 @@ const inspectorTab = ref<'scene' | 'interaction' | 'socket' | 'settings'>(
 const assetCategory = ref<
   'model' | 'geometry' | 'light' | 'chart' | 'text' | 'video' | 'shader'
 >('model');
+const runtimeNodes = computed(() => Object.values(document.value.nodes));
+const runtimeDiagnostics = ref<string[]>([]);
+const publication = ref<PublicationDetail>();
+const publishing = ref(false);
+let previewWindow: Window | null = null;
+const runtimeOrigin = (
+  import.meta.env.VITE_RUNTIME_ORIGIN ?? 'http://127.0.0.1:5174'
+).replace(/\/$/, '');
 
 function showEditorError(reason: unknown, fallback = '编辑操作执行失败'): void {
   ElMessage.error(reason instanceof Error ? reason.message : fallback);
@@ -141,6 +154,66 @@ function changeSelection(selection: SelectionState): void {
 function changeStats(value: SceneStats): void {
   stats.value = value;
 }
+
+async function ensureRuntimeDocumentSaved(): Promise<void> {
+  if (saveState.value === 'dirty' || saveState.value === 'error') {
+    await store.save();
+  }
+}
+
+async function openPreview(): Promise<void> {
+  try {
+    await ensureRuntimeDocumentSaved();
+    const url = `${runtimeOrigin}/preview/${encodeURIComponent(props.sceneId)}`;
+    previewWindow = window.open(url, 'digital-twin-preview');
+    if (!previewWindow) throw new Error('浏览器阻止了预览窗口');
+    runtimeDiagnostics.value.push('已打开当前草稿预览');
+  } catch (reason) {
+    showEditorError(reason, '打开预览失败');
+  }
+}
+
+async function publishScene(): Promise<void> {
+  publishing.value = true;
+  try {
+    await ensureRuntimeDocumentSaved();
+    publication.value = await publicationApi.publish(props.projectId, {
+      sceneId: props.sceneId,
+    });
+    runtimeDiagnostics.value.push('当前场景已原子发布');
+    ElMessage.success('发布成功');
+  } catch (reason) {
+    showEditorError(reason, '发布失败，已有线上内容未改变');
+  } finally {
+    publishing.value = false;
+  }
+}
+
+function commitRuntimeConfig(patch: RuntimeConfigPatch): void {
+  runCommand(commands.updateRuntimeConfig(patch));
+}
+
+function simulateSocket(dataSourceId: string, payload: unknown): void {
+  if (!previewWindow || previewWindow.closed) {
+    runtimeDiagnostics.value.push('请先打开预览，再发送模拟消息');
+    ElMessage.warning('请先打开预览窗口');
+    return;
+  }
+  previewWindow.postMessage(
+    {
+      type: 'digital-twin:socket-message',
+      dataSourceId,
+      payload,
+    },
+    new URL(runtimeOrigin).origin,
+  );
+  runtimeDiagnostics.value.push(`已发送模拟消息：${dataSourceId}`);
+}
+
+async function copyText(value: string): Promise<void> {
+  await navigator.clipboard.writeText(value);
+  ElMessage.success('已复制');
+}
 </script>
 
 <template>
@@ -184,8 +257,18 @@ function changeStats(value: SceneStats): void {
         >
           重新加载
         </ElButton>
-        <ElButton size="small">预览</ElButton>
-        <ElButton type="primary" size="small">发布</ElButton>
+        <ElButton size="small" data-testid="preview-scene" @click="openPreview">
+          预览
+        </ElButton>
+        <ElButton
+          type="primary"
+          size="small"
+          :loading="publishing"
+          data-testid="publish-scene"
+          @click="publishScene"
+        >
+          发布
+        </ElButton>
       </ElButtonGroup>
     </header>
 
@@ -363,11 +446,24 @@ function changeStats(value: SceneStats): void {
         />
         <div v-else class="empty-panel">选择节点后编辑属性</div>
       </div>
-      <div v-else-if="inspectorTab === 'interaction'" class="empty-panel">
-        低代码交互编排将在下一阶段接入
+      <div v-else-if="inspectorTab === 'interaction'" class="runtime-tab-panel">
+        <InteractionPanel
+          :nodes="runtimeNodes"
+          :interactions="document.interactions"
+          :data-sources="document.dataSources"
+          @commit="commitRuntimeConfig"
+        />
+        <RuntimeDiagnostics :entries="runtimeDiagnostics" />
       </div>
-      <div v-else-if="inspectorTab === 'socket'" class="empty-panel">
-        WebSocket 数据源与任务面板将在下一阶段接入
+      <div v-else-if="inspectorTab === 'socket'" class="runtime-tab-panel">
+        <SocketTaskPanel
+          :nodes="runtimeNodes"
+          :data-sources="document.dataSources"
+          :socket-tasks="document.socketTasks"
+          @commit="commitRuntimeConfig"
+          @simulate="simulateSocket"
+        />
+        <RuntimeDiagnostics :entries="runtimeDiagnostics" />
       </div>
       <SceneSettingsInspector
         v-else
@@ -393,5 +489,25 @@ function changeStats(value: SceneStats): void {
         {{ stateLabel }}
       </span>
     </footer>
+
+    <section v-if="publication" class="publication-result">
+      <strong>发布成功</strong>
+      <a :href="publication.runtimeUrl" target="_blank">{{
+        publication.runtimeUrl
+      }}</a>
+      <button type="button" @click="copyText(publication.runtimeUrl)">
+        复制地址
+      </button>
+      <button type="button" @click="copyText(publication.iframeCode)">
+        复制 iframe
+      </button>
+      <button
+        type="button"
+        aria-label="关闭发布结果"
+        @click="publication = undefined"
+      >
+        ×
+      </button>
+    </section>
   </main>
 </template>

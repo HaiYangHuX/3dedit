@@ -44,5 +44,17 @@ describe('EditorWorkspace', () => {
       '场景内容',
     );
     expect(wrapper.get('[data-testid="status-bar"]').text()).toContain('FPS');
+    expect(wrapper.get('[data-testid="preview-scene"]')).toBeTruthy();
+    expect(wrapper.get('[data-testid="publish-scene"]')).toBeTruthy();
+
+    const tabs = wrapper.findAll('.inspector-tabs button');
+    await tabs.find((tab) => tab.text() === '交互事件')!.trigger('click');
+    expect(wrapper.findComponent({ name: 'InteractionPanel' }).exists()).toBe(
+      true,
+    );
+    await tabs.find((tab) => tab.text() === 'Socket 任务')!.trigger('click');
+    expect(wrapper.findComponent({ name: 'SocketTaskPanel' }).exists()).toBe(
+      true,
+    );
   });
 });

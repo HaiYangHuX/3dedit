@@ -5,9 +5,11 @@ import {
   ReparentNodeCommand,
   TransformNodesCommand,
   UpdateNodeCommand,
+  UpdateRuntimeConfigCommand,
   UpdateSceneSettingsCommand,
   type EditableNodePatch,
   type EditableSceneSettingsPatch,
+  type RuntimeConfigPatch,
 } from '@digital-twin/editor-core';
 import type {
   SceneDocument,
@@ -182,6 +184,10 @@ export function useEditorCommands(
     canvas.value?.applySceneSettings?.(documentStore.document.settings);
   }
 
+  async function updateRuntimeConfig(patch: RuntimeConfigPatch): Promise<void> {
+    await documentStore.execute(new UpdateRuntimeConfigCommand(patch));
+  }
+
   async function commitTransform(commit: TransformCommit): Promise<void> {
     await documentStore.execute(
       new TransformNodesCommand([
@@ -260,6 +266,7 @@ export function useEditorCommands(
     duplicateNode,
     groupNodes,
     updateSceneSettings,
+    updateRuntimeConfig,
     commitTransform,
     undo,
     redo,
