@@ -107,6 +107,10 @@ function applyNodeUpdated(node: SceneNode): void {
   engine.updateNode(node);
 }
 
+function applySceneSettings(settings: SceneDocument['settings']): void {
+  engine.updateSettings(settings);
+}
+
 function setSelection(ids: Iterable<string>, primaryId?: string | null): void {
   engine.setSelection(ids, primaryId);
 }
@@ -198,6 +202,7 @@ defineExpose({
   applyNodeAdded,
   applyNodeRemoved,
   applyNodeUpdated,
+  applySceneSettings,
   setSelection,
   setTransformMode,
   setTransformSpace,

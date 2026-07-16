@@ -10,6 +10,10 @@ export {
   UpdateNodeCommand,
   type EditableNodePatch,
 } from './commands/UpdateNodeCommand';
+export {
+  UpdateSceneSettingsCommand,
+  type EditableSceneSettingsPatch,
+} from './commands/UpdateSceneSettingsCommand';
 export type { EditorCommand } from './commands/types';
 export {
   rebuildAssetReferences,

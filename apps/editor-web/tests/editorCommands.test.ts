@@ -191,4 +191,35 @@ describe('editor commands', () => {
 
     await vi.waitFor(() => expect(onError).toHaveBeenCalledWith(failure));
   });
+
+  it('可复制节点并将同层选中节点收入新建组', async () => {
+    const store = useDocumentStore();
+    await store.loadScene('scene-1');
+    const bridge: EditorCanvasBridge = {
+      applyNodeAdded: vi.fn().mockResolvedValue(undefined),
+      applyNodeRemoved: vi.fn(),
+      applyNodeUpdated: vi.fn(),
+      loadDocument: vi.fn().mockResolvedValue(undefined),
+      setSelection: vi.fn(),
+      setTransformMode: vi.fn(),
+      focusSelection: vi.fn(),
+    };
+    const commands = useEditorCommands(shallowRef(bridge));
+    const first = await commands.addAssetNode(asset, [0, 0, 0]);
+    const second = await commands.addAssetNode(
+      { id: 'asset-2', name: '罐体' },
+      [2, 0, 0],
+    );
+
+    const copy = await commands.duplicateNode(first.id);
+    const group = await commands.groupNodes([first.id, second.id]);
+
+    expect(copy.id).not.toBe(first.id);
+    expect(copy.name).toContain('副本');
+    expect(copy.components).toEqual(first.components);
+    expect(group.childIds).toEqual([first.id, second.id]);
+    expect(store.document.nodes[first.id]?.parentId).toBe(group.id);
+    expect(store.document.nodes[second.id]?.parentId).toBe(group.id);
+    expect(bridge.loadDocument).toHaveBeenCalled();
+  });
 });

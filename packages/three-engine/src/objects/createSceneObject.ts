@@ -12,20 +12,27 @@ import {
   PointLight,
   SphereGeometry,
   SpotLight,
+  type BufferGeometry,
   type Light,
   type Object3D,
 } from 'three';
 import type { AssetInstanceProvider } from '../types.js';
 
-function geometryObject(
+export function createPrimitiveGeometry(
   primitive: 'box' | 'sphere' | 'plane' | 'cylinder',
-): Mesh {
-  const geometry = {
+): BufferGeometry {
+  return {
     box: () => new BoxGeometry(1, 1, 1),
     sphere: () => new SphereGeometry(0.5, 32, 16),
     plane: () => new PlaneGeometry(1, 1),
     cylinder: () => new CylinderGeometry(0.5, 0.5, 1, 32),
   }[primitive]();
+}
+
+function geometryObject(
+  primitive: 'box' | 'sphere' | 'plane' | 'cylinder',
+): Mesh {
+  const geometry = createPrimitiveGeometry(primitive);
   return new Mesh(
     geometry,
     new MeshStandardMaterial({
@@ -99,9 +106,10 @@ export async function createSceneObject(
     const light = node.components.find(
       (component) => component.kind === 'light',
     );
-    if (geometry?.kind === 'geometry')
+    if (geometry?.kind === 'geometry') {
       root = geometryObject(geometry.primitive);
-    else if (light?.kind === 'light') root = lightObject(light);
+      root.userData.geometryPrimitive = geometry.primitive;
+    } else if (light?.kind === 'light') root = lightObject(light);
     else root = new Group();
   }
   applySceneNode(root, node);

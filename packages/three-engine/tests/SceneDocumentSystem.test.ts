@@ -130,6 +130,61 @@ describe('SceneDocumentSystem', () => {
     expect(system.getStats()).toMatchObject({ objectCount: 8, meshCount: 3 });
   });
 
+  it('属性面板切换几何体类型时替换并释放旧几何资源', async () => {
+    const scene = new Scene();
+    const assets: AssetInstanceProvider = {
+      beginGeneration: vi.fn(() => 1),
+      instantiate: vi.fn(async () => modelRoot()),
+      release: vi.fn(() => false),
+      dispose: vi.fn(),
+    };
+    const system = new SceneDocumentSystem(scene, assets);
+    const document = createDefaultSceneDocument('project-1', 'scene-1', '场景');
+    const box = node('box', { kind: 'geometry', primitive: 'box' });
+    document.nodes = { box };
+    document.rootNodeIds = ['box'];
+    await system.loadDocument(document);
+    const object = system.getObject('box') as Mesh;
+    const oldGeometry = object.geometry;
+    const dispose = vi.spyOn(oldGeometry, 'dispose');
+
+    system.updateNode({
+      ...box,
+      components: [{ kind: 'geometry', primitive: 'sphere' }],
+    });
+
+    expect(object.geometry.type).toBe('SphereGeometry');
+    expect(object.geometry).not.toBe(oldGeometry);
+    expect(dispose).toHaveBeenCalledOnce();
+    system.dispose();
+  });
+
+  it('统计不包含被隐藏祖先覆盖的子网格', async () => {
+    const scene = new Scene();
+    const assets: AssetInstanceProvider = {
+      beginGeneration: vi.fn(() => 1),
+      instantiate: vi.fn(async () => modelRoot()),
+      release: vi.fn(() => false),
+      dispose: vi.fn(),
+    };
+    const system = new SceneDocumentSystem(scene, assets);
+    const document = createDefaultSceneDocument('project-1', 'scene-1', '场景');
+    const parent = node('parent', { kind: 'text', data: {} });
+    parent.enabled = false;
+    parent.childIds = ['child'];
+    const child = node(
+      'child',
+      { kind: 'geometry', primitive: 'box' },
+      'parent',
+    );
+    document.nodes = { parent, child };
+    document.rootNodeIds = ['parent'];
+    await system.loadDocument(document);
+
+    expect(system.getStats().meshCount).toBe(0);
+    system.dispose();
+  });
+
   it('切换场景时释放旧对象并只保留新文档节点', async () => {
     const scene = new Scene();
     let generation = 0;

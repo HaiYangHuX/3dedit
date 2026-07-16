@@ -37,6 +37,7 @@ import {
 } from './interaction/TransformSystem.js';
 import { ViewportDropSystem } from './interaction/ViewportDropSystem.js';
 import { ResourceTracker } from './ResourceTracker';
+import { SceneSettingsSystem } from './settings/SceneSettingsSystem.js';
 import type { LoadReport, SceneStats } from './types.js';
 
 export interface EditorEngineEventMap {
@@ -64,6 +65,7 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
   private selectionSystem?: SelectionSystem;
   private transformSystem?: TransformSystem;
   private dropSystem?: ViewportDropSystem;
+  private settingsSystem?: SceneSettingsSystem;
   private assetResolver?: AssetResolver;
   private resizeObserver?: ResizeObserver;
   private frameId?: number;
@@ -89,6 +91,7 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     renderer.shadowMap.enabled = true;
     container.append(renderer.domElement);
     this.renderer = renderer;
+    this.settingsSystem = new SceneSettingsSystem(this.scene, renderer);
 
     this.controls = new OrbitControls(this.camera, renderer.domElement);
     this.controls.target.set(0, 0.5, 0);
@@ -173,6 +176,7 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     resolver: AssetResolver,
   ): Promise<LoadReport> {
     if (!this.renderer) throw new Error('EditorEngine 尚未初始化');
+    this.settingsSystem?.apply(document.settings);
     this.selectionSystem?.setSelection([]);
     this.transformSystem?.setSelection(null);
     if (!this.documentSystem || resolver !== this.assetResolver) {
@@ -221,6 +225,11 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
       this.transformSystem?.setSelection(selection.primaryId);
     }
     this.emitStats();
+    this.invalidate();
+  }
+
+  updateSettings(settings: SceneDocument['settings']): void {
+    this.settingsSystem?.apply(settings);
     this.invalidate();
   }
 
@@ -319,6 +328,7 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.resizeObserver?.disconnect();
     this.selectionSystem?.dispose();
     this.transformSystem?.dispose();
+    this.settingsSystem?.dispose();
     this.controls?.removeEventListener('change', this.invalidate);
     this.controls?.dispose();
     this.documentSystem?.dispose();

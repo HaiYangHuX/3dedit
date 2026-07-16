@@ -2,9 +2,12 @@ import type { Asset } from '@digital-twin/api-contracts';
 import {
   AddNodeCommand,
   RemoveNodesCommand,
+  ReparentNodeCommand,
   TransformNodesCommand,
   UpdateNodeCommand,
+  UpdateSceneSettingsCommand,
   type EditableNodePatch,
+  type EditableSceneSettingsPatch,
 } from '@digital-twin/editor-core';
 import type {
   SceneDocument,
@@ -20,6 +23,7 @@ import {
   createAssetNode,
   createGeometryNode,
   createLightNode,
+  createSceneNode,
   type GeometryPrimitive,
   type SceneLightType,
 } from './createSceneNode';
@@ -31,6 +35,7 @@ export interface EditorCanvasBridge {
   applyNodeAdded(node: SceneNode): Promise<void>;
   applyNodeRemoved(ids: Iterable<string>): void;
   applyNodeUpdated(node: SceneNode): void;
+  applySceneSettings?(settings: SceneDocument['settings']): void;
   setSelection(ids: Iterable<string>, primaryId?: string | null): void;
   setTransformMode(mode: 'translate' | 'rotate' | 'scale'): void;
   setTransformSpace?(space: 'local' | 'world'): void;
@@ -63,6 +68,7 @@ export function useEditorCommands(
 
   function select(selection: SelectionState): void {
     selectionStore.set(selection);
+    syncCanvasSelection();
   }
 
   async function addNode(node: SceneNode): Promise<SceneNode> {
@@ -94,8 +100,7 @@ export function useEditorCommands(
     return addNode(createLightNode(lightType, position));
   }
 
-  async function removeSelection(): Promise<void> {
-    const ids = [...selectionStore.ids];
+  async function removeNodes(ids: string[]): Promise<void> {
     if (ids.length === 0) return;
     await documentStore.execute(new RemoveNodesCommand(ids));
     canvas.value?.applyNodeRemoved(ids);
@@ -103,12 +108,78 @@ export function useEditorCommands(
     syncCanvasSelection();
   }
 
-  async function updateSelection(patch: EditableNodePatch): Promise<void> {
-    const nodeId = selectionStore.primaryId;
-    if (!nodeId) return;
+  function removeSelection(): Promise<void> {
+    return removeNodes([...selectionStore.ids]);
+  }
+
+  async function updateNode(
+    nodeId: string,
+    patch: EditableNodePatch,
+  ): Promise<void> {
     await documentStore.execute(new UpdateNodeCommand(nodeId, patch));
     const node = documentStore.document.nodes[nodeId];
     if (node) canvas.value?.applyNodeUpdated(node);
+  }
+
+  async function updateSelection(patch: EditableNodePatch): Promise<void> {
+    const nodeId = selectionStore.primaryId;
+    if (!nodeId) return;
+    await updateNode(nodeId, patch);
+  }
+
+  async function reparentNode(
+    nodeId: string,
+    parentId: string | null,
+    index: number,
+  ): Promise<void> {
+    await documentStore.execute(
+      new ReparentNodeCommand(nodeId, parentId, index),
+    );
+    // SceneDocumentSystem 恢复层级时会保持模型模板缓存，这里优先保证父子矩阵正确。
+    await canvas.value?.loadDocument(documentStore.document);
+  }
+
+  async function duplicateNode(nodeId: string): Promise<SceneNode> {
+    const source = documentStore.document.nodes[nodeId];
+    if (!source) throw new Error(`节点不存在: ${nodeId}`);
+    // 属性协议是 JSON，显式换新 ID 并移除子级，避免复制单节点时引入悬空 childIds。
+    const copy = JSON.parse(JSON.stringify(source)) as SceneNode;
+    copy.id = globalThis.crypto.randomUUID();
+    copy.name = `${source.name} 副本`;
+    copy.childIds = [];
+    return addNode(copy);
+  }
+
+  async function groupNodes(nodeIds: string[]): Promise<SceneNode> {
+    const nodes = [...new Set(nodeIds)].flatMap((id) => {
+      const node = documentStore.document.nodes[id];
+      return node ? [node] : [];
+    });
+    if (nodes.length === 0) throw new Error('没有可组合的节点');
+    const parentId = nodes[0]?.parentId ?? null;
+    if (nodes.some((node) => node.parentId !== parentId)) {
+      throw new Error('只能组合位于同一层级的节点');
+    }
+    const group = createSceneNode('组', [], { parentId });
+    await addNode(group);
+    for (let index = 0; index < nodes.length; index += 1) {
+      const node = nodes[index];
+      if (!node) continue;
+      await documentStore.execute(
+        new ReparentNodeCommand(node.id, group.id, index),
+      );
+    }
+    await canvas.value?.loadDocument(documentStore.document);
+    selectionStore.set({ ids: [group.id], primaryId: group.id });
+    syncCanvasSelection();
+    return documentStore.document.nodes[group.id] ?? group;
+  }
+
+  async function updateSceneSettings(
+    patch: EditableSceneSettingsPatch,
+  ): Promise<void> {
+    await documentStore.execute(new UpdateSceneSettingsCommand(patch));
+    canvas.value?.applySceneSettings?.(documentStore.document.settings);
   }
 
   async function commitTransform(commit: TransformCommit): Promise<void> {
@@ -181,8 +252,14 @@ export function useEditorCommands(
     addAssetNode,
     addGeometry,
     addLight,
+    removeNodes,
     removeSelection,
+    updateNode,
     updateSelection,
+    reparentNode,
+    duplicateNode,
+    groupNodes,
+    updateSceneSettings,
     commitTransform,
     undo,
     redo,

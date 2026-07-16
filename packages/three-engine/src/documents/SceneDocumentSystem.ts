@@ -4,6 +4,7 @@ import { StaleAssetLoadError } from '../assets/AssetInstanceSystem.js';
 import { disposeObject3D } from '../ResourceTracker.js';
 import {
   applySceneNode,
+  createPrimitiveGeometry,
   createSceneObject,
 } from '../objects/createSceneObject.js';
 import type {
@@ -100,6 +101,20 @@ export class SceneDocumentSystem {
     const object = this.objects.get(node.id);
     if (!object) throw new Error(`节点不存在: ${node.id}`);
     applySceneNode(object, node);
+    const geometry = node.components.find(
+      (component) => component.kind === 'geometry',
+    );
+    if (
+      geometry?.kind === 'geometry' &&
+      object instanceof Mesh &&
+      typeof object.userData.geometryPrimitive === 'string' &&
+      object.userData.geometryPrimitive !== geometry.primitive
+    ) {
+      // 基础几何体由当前节点独占，替换时可立即释放；模型缓存的共享几何不走此分支。
+      object.geometry.dispose();
+      object.geometry = createPrimitiveGeometry(geometry.primitive);
+      object.userData.geometryPrimitive = geometry.primitive;
+    }
     const light = node.components.find(
       (component) => component.kind === 'light',
     );
@@ -130,7 +145,9 @@ export class SceneDocumentSystem {
     let vertexCount = 0;
     let faceCount = 0;
     this.root.traverse((object) => {
-      if (!(object instanceof Mesh) || !object.visible) return;
+      if (!(object instanceof Mesh) || !this.isEffectivelyVisible(object)) {
+        return;
+      }
       meshCount += 1;
       const positions = object.geometry.getAttribute('position');
       const vertices = positions?.count ?? 0;
@@ -143,6 +160,16 @@ export class SceneDocumentSystem {
       vertexCount,
       faceCount,
     };
+  }
+
+  private isEffectivelyVisible(object: Object3D): boolean {
+    let current: Object3D | null = object;
+    while (current) {
+      if (!current.visible) return false;
+      if (current === this.root) return true;
+      current = current.parent;
+    }
+    return false;
   }
 
   dispose(): void {

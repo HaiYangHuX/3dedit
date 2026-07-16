@@ -10,11 +10,15 @@ import { storeToRefs } from 'pinia';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import EditorCanvas from '../components/EditorCanvas.vue';
 import AssetLibraryPanel from '../components/AssetLibraryPanel.vue';
+import NodeInspector from '../components/editor/NodeInspector.vue';
+import SceneSettingsInspector from '../components/editor/SceneSettingsInspector.vue';
+import SceneTree from '../components/editor/SceneTree.vue';
 import {
   useEditorCommands,
   type EditorCanvasBridge,
 } from '../editor/useEditorCommands';
 import { useDocumentStore, type SaveState } from '../stores/document';
+import { useSelectionStore } from '../stores/selection';
 
 const props = withDefaults(
   defineProps<{ projectId?: string; sceneId?: string }>(),
@@ -22,7 +26,12 @@ const props = withDefaults(
 );
 const store = useDocumentStore();
 const { document, saveState, error, canUndo, canRedo } = storeToRefs(store);
+const selectionStore = useSelectionStore();
+const { ids: selectedIds, primaryId } = storeToRefs(selectionStore);
 const canvas = ref<EditorCanvasBridge>();
+const inspectorTab = ref<'scene' | 'interaction' | 'socket' | 'settings'>(
+  'scene',
+);
 
 function showEditorError(reason: unknown, fallback = '编辑操作执行失败'): void {
   ElMessage.error(reason instanceof Error ? reason.message : fallback);
@@ -37,6 +46,13 @@ const stats = ref<SceneStats>({
   vertexCount: 0,
   faceCount: 0,
 });
+const selection = computed<SelectionState>(() => ({
+  ids: selectedIds.value,
+  primaryId: primaryId.value,
+}));
+const selectedNode = computed(() =>
+  primaryId.value ? document.value.nodes[primaryId.value] : undefined,
+);
 
 const saveStateLabel: Record<SaveState, string> = {
   idle: '尚未加载',
@@ -109,6 +125,10 @@ function undoCommand(): void {
 
 function redoCommand(): void {
   void commands.redo().catch(showEditorError);
+}
+
+function runCommand(operation: Promise<unknown>): void {
+  void operation.catch(showEditorError);
 }
 
 function changeSelection(selection: SelectionState): void {
@@ -223,12 +243,75 @@ function changeStats(value: SceneStats): void {
 
     <aside class="inspector-panel" data-testid="inspector-panel">
       <nav class="inspector-tabs">
-        <button type="button" class="active">场景内容</button>
-        <button type="button">交互事件</button>
-        <button type="button">Socket 任务</button>
-        <button type="button">项目配置</button>
+        <button
+          type="button"
+          :class="{ active: inspectorTab === 'scene' }"
+          @click="inspectorTab = 'scene'"
+        >
+          场景内容
+        </button>
+        <button
+          type="button"
+          :class="{ active: inspectorTab === 'interaction' }"
+          @click="inspectorTab = 'interaction'"
+        >
+          交互事件
+        </button>
+        <button
+          type="button"
+          :class="{ active: inspectorTab === 'socket' }"
+          @click="inspectorTab = 'socket'"
+        >
+          Socket 任务
+        </button>
+        <button
+          type="button"
+          :class="{ active: inspectorTab === 'settings' }"
+          @click="inspectorTab = 'settings'"
+        >
+          项目配置
+        </button>
       </nav>
-      <div class="empty-panel">当前场景暂无节点</div>
+      <div v-if="inspectorTab === 'scene'" class="scene-content-panel">
+        <SceneTree
+          :document="document"
+          :selection="selection"
+          @select="changeSelection"
+          @toggle-visible="
+            (id, enabled) => runCommand(commands.updateNode(id, { enabled }))
+          "
+          @toggle-locked="
+            (id, locked) => runCommand(commands.updateNode(id, { locked }))
+          "
+          @rename="(id, name) => runCommand(commands.updateNode(id, { name }))"
+          @remove="(id) => runCommand(commands.removeNodes([id]))"
+          @duplicate="(id) => runCommand(commands.duplicateNode(id))"
+          @group="(ids) => runCommand(commands.groupNodes(ids))"
+          @reparent="
+            (id, parentId, index) =>
+              runCommand(commands.reparentNode(id, parentId, index))
+          "
+        />
+        <NodeInspector
+          v-if="selectedNode"
+          :node="selectedNode"
+          @update="
+            (patch) => runCommand(commands.updateNode(selectedNode!.id, patch))
+          "
+        />
+        <div v-else class="empty-panel">选择节点后编辑属性</div>
+      </div>
+      <div v-else-if="inspectorTab === 'interaction'" class="empty-panel">
+        低代码交互编排将在下一阶段接入
+      </div>
+      <div v-else-if="inspectorTab === 'socket'" class="empty-panel">
+        WebSocket 数据源与任务面板将在下一阶段接入
+      </div>
+      <SceneSettingsInspector
+        v-else
+        :settings="document.settings"
+        @update="(patch) => runCommand(commands.updateSceneSettings(patch))"
+      />
     </aside>
 
     <footer class="status-bar" data-testid="status-bar">

@@ -28,4 +28,5 @@ export {
   type ViewportDropOptions,
 } from './interaction/ViewportDropSystem';
 export { disposeObject3D, ResourceTracker } from './ResourceTracker';
+export { SceneSettingsSystem } from './settings/SceneSettingsSystem';
 export type { AssetInstanceProvider, LoadReport, SceneStats } from './types';
