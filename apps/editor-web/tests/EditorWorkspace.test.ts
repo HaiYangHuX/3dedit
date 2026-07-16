@@ -27,6 +27,9 @@ describe('EditorWorkspace', () => {
     expect(wrapper.get('[data-tool="scale"]').text()).toContain('缩放');
     expect(wrapper.get('[data-tool="focus"]').text()).toContain('聚焦');
     expect(
+      wrapper.get('[data-tool="reset-camera"]').attributes('title'),
+    ).toContain('重置');
+    expect(
       wrapper
         .get('[data-testid="editor-canvas"]')
         .attributes('data-document-id'),
@@ -43,7 +46,10 @@ describe('EditorWorkspace', () => {
     expect(wrapper.get('[data-testid="inspector-panel"]').text()).toContain(
       '场景内容',
     );
-    expect(wrapper.get('[data-testid="status-bar"]').text()).toContain('FPS');
+    expect(wrapper.get('[data-testid="viewport-stats"]').text()).toContain(
+      'FPS',
+    );
+    expect(wrapper.get('[data-testid="viewport-gizmo"]')).toBeTruthy();
     expect(wrapper.get('[data-testid="preview-scene"]')).toBeTruthy();
     expect(wrapper.get('[data-testid="publish-scene"]')).toBeTruthy();
 

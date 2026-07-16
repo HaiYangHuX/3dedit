@@ -2,26 +2,35 @@
 import type { Asset, PublicationDetail } from '@digital-twin/api-contracts';
 import type { RuntimeConfigPatch } from '@digital-twin/editor-core';
 import type {
+  CameraOrientation,
+  CameraView,
+  RenderStats,
   SceneStats,
   SelectionState,
   TransformCommit,
 } from '@digital-twin/three-engine';
-import { ElButton, ElButtonGroup, ElMessage } from 'element-plus';
+import { ElMessage } from 'element-plus';
 import { storeToRefs } from 'pinia';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import EditorCanvas from '../components/EditorCanvas.vue';
 import AssetLibraryPanel from '../components/AssetLibraryPanel.vue';
+import AssetPalette from '../components/editor/AssetPalette.vue';
+import EditorTopBar from '../components/editor/EditorTopBar.vue';
 import NodeInspector from '../components/editor/NodeInspector.vue';
 import InteractionPanel from '../components/editor/InteractionPanel.vue';
 import RuntimeDiagnostics from '../components/editor/RuntimeDiagnostics.vue';
 import SceneSettingsInspector from '../components/editor/SceneSettingsInspector.vue';
 import SceneTree from '../components/editor/SceneTree.vue';
 import SocketTaskPanel from '../components/editor/SocketTaskPanel.vue';
+import ViewportGizmo from '../components/editor/ViewportGizmo.vue';
+import ViewportStats from '../components/editor/ViewportStats.vue';
+import ViewportToolbar from '../components/editor/ViewportToolbar.vue';
 import {
   useEditorCommands,
   type EditorCanvasBridge,
 } from '../editor/useEditorCommands';
 import { useDocumentStore, type SaveState } from '../stores/document';
+import { useAssetStore } from '../stores/asset';
 import { useSelectionStore } from '../stores/selection';
 import { publicationApi } from '../api/publications';
 
@@ -35,6 +44,9 @@ const { document, documentChangeVersion, saveState, error, canUndo, canRedo } =
 const selectionStore = useSelectionStore();
 const { ids: selectedIds, primaryId } = storeToRefs(selectionStore);
 const canvas = ref<EditorCanvasBridge>();
+const viewportShell = ref<HTMLElement>();
+const assetStore = useAssetStore();
+const { assets } = storeToRefs(assetStore);
 const inspectorTab = ref<'scene' | 'interaction' | 'socket' | 'settings'>(
   'scene',
 );
@@ -45,6 +57,13 @@ const runtimeNodes = computed(() => Object.values(document.value.nodes));
 const runtimeDiagnostics = ref<string[]>([]);
 const publication = ref<PublicationDetail>();
 const publishing = ref(false);
+const transformMode = ref<'translate' | 'rotate' | 'scale'>('translate');
+const transformSpace = ref<'local' | 'world'>('world');
+const cameraOrientation = ref<CameraOrientation>({
+  quaternion: [0, 0, 0, 1],
+});
+const renderStats = ref<RenderStats>({ fps: 0, drawCalls: 0 });
+const isFullscreen = ref(false);
 let previewWindow: Window | null = null;
 const runtimeOrigin = (
   import.meta.env.VITE_RUNTIME_ORIGIN ?? 'http://127.0.0.1:5174'
@@ -70,6 +89,13 @@ const selection = computed<SelectionState>(() => ({
 const selectedNode = computed(() =>
   primaryId.value ? document.value.nodes[primaryId.value] : undefined,
 );
+const textureAssets = computed(() =>
+  assets.value.filter(
+    (asset) =>
+      asset.status === 'ready' &&
+      (asset.kind === 'image' || asset.kind === 'texture'),
+  ),
+);
 
 const saveStateLabel: Record<SaveState, string> = {
   idle: '尚未加载',
@@ -92,10 +118,22 @@ watch(
   { immediate: true },
 );
 
-onMounted(() => window.addEventListener('keydown', commands.handleKeydown));
+function syncFullscreenState(): void {
+  isFullscreen.value =
+    globalThis.document.fullscreenElement === viewportShell.value;
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', commands.handleKeydown);
+  globalThis.document.addEventListener('fullscreenchange', syncFullscreenState);
+});
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', commands.handleKeydown);
+  globalThis.document.removeEventListener(
+    'fullscreenchange',
+    syncFullscreenState,
+  );
   store.disposeAutoSave();
 });
 
@@ -154,6 +192,55 @@ function changeSelection(selection: SelectionState): void {
 
 function changeStats(value: SceneStats): void {
   stats.value = value;
+}
+
+function changeCameraOrientation(value: CameraOrientation): void {
+  cameraOrientation.value = value;
+}
+
+function changeRenderStats(value: RenderStats): void {
+  renderStats.value = value;
+}
+
+function changeTransformMode(mode: 'translate' | 'rotate' | 'scale'): void {
+  transformMode.value = mode;
+  commands.setTransformMode(mode);
+}
+
+function changeTransformSpace(space: 'local' | 'world'): void {
+  transformSpace.value = space;
+  canvas.value?.setTransformSpace?.(space);
+}
+
+function changeCameraView(view: CameraView): void {
+  commands.setCameraView(view);
+}
+
+async function downloadScreenshot(): Promise<void> {
+  try {
+    const blob = await commands.captureScreenshot();
+    const url = URL.createObjectURL(blob);
+    const link = globalThis.document.createElement('a');
+    link.href = url;
+    link.download = `${document.value.name || 'scene'}-${Date.now()}.png`;
+    link.click();
+    URL.revokeObjectURL(url);
+    ElMessage.success('视口截图已下载');
+  } catch (reason) {
+    showEditorError(reason, '视口截图失败');
+  }
+}
+
+async function toggleViewportFullscreen(): Promise<void> {
+  try {
+    if (globalThis.document.fullscreenElement === viewportShell.value) {
+      await globalThis.document.exitFullscreen();
+    } else if (viewportShell.value) {
+      await viewportShell.value.requestFullscreen();
+    }
+  } catch (reason) {
+    showEditorError(reason, '无法切换视口全屏');
+  }
 }
 
 async function ensureRuntimeDocumentSaved(): Promise<void> {
@@ -219,82 +306,24 @@ async function copyText(value: string): Promise<void> {
 
 <template>
   <main class="editor-workspace">
-    <header class="top-toolbar" data-testid="top-toolbar">
-      <div class="brand-block">
-        <span class="brand-dot" />
-        <strong>数字孪生场景平台</strong>
-        <span class="scene-name">{{ document.name }}</span>
-      </div>
-      <ElButtonGroup>
-        <ElButton
-          size="small"
-          data-testid="undo-scene"
-          :disabled="!canUndo"
-          @click="undoCommand"
-        >
-          撤销
-        </ElButton>
-        <ElButton
-          size="small"
-          data-testid="redo-scene"
-          :disabled="!canRedo"
-          @click="redoCommand"
-        >
-          重做
-        </ElButton>
-        <ElButton
-          size="small"
-          :loading="saveState === 'saving'"
-          :disabled="saveState === 'loading'"
-          data-testid="save-scene"
-          @click="saveDocument"
-        >
-          保存
-        </ElButton>
-        <ElButton
-          v-if="saveState === 'conflict'"
-          size="small"
-          @click="reloadScene"
-        >
-          重新加载
-        </ElButton>
-        <ElButton size="small" data-testid="preview-scene" @click="openPreview">
-          预览
-        </ElButton>
-        <ElButton
-          type="primary"
-          size="small"
-          :loading="publishing"
-          data-testid="publish-scene"
-          @click="publishScene"
-        >
-          发布
-        </ElButton>
-      </ElButtonGroup>
-    </header>
+    <EditorTopBar
+      :scene-name="document.name"
+      :save-state-label="stateLabel"
+      :save-state-error="saveState === 'conflict' || saveState === 'error'"
+      :can-undo="canUndo"
+      :can-redo="canRedo"
+      :saving="saveState === 'saving'"
+      :publishing="publishing"
+      :show-reload="saveState === 'conflict'"
+      @undo="undoCommand"
+      @redo="redoCommand"
+      @save="saveDocument"
+      @reload="reloadScene"
+      @preview="openPreview"
+      @publish="publishScene"
+    />
 
-    <aside class="asset-panel" data-testid="asset-panel">
-      <h2>场景元素</h2>
-      <nav class="asset-categories">
-        <button
-          v-for="item in [
-            ['model', '模型'],
-            ['geometry', '几何体'],
-            ['light', '灯光'],
-            ['chart', '图表'],
-            ['text', '文本'],
-            ['video', '视频'],
-            ['shader', 'Shader'],
-          ] as const"
-          :key="item[0]"
-          type="button"
-          :data-asset-category="item[0]"
-          :class="{ active: assetCategory === item[0] }"
-          @click="assetCategory = item[0]"
-        >
-          {{ item[1] }}
-        </button>
-      </nav>
+    <AssetPalette v-model:active="assetCategory">
       <AssetLibraryPanel
         v-if="assetCategory === 'model'"
         @activate="activateAsset"
@@ -344,39 +373,25 @@ async function copyText(value: string): Promise<void> {
           }[assetCategory]
         }}
       </div>
-    </aside>
+    </AssetPalette>
 
-    <section class="viewport-shell">
-      <div class="viewport-tools">
-        <button
-          type="button"
-          data-tool="translate"
-          @click="commands.setTransformMode('translate')"
-        >
-          移动 W
-        </button>
-        <button
-          type="button"
-          data-tool="rotate"
-          @click="commands.setTransformMode('rotate')"
-        >
-          旋转 E
-        </button>
-        <button
-          type="button"
-          data-tool="scale"
-          @click="commands.setTransformMode('scale')"
-        >
-          缩放 R
-        </button>
-        <button
-          type="button"
-          data-tool="focus"
-          @click="commands.focusSelection"
-        >
-          聚焦 F
-        </button>
-      </div>
+    <section ref="viewportShell" class="viewport-shell">
+      <ViewportToolbar
+        :mode="transformMode"
+        :space="transformSpace"
+        :grid-visible="document.settings.gridVisible"
+        :is-fullscreen="isFullscreen"
+        @mode="changeTransformMode"
+        @space="changeTransformSpace"
+        @grid="
+          (gridVisible) =>
+            runCommand(commands.updateSceneSettings({ gridVisible }))
+        "
+        @focus="commands.focusSelection"
+        @reset="commands.resetCamera"
+        @screenshot="downloadScreenshot"
+        @fullscreen="toggleViewportFullscreen"
+      />
       <EditorCanvas
         ref="canvas"
         :document="document"
@@ -384,6 +399,13 @@ async function copyText(value: string): Promise<void> {
         @transform-commit="commitTransform"
         @asset-drop="dropAsset"
         @stats-change="changeStats"
+        @camera-change="changeCameraOrientation"
+        @render-stats-change="changeRenderStats"
+      />
+      <ViewportStats :scene="stats" :render="renderStats" />
+      <ViewportGizmo
+        :quaternion="cameraOrientation.quaternion"
+        @view="changeCameraView"
       />
     </section>
 
@@ -442,6 +464,7 @@ async function copyText(value: string): Promise<void> {
         <NodeInspector
           v-if="selectedNode"
           :node="selectedNode"
+          :texture-assets="textureAssets"
           @update="
             (patch) => runCommand(commands.updateNode(selectedNode!.id, patch))
           "
@@ -473,24 +496,6 @@ async function copyText(value: string): Promise<void> {
         @update="(patch) => runCommand(commands.updateSceneSettings(patch))"
       />
     </aside>
-
-    <footer class="status-bar" data-testid="status-bar">
-      <span>对象 {{ stats.objectCount }}</span>
-      <span>网格 {{ stats.meshCount }}</span>
-      <span>顶点 {{ stats.vertexCount.toLocaleString() }}</span>
-      <span>面 {{ stats.faceCount.toLocaleString() }}</span
-      ><span>FPS --</span>
-      <span
-        class="save-state"
-        :class="{
-          'save-state--error':
-            saveState === 'conflict' || saveState === 'error',
-        }"
-        :title="error"
-      >
-        {{ stateLabel }}
-      </span>
-    </footer>
 
     <section v-if="publication" class="publication-result">
       <strong>发布成功</strong>
