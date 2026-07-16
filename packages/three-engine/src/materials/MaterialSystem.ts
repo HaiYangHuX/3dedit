@@ -46,6 +46,18 @@ export interface MaterialApplyReport {
   errors: MaterialApplyError[];
 }
 
+/** SceneDocumentSystem 只依赖投影能力，测试无需创建真实 TextureLoader。 */
+export interface MaterialProjectionSystem {
+  beginGeneration(): number;
+  apply(
+    root: Object3D,
+    component: MaterialComponent | undefined,
+    generation: number,
+  ): Promise<MaterialApplyReport>;
+  restore(root: Object3D): void;
+  dispose(): void;
+}
+
 interface TextureCacheEntry {
   generation: number;
   promise: Promise<Texture>;
@@ -222,7 +234,7 @@ function applyScalarTextureParameters(
  * 将可序列化材质组件投影到节点子树，并严格区分模型模板共享资源与本系统覆盖资源。
  * 每次场景切换通过 generation 使迟到图片失效，避免旧场景异步结果污染新对象。
  */
-export class MaterialSystem {
+export class MaterialSystem implements MaterialProjectionSystem {
   private readonly textureLoader: TextureLoaderLike;
   private readonly textureCache = new Map<string, TextureCacheEntry>();
   private readonly roots = new Map<Object3D, RootMaterialEntry>();

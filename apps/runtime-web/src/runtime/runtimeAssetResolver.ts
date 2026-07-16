@@ -1,6 +1,8 @@
 import type {
   AssetResolver,
+  EngineAssetFormat,
   ModelAssetFormat,
+  TextureAssetFormat,
 } from '@digital-twin/three-engine';
 import type { PublicationManifest } from '../api/runtime.js';
 
@@ -11,6 +13,12 @@ const modelFormats = new Set<ModelAssetFormat>([
   'obj',
   'stl',
   'usdz',
+]);
+const textureFormats = new Set<TextureAssetFormat>([
+  'png',
+  'jpg',
+  'jpeg',
+  'webp',
 ]);
 
 interface PreviewAsset {
@@ -46,8 +54,11 @@ export function createPreviewAssetResolver(
         modelFormats.has(asset.format as ModelAssetFormat);
       const isEnvironment =
         asset.kind === 'environment' && asset.format === 'hdr';
-      if (!isModel && !isEnvironment) {
-        throw new Error(`资源不是可加载的三维模型: ${asset.name}`);
+      const isTexture =
+        (asset.kind === 'image' || asset.kind === 'texture') &&
+        textureFormats.has(asset.format as TextureAssetFormat);
+      if (!isModel && !isEnvironment && !isTexture) {
+        throw new Error(`资源不是可加载的模型、环境或贴图: ${asset.name}`);
       }
       const source = asset.files.find(
         (file) => file.role === 'source' && file.checksum === asset.sourceHash,
@@ -58,7 +69,9 @@ export function createPreviewAssetResolver(
       return {
         assetId,
         name: asset.name,
-        format: isEnvironment ? 'hdr' : (asset.format as ModelAssetFormat),
+        format: isEnvironment
+          ? 'hdr'
+          : (asset.format as ModelAssetFormat | TextureAssetFormat),
         url: source.downloadUrl,
       };
     },
@@ -75,14 +88,15 @@ export function createPublicationAssetResolver(
       if (!asset) throw new Error(`发布包未包含资源: ${assetId}`);
       if (
         asset.format !== 'hdr' &&
-        !modelFormats.has(asset.format as ModelAssetFormat)
+        !modelFormats.has(asset.format as ModelAssetFormat) &&
+        !textureFormats.has(asset.format as TextureAssetFormat)
       ) {
-        throw new Error(`发布资源不是可加载模型: ${assetId}`);
+        throw new Error(`发布资源不是可加载模型、环境或贴图: ${assetId}`);
       }
       return {
         assetId,
         name: asset.name,
-        format: asset.format as ModelAssetFormat | 'hdr',
+        format: asset.format as EngineAssetFormat,
         url: asset.url,
       };
     },

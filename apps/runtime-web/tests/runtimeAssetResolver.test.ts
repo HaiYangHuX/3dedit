@@ -57,4 +57,40 @@ describe('运行时资源解析器', () => {
       '发布包未包含资源',
     );
   });
+
+  it('preview 与 publication 都允许材质图片资源', async () => {
+    const getAsset = vi.fn(async () => ({
+      id: 'texture-1',
+      name: '颜色贴图',
+      kind: 'image',
+      format: 'png',
+      status: 'ready',
+      sourceHash: 'texture-hash',
+      files: [
+        {
+          role: 'source',
+          checksum: 'texture-hash',
+          downloadUrl: 'http://example.com/color.png',
+        },
+      ],
+    }));
+    const preview = createPreviewAssetResolver({ getAsset });
+    const publication = createPublicationAssetResolver({
+      'texture-1': {
+        name: '颜色贴图',
+        format: 'png',
+        mimeType: 'image/png',
+        size: 64,
+        objectKey: 'publications/pub/assets/texture-1.png',
+        url: '/api/publications/pub/assets/texture-1',
+      },
+    });
+
+    await expect(preview.resolve('texture-1')).resolves.toMatchObject({
+      format: 'png',
+    });
+    await expect(publication.resolve('texture-1')).resolves.toMatchObject({
+      format: 'png',
+    });
+  });
 });

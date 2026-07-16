@@ -1,6 +1,7 @@
 import type {
   AssetResolver,
   ModelAssetFormat,
+  TextureAssetFormat,
 } from '@digital-twin/three-engine';
 import { assetApi } from '../api/assets';
 
@@ -12,9 +13,19 @@ const modelFormats = new Set<ModelAssetFormat>([
   'stl',
   'usdz',
 ]);
+const textureFormats = new Set<TextureAssetFormat>([
+  'png',
+  'jpg',
+  'jpeg',
+  'webp',
+]);
 
 function isModelFormat(value: string): value is ModelAssetFormat {
   return modelFormats.has(value as ModelAssetFormat);
+}
+
+function isTextureFormat(value: string): value is TextureAssetFormat {
+  return textureFormats.has(value as TextureAssetFormat);
 }
 
 /**
@@ -30,8 +41,11 @@ export const editorAssetResolver: AssetResolver = {
     const isModel = asset.kind === 'model' && isModelFormat(asset.format);
     const isEnvironment =
       asset.kind === 'environment' && asset.format === 'hdr';
-    if (!isModel && !isEnvironment) {
-      throw new Error(`资源不是可加载的三维模型: ${asset.name}`);
+    const isTexture =
+      (asset.kind === 'image' || asset.kind === 'texture') &&
+      isTextureFormat(asset.format);
+    if (!isModel && !isEnvironment && !isTexture) {
+      throw new Error(`资源不是可加载的模型、环境或贴图: ${asset.name}`);
     }
     const source = asset.files.find(
       (file) => file.role === 'source' && file.checksum === asset.sourceHash,
@@ -42,7 +56,9 @@ export const editorAssetResolver: AssetResolver = {
     return {
       assetId: asset.id,
       name: asset.name,
-      format: isEnvironment ? 'hdr' : (asset.format as ModelAssetFormat),
+      format: isEnvironment
+        ? 'hdr'
+        : (asset.format as ModelAssetFormat | TextureAssetFormat),
       url: source.downloadUrl,
     };
   },

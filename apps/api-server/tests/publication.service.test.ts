@@ -1,4 +1,5 @@
 import {
+  createDefaultMaterialComponent,
   createDefaultSceneDocument,
   type SceneNode,
 } from '@digital-twin/scene-schema';
@@ -64,7 +65,70 @@ const readyAsset = {
   },
 };
 
+const readyTexture = {
+  id: 'texture-1',
+  name: '设备颜色',
+  kind: 'image',
+  format: 'png',
+  status: 'ready',
+  activeFile: {
+    objectKey: 'assets/texture-1/source/color.png',
+    mimeType: 'image/png',
+    size: 256n,
+  },
+};
+
 describe('PublicationService', () => {
+  it('把材质贴图复制到独立 release 并写入 Manifest', async () => {
+    const row = sceneRow();
+    const material = createDefaultMaterialComponent();
+    material.textures.baseColor = {
+      assetId: 'texture-1',
+      offset: [0, 0],
+      repeat: [1, 1],
+      rotation: 0,
+      wrapS: 'repeat',
+      wrapT: 'repeat',
+    };
+    row.document.nodes.device!.components.push(material);
+    const transaction = {
+      publication: {
+        upsert: vi.fn(async ({ create }) => ({
+          ...create,
+          publishedAt: now,
+          updatedAt: now,
+        })),
+      },
+    };
+    const findMany = vi.fn().mockResolvedValue([readyAsset, readyTexture]);
+    const prisma = {
+      scene: { findUnique: vi.fn().mockResolvedValue(row) },
+      asset: { findMany },
+      publication: { findUnique: vi.fn().mockResolvedValue(null) },
+      $transaction: vi.fn(async (callback) => callback(transaction)),
+    } as unknown as PrismaService;
+    const copyObject = vi.fn().mockResolvedValue(undefined);
+    const minio = {
+      copyObject,
+      putJson: vi.fn().mockResolvedValue(undefined),
+      removePrefix: vi.fn().mockResolvedValue(undefined),
+    } as unknown as MinioService;
+
+    await new PublicationService(prisma, minio).publish('project-1', {
+      sceneId: 'scene-1',
+    });
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: { in: ['asset-1', 'texture-1'] } },
+      }),
+    );
+    expect(copyObject).toHaveBeenCalledWith(
+      'assets/texture-1/source/color.png',
+      expect.stringMatching(/assets\/texture-1\/source\.png$/),
+    );
+  });
+
   it('全部对象写完后才原子切换当前 Publication 指针', async () => {
     const upsert = vi.fn(
       async ({ create }: { create: Record<string, unknown> }) => ({

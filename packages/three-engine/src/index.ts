@@ -41,6 +41,7 @@ export {
   StaleMaterialLoadError,
   type MaterialApplyError,
   type MaterialApplyReport,
+  type MaterialProjectionSystem,
   type MaterialSystemOptions,
   type TextureLoaderLike,
 } from './materials/MaterialSystem';

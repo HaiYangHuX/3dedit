@@ -11,6 +11,7 @@ import {
   SpotLight,
 } from 'three';
 import {
+  createDefaultMaterialComponent,
   createDefaultSceneDocument,
   type SceneNode,
 } from '@digital-twin/scene-schema';
@@ -18,6 +19,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   SceneDocumentSystem,
   type AssetInstanceProvider,
+  type MaterialProjectionSystem,
 } from '../src/index.js';
 
 function node(
@@ -54,6 +56,53 @@ function modelRoot(): Group {
 }
 
 describe('SceneDocumentSystem', () => {
+  it('在节点创建更新删除和销毁时对称驱动材质投影', async () => {
+    const scene = new Scene();
+    const assets: AssetInstanceProvider = {
+      beginGeneration: vi.fn(() => 1),
+      instantiate: vi.fn(async () => modelRoot()),
+      release: vi.fn(() => false),
+      dispose: vi.fn(),
+    };
+    const materials: MaterialProjectionSystem = {
+      beginGeneration: vi.fn(() => 7),
+      apply: vi.fn(async () => ({ applied: true, errors: [] })),
+      restore: vi.fn(),
+      dispose: vi.fn(),
+    };
+    const system = new SceneDocumentSystem(scene, assets, materials);
+    const document = createDefaultSceneDocument('project-1', 'scene-1', '场景');
+    const box = node('box', { kind: 'geometry', primitive: 'box' });
+    const material = createDefaultMaterialComponent();
+    box.components.push(material);
+    document.nodes = { box };
+    document.rootNodeIds = ['box'];
+
+    await system.loadDocument(document);
+    const object = system.getObject('box')!;
+    expect(materials.apply).toHaveBeenCalledWith(object, material, 7);
+
+    const changed = structuredClone(box);
+    const changedMaterial = changed.components.find(
+      (component) => component.kind === 'material',
+    );
+    if (changedMaterial?.kind === 'material') changedMaterial.roughness = 0.2;
+    await system.updateNode(changed);
+    expect(materials.apply).toHaveBeenLastCalledWith(
+      object,
+      changedMaterial,
+      7,
+    );
+
+    system.removeNodes(['box']);
+    expect(materials.restore).toHaveBeenCalledWith(object);
+    expect(
+      vi.mocked(materials.restore).mock.invocationCallOrder.at(-1),
+    ).toBeLessThan(vi.mocked(assets.release).mock.invocationCallOrder.at(-1)!);
+    system.dispose();
+    expect(materials.dispose).toHaveBeenCalledOnce();
+  });
+
   it('加载多模型、几何体、五种灯光并恢复父子层级和变换', async () => {
     const scene = new Scene();
     let generation = 0;

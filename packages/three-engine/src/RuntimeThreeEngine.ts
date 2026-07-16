@@ -18,6 +18,7 @@ import { AssetInstanceSystem } from './assets/AssetInstanceSystem.js';
 import { AssetLoader } from './assets/AssetLoader.js';
 import type { AssetResolver } from './assets/types.js';
 import { SceneDocumentSystem } from './documents/SceneDocumentSystem.js';
+import { MaterialSystem } from './materials/MaterialSystem.js';
 import { RuntimeHostAdapter } from './runtime/RuntimeHostAdapter.js';
 import { RuntimePointerSystem } from './runtime/RuntimePointerSystem.js';
 import { SceneSettingsSystem } from './settings/SceneSettingsSystem.js';
@@ -112,6 +113,7 @@ export class RuntimeThreeEngine {
           resolver,
           new AssetLoader({ renderer: this.renderer }),
         ),
+        new MaterialSystem(resolver),
       );
       this.assetResolver = resolver;
     }

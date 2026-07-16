@@ -1,6 +1,10 @@
 import type { SceneDocument, SceneNode } from '@digital-twin/scene-schema';
 import { Group, Light, Mesh, type Object3D, type Scene } from 'three';
 import { StaleAssetLoadError } from '../assets/AssetInstanceSystem.js';
+import {
+  StaleMaterialLoadError,
+  type MaterialProjectionSystem,
+} from '../materials/MaterialSystem.js';
 import { disposeObject3D } from '../ResourceTracker.js';
 import {
   applySceneNode,
@@ -19,11 +23,13 @@ export class SceneDocumentSystem {
   private readonly objects = new Map<string, Object3D>();
   private loadVersion = 0;
   private generation = 0;
+  private materialGeneration = 0;
   private disposed = false;
 
   constructor(
     scene: Scene,
     private readonly assets: AssetInstanceProvider,
+    private readonly materials?: MaterialProjectionSystem,
   ) {
     this.root.name = '__scene_document_root__';
     this.root.userData.isDocumentRoot = true;
@@ -34,10 +40,11 @@ export class SceneDocumentSystem {
     const version = ++this.loadVersion;
     this.clearRuntimeNodes();
     this.generation = this.assets.beginGeneration();
+    this.materialGeneration = this.materials?.beginGeneration() ?? 0;
     const results = await Promise.allSettled(
       Object.values(document.nodes).map(async (node) => ({
         node,
-        object: await createSceneObject(node, this.assets, this.generation),
+        object: await this.createNodeObject(node),
       })),
     );
     const created = results.flatMap((result) =>
@@ -49,7 +56,8 @@ export class SceneDocumentSystem {
       results.some(
         (result) =>
           result.status === 'rejected' &&
-          result.reason instanceof StaleAssetLoadError,
+          (result.reason instanceof StaleAssetLoadError ||
+            result.reason instanceof StaleMaterialLoadError),
       );
     if (stale) {
       this.disposeCreated(created.map(({ object }) => object));
@@ -68,7 +76,7 @@ export class SceneDocumentSystem {
 
   async addNode(node: SceneNode): Promise<Object3D> {
     if (this.objects.has(node.id)) throw new Error(`节点已存在: ${node.id}`);
-    const object = await createSceneObject(node, this.assets, this.generation);
+    const object = await this.createNodeObject(node);
     this.objects.set(node.id, object);
     const parent = node.parentId ? this.objects.get(node.parentId) : this.root;
     (parent ?? this.root).add(object);
@@ -92,6 +100,7 @@ export class SceneDocumentSystem {
       );
     for (const { object } of objects) object.removeFromParent();
     for (const { id, object } of objects) {
+      this.materials?.restore(object);
       if (!this.assets.release(object)) disposeObject3D(object);
       this.objects.delete(id);
     }
@@ -127,6 +136,7 @@ export class SceneDocumentSystem {
       object.color.set(light.color);
       if ('castShadow' in object) object.castShadow = light.castShadow;
     }
+    await this.applyNodeMaterial(object, node);
   }
 
   private requiresReplacement(object: Object3D, node: SceneNode): boolean {
@@ -165,13 +175,14 @@ export class SceneDocumentSystem {
     if (!previous) throw new Error(`节点不存在: ${node.id}`);
     const version = this.loadVersion;
     const generation = this.generation;
-    const replacement = await createSceneObject(node, this.assets, generation);
+    const replacement = await this.createNodeObject(node);
     if (
       this.disposed ||
       version !== this.loadVersion ||
       generation !== this.generation ||
       this.objects.get(node.id) !== previous
     ) {
+      this.materials?.restore(replacement);
       if (!this.assets.release(replacement)) disposeObject3D(replacement);
       throw new StaleAssetLoadError();
     }
@@ -186,6 +197,7 @@ export class SceneDocumentSystem {
       parent.children.splice(previousIndex, 0, replacement);
     }
     this.objects.set(node.id, replacement);
+    this.materials?.restore(previous);
     if (!this.assets.release(previous)) disposeObject3D(previous);
     return replacement;
   }
@@ -243,6 +255,7 @@ export class SceneDocumentSystem {
     this.loadVersion += 1;
     this.clearRuntimeNodes();
     this.assets.dispose();
+    this.materials?.dispose();
     this.root.removeFromParent();
   }
 
@@ -267,6 +280,7 @@ export class SceneDocumentSystem {
     const objects = [...this.objects.values()];
     for (const object of objects) object.removeFromParent();
     for (const object of objects) {
+      this.materials?.restore(object);
       if (!this.assets.release(object)) disposeObject3D(object);
     }
     this.objects.clear();
@@ -283,14 +297,50 @@ export class SceneDocumentSystem {
     const placeholderNodeIds: string[] = [];
     const errors: LoadReport['errors'] = [];
     for (const [nodeId, object] of this.objects) {
-      if (typeof object.userData.loadError !== 'string') continue;
-      placeholderNodeIds.push(nodeId);
-      errors.push({ nodeId, message: object.userData.loadError });
+      if (typeof object.userData.loadError === 'string') {
+        placeholderNodeIds.push(nodeId);
+        errors.push({ nodeId, message: object.userData.loadError });
+      }
+      const materialErrors = object.userData.materialErrors as
+        Array<{ slot: string; message: string }> | undefined;
+      for (const error of materialErrors ?? []) {
+        errors.push({
+          nodeId,
+          message: `材质贴图 ${error.slot}: ${error.message}`,
+        });
+      }
     }
     return {
       loadedNodeIds: [...this.objects.keys()],
       placeholderNodeIds,
       errors,
     };
+  }
+
+  /** 创建失败时立即释放尚未挂入场景的对象，避免贴图异常留下孤立 GPU 资源。 */
+  private async createNodeObject(node: SceneNode): Promise<Object3D> {
+    const object = await createSceneObject(node, this.assets, this.generation);
+    try {
+      await this.applyNodeMaterial(object, node);
+      return object;
+    } catch (reason) {
+      this.materials?.restore(object);
+      if (!this.assets.release(object)) disposeObject3D(object);
+      throw reason;
+    }
+  }
+
+  private async applyNodeMaterial(
+    object: Object3D,
+    node: SceneNode,
+  ): Promise<void> {
+    const component = node.components.find(
+      (candidate) => candidate.kind === 'material',
+    );
+    await this.materials?.apply(
+      object,
+      component?.kind === 'material' ? component : undefined,
+      this.materialGeneration,
+    );
   }
 }

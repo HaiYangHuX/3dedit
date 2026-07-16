@@ -100,4 +100,32 @@ describe('editorAssetResolver', () => {
       url: 'https://assets.test/factory.hdr',
     });
   });
+
+  it('允许材质系统解析 ready 图片的活动源文件', async () => {
+    vi.mocked(assetApi.get).mockResolvedValue({
+      ...asset,
+      id: 'texture-1',
+      name: '设备颜色',
+      kind: 'image',
+      format: 'png',
+      sourceHash: 'd'.repeat(64),
+      files: [
+        {
+          ...asset.files[1]!,
+          id: 'texture-source',
+          objectKey: 'color.png',
+          mimeType: 'image/png',
+          checksum: 'd'.repeat(64),
+          downloadUrl: 'https://assets.test/color.png',
+        },
+      ],
+    });
+
+    await expect(
+      editorAssetResolver.resolve('texture-1'),
+    ).resolves.toMatchObject({
+      format: 'png',
+      url: 'https://assets.test/color.png',
+    });
+  });
 });

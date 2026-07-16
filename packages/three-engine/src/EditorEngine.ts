@@ -36,6 +36,7 @@ import {
   type TransformCommit,
 } from './interaction/TransformSystem.js';
 import { ViewportDropSystem } from './interaction/ViewportDropSystem.js';
+import { MaterialSystem } from './materials/MaterialSystem.js';
 import { ResourceTracker } from './ResourceTracker';
 import { SceneSettingsSystem } from './settings/SceneSettingsSystem.js';
 import type { LoadReport, SceneStats } from './types.js';
@@ -191,6 +192,7 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
       this.documentSystem = new SceneDocumentSystem(
         this.scene,
         new AssetInstanceSystem(resolver, loader),
+        new MaterialSystem(resolver),
       );
       this.assetResolver = resolver;
     }

@@ -5,7 +5,10 @@ import {
   type PublicationManifest,
   type PublishSceneInput,
 } from '@digital-twin/api-contracts';
-import { sceneDocumentSchema } from '@digital-twin/scene-schema';
+import {
+  collectAssetReferences,
+  sceneDocumentSchema,
+} from '@digital-twin/scene-schema';
 import {
   BadRequestException,
   ConflictException,
@@ -49,16 +52,7 @@ function mapDetail(publication: Publication): PublicationDetail {
 function collectAssetIds(
   document: ReturnType<typeof sceneDocumentSchema.parse>,
 ): string[] {
-  const ids = new Set<string>();
-  for (const node of Object.values(document.nodes)) {
-    for (const component of node.components) {
-      if (component.kind === 'model') ids.add(component.assetId);
-    }
-  }
-  if (document.settings.environmentAssetId) {
-    ids.add(document.settings.environmentAssetId);
-  }
-  return [...ids].sort();
+  return collectAssetReferences(document).map(({ assetId }) => assetId);
 }
 
 /** 生成独立发布包，并以 projectId 唯一行作为当前线上指针。 */
