@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import type { Asset } from '@digital-twin/api-contracts';
 import { ElButton, ElButtonGroup, ElMessage } from 'element-plus';
 import { storeToRefs } from 'pinia';
 import { computed, onBeforeUnmount, watch } from 'vue';
 import EditorCanvas from '../components/EditorCanvas.vue';
+import AssetLibraryPanel from '../components/AssetLibraryPanel.vue';
 import { useDocumentStore, type SaveState } from '../stores/document';
 
 const props = withDefaults(
@@ -46,6 +48,11 @@ async function saveDocument(): Promise<void> {
 
 function reloadScene(): void {
   void store.loadScene(props.sceneId).catch(() => undefined);
+}
+
+function activateAsset(asset: Asset): void {
+  // 资源列表与拖放协议已接通；模型实例化将在 Loader/命令系统阶段统一落入撤销历史。
+  ElMessage.info(`已选择模型“${asset.name}”，可拖放到视口中`);
 }
 </script>
 
@@ -92,7 +99,7 @@ function reloadScene(): void {
         <button type="button">视频</button>
         <button type="button">Shader</button>
       </nav>
-      <div class="empty-panel">模型库将在资源阶段接入</div>
+      <AssetLibraryPanel @activate="activateAsset" />
     </aside>
 
     <section class="viewport-shell">

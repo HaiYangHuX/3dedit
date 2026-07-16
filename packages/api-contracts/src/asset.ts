@@ -229,6 +229,7 @@ export const analyzeAssetJobDataSchema = z.object({
 });
 
 export type CreateUploadInput = z.infer<typeof createUploadInputSchema>;
+export type CreateUploadRequest = z.input<typeof createUploadInputSchema>;
 export type CompleteUploadInput = z.infer<typeof completeUploadInputSchema>;
 export type ListAssetsQuery = z.infer<typeof listAssetsQuerySchema>;
 export type UpdateAssetInput = z.infer<typeof updateAssetInputSchema>;

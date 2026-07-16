@@ -112,7 +112,7 @@ importers:
         version: 4.21.0
       vitest:
         specifier: 4.1.10
-        version: 4.1.10(@types/node@24.0.0)(happy-dom@20.10.6)(jiti@2.7.0)(sass@1.101.0)(tsx@4.21.0)
+        version: 4.1.10(@types/node@24.0.0)(happy-dom@20.10.6)(vite@7.3.6(@types/node@24.0.0)(jiti@2.7.0)(sass@1.101.0)(tsx@4.21.0))
 
   apps/asset-worker:
     dependencies:
@@ -140,7 +140,7 @@ importers:
         version: 4.21.0
       vitest:
         specifier: 4.1.10
-        version: 4.1.10(@types/node@24.0.0)(happy-dom@20.10.6)(jiti@2.7.0)(sass@1.101.0)(tsx@4.21.0)
+        version: 4.1.10(@types/node@24.0.0)(happy-dom@20.10.6)(vite@7.3.6(@types/node@24.0.0)(jiti@2.7.0)(sass@1.101.0)(tsx@4.21.0))
 
   apps/editor-web:
     dependencies:
@@ -162,6 +162,9 @@ importers:
       element-plus:
         specifier: 2.14.3
         version: 2.14.3(vue@3.5.40(typescript@5.9.3))
+      hash-wasm:
+        specifier: 4.12.0
+        version: 4.12.0
       pinia:
         specifier: 4.0.2
         version: 4.0.2(@vue/devtools-api@8.1.5)(typescript@5.9.3)(vue@3.5.40(typescript@5.9.3))
@@ -192,7 +195,7 @@ importers:
         version: 7.3.6(@types/node@24.0.0)(jiti@2.7.0)(sass@1.101.0)(tsx@4.21.0)
       vitest:
         specifier: 4.1.10
-        version: 4.1.10(@types/node@24.0.0)(happy-dom@20.10.6)(jiti@2.7.0)(sass@1.101.0)(tsx@4.21.0)
+        version: 4.1.10(@types/node@24.0.0)(happy-dom@20.10.6)(vite@7.3.6(@types/node@24.0.0)(jiti@2.7.0)(sass@1.101.0)(tsx@4.21.0))
       vue-tsc:
         specifier: 3.3.7
         version: 3.3.7(typescript@5.9.3)
@@ -226,7 +229,7 @@ importers:
         version: 7.3.6(@types/node@24.0.0)(jiti@2.7.0)(sass@1.101.0)(tsx@4.21.0)
       vitest:
         specifier: 4.1.10
-        version: 4.1.10(@types/node@24.0.0)(happy-dom@20.10.6)(jiti@2.7.0)(sass@1.101.0)(tsx@4.21.0)
+        version: 4.1.10(@types/node@24.0.0)(happy-dom@20.10.6)(vite@7.3.6(@types/node@24.0.0)(jiti@2.7.0)(sass@1.101.0)(tsx@4.21.0))
       vue-tsc:
         specifier: 3.3.7
         version: 3.3.7(typescript@5.9.3)
@@ -242,7 +245,7 @@ importers:
     devDependencies:
       vitest:
         specifier: 4.1.10
-        version: 4.1.10(@types/node@24.0.0)(happy-dom@20.10.6)(jiti@2.7.0)(sass@1.101.0)(tsx@4.21.0)
+        version: 4.1.10(@types/node@24.0.0)(happy-dom@20.10.6)(vite@7.3.6(@types/node@24.0.0)(jiti@2.7.0)(sass@1.101.0)(tsx@4.21.0))
 
   packages/editor-core:
     dependencies:
@@ -252,7 +255,7 @@ importers:
     devDependencies:
       vitest:
         specifier: 4.1.10
-        version: 4.1.10(@types/node@24.0.0)(happy-dom@20.10.6)(jiti@2.7.0)(sass@1.101.0)(tsx@4.21.0)
+        version: 4.1.10(@types/node@24.0.0)(happy-dom@20.10.6)(vite@7.3.6(@types/node@24.0.0)(jiti@2.7.0)(sass@1.101.0)(tsx@4.21.0))
 
   packages/scene-schema:
     dependencies:
@@ -262,7 +265,7 @@ importers:
     devDependencies:
       vitest:
         specifier: 4.1.10
-        version: 4.1.10(@types/node@24.0.0)(happy-dom@20.10.6)(jiti@2.7.0)(sass@1.101.0)(tsx@4.21.0)
+        version: 4.1.10(@types/node@24.0.0)(happy-dom@20.10.6)(vite@7.3.6(@types/node@24.0.0)(jiti@2.7.0)(sass@1.101.0)(tsx@4.21.0))
 
   packages/three-engine:
     dependencies:
@@ -275,7 +278,7 @@ importers:
         version: 0.183.1
       vitest:
         specifier: 4.1.10
-        version: 4.1.10(@types/node@24.0.0)(happy-dom@20.10.6)(jiti@2.7.0)(sass@1.101.0)(tsx@4.21.0)
+        version: 4.1.10(@types/node@24.0.0)(happy-dom@20.10.6)(vite@7.3.6(@types/node@24.0.0)(jiti@2.7.0)(sass@1.101.0)(tsx@4.21.0))
 
 packages:
   '@babel/code-frame@7.29.7':
@@ -3197,6 +3200,12 @@ packages:
       }
     engines: { node: '>=12' }
 
+  hash-wasm@4.12.0:
+    resolution:
+      {
+        integrity: sha512-+/2B2rYLb48I/evdOIhP+K/DD2ca2fgBjp6O+GBEnCDk2e4rpeXIK8GvIyRPjTezgmWn9gmKwkQjjx6BtqDHVQ==,
+      }
+
   hashery@1.5.1:
     resolution:
       {
@@ -4767,6 +4776,7 @@ packages:
       '@vitest/ui': 4.1.10
       happy-dom: '*'
       jsdom: '*'
+      vite: ^6.0.0 || ^7.0.0 || ^8.0.0
     peerDependenciesMeta:
       '@edge-runtime/vm':
         optional: true
@@ -6603,6 +6613,8 @@ snapshots:
 
   has-flag@5.0.1: {}
 
+  hash-wasm@4.12.0: {}
+
   hashery@1.5.1:
     dependencies:
       hookified: 1.15.1
@@ -7436,7 +7448,7 @@ snapshots:
       sass: 1.101.0
       tsx: 4.21.0
 
-  vitest@4.1.10(@types/node@24.0.0)(happy-dom@20.10.6)(jiti@2.7.0)(sass@1.101.0)(tsx@4.21.0):
+  vitest@4.1.10(@types/node@24.0.0)(happy-dom@20.10.6)(vite@7.3.6(@types/node@24.0.0)(jiti@2.7.0)(sass@1.101.0)(tsx@4.21.0)):
     dependencies:
       '@vitest/expect': 4.1.10
       '@vitest/mocker': 4.1.10(vite@7.3.6(@types/node@24.0.0)(jiti@2.7.0)(sass@1.101.0)(tsx@4.21.0))
@@ -7462,17 +7474,7 @@ snapshots:
       '@types/node': 24.0.0
       happy-dom: 20.10.6
     transitivePeerDependencies:
-      - jiti
-      - less
-      - lightningcss
       - msw
-      - sass
-      - sass-embedded
-      - stylus
-      - sugarss
-      - terser
-      - tsx
-      - yaml
 
   vscode-uri@3.1.0: {}
 

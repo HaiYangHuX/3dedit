@@ -12,6 +12,7 @@ describe('EditorWorkspace', () => {
           EditorCanvas: {
             template: '<div data-testid="editor-canvas" />',
           },
+          RouterLink: { template: '<a><slot /></a>' },
         },
       },
     });

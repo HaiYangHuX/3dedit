@@ -26,6 +26,7 @@ export type {
   AssetStatus,
   CompleteUploadInput,
   CreateUploadInput,
+  CreateUploadRequest,
   ListAssetsQuery,
   UpdateAssetInput,
   UploadSession,

@@ -55,6 +55,7 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET:-assets}
       MINIO_SECRET_KEY: digital-twin-secret
     volumes:
+      - ./infrastructure/docker/minio-cors.xml:/init/minio-cors.xml:ro
       - ./infrastructure/docker/minio-init.sh:/init/minio-init.sh:ro
 
 volumes:
