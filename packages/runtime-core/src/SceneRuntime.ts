@@ -4,6 +4,7 @@ import type {
 } from '@digital-twin/scene-schema';
 import { ActionRunner } from './actions/ActionRunner.js';
 import { evaluateConditionGroup } from './conditions/evaluateConditions.js';
+import { WebSocketRuntime } from './socket/WebSocketRuntime.js';
 import {
   createDiagnostic,
   type RuntimeDiagnosticListener,
@@ -11,10 +12,18 @@ import {
   type RuntimeNodeEvent,
   type RuntimeTriggerEvent,
 } from './types.js';
+import type {
+  SocketTaskExecution,
+  WebSocketFactory,
+  WebSocketStatus,
+} from './socket/types.js';
 
 export interface SceneRuntimeOptions {
   host: RuntimeHost;
   onDiagnostic?: RuntimeDiagnosticListener;
+  createSocket?: WebSocketFactory;
+  onSocketStatus?: (dataSourceId: string, status: WebSocketStatus) => void;
+  onSocketTask?: (execution: SocketTaskExecution) => void;
 }
 
 const NODE_TRIGGER_TYPES = new Set<RuntimeNodeEvent>([
@@ -32,6 +41,7 @@ export class SceneRuntime {
   private readonly controllers = new Set<AbortController>();
   private readonly pending = new Set<Promise<void>>();
   private readonly actionRunner: ActionRunner;
+  private webSocketRuntime?: WebSocketRuntime;
   private document?: SceneDocument;
   private started = false;
   private disposed = false;
@@ -74,6 +84,26 @@ export class SceneRuntime {
         this.scheduleTimer(interaction);
       }
     }
+    if (this.options.createSocket) {
+      this.webSocketRuntime = new WebSocketRuntime({
+        host: this.options.host,
+        createSocket: this.options.createSocket,
+        onDiagnostic: this.options.onDiagnostic,
+        onStatus: this.options.onSocketStatus,
+        onTask: (execution) => {
+          this.options.onSocketTask?.(execution);
+          this.track(
+            this.emitTrigger({
+              type: 'websocket',
+              dataSourceId: execution.dataSourceId,
+              taskCode: execution.taskCode,
+              message: execution.message,
+            }),
+          );
+        },
+      });
+      this.webSocketRuntime.start(this.document);
+    }
     this.track(this.emitTrigger({ type: 'scene-load' }));
   }
 
@@ -106,6 +136,13 @@ export class SceneRuntime {
 
   getVariable(key: string): unknown {
     return this.variables.get(key);
+  }
+
+  injectSocketMessage(dataSourceId: string, payload: unknown): Promise<void> {
+    return (
+      this.webSocketRuntime?.injectMessage(dataSourceId, payload) ??
+      Promise.resolve()
+    );
   }
 
   /** 等待当前已触发动作全部收敛，预览切场景和测试均可用它建立明确边界。 */
@@ -212,6 +249,8 @@ export class SceneRuntime {
 
   private stopActiveLifecycle(): void {
     this.started = false;
+    this.webSocketRuntime?.stop();
+    this.webSocketRuntime = undefined;
     for (const unsubscribe of this.subscriptions) unsubscribe();
     this.subscriptions.clear();
     for (const timer of this.timers) {

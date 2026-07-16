@@ -1,6 +1,21 @@
 export { ActionRunner } from './actions/ActionRunner.js';
 export { evaluateConditionGroup } from './conditions/evaluateConditions.js';
 export { SceneRuntime, type SceneRuntimeOptions } from './SceneRuntime.js';
+export { SocketTaskRunner } from './socket/SocketTaskRunner.js';
+export { WebSocketConnection } from './socket/WebSocketConnection.js';
+export {
+  WebSocketRuntime,
+  type WebSocketRuntimeDocument,
+  type WebSocketRuntimeOptions,
+} from './socket/WebSocketRuntime.js';
+export type {
+  SocketTaskExecution,
+  SocketTaskMessage,
+  WebSocketEventMap,
+  WebSocketFactory,
+  WebSocketLike,
+  WebSocketStatus,
+} from './socket/types.js';
 export {
   createDiagnostic,
   type AnimationAction,

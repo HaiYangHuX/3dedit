@@ -106,13 +106,19 @@ export class ActionRunner {
         await this.host.setHighlight(action.nodeId, action.highlighted);
         return;
       case 'control-animation': {
-        const { type: _type, nodeId, ...command } = action;
-        await this.host.controlAnimation(nodeId, command);
+        await this.host.controlAnimation(action.nodeId, {
+          command: action.command,
+          clip: action.clip,
+          speed: action.speed,
+          loop: action.loop,
+        });
         return;
       }
       case 'control-video': {
-        const { type: _type, nodeId, ...command } = action;
-        await this.host.controlVideo(nodeId, command);
+        await this.host.controlVideo(action.nodeId, {
+          command: action.command,
+          currentTime: action.currentTime,
+        });
         return;
       }
       case 'set-text':
