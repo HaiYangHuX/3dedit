@@ -237,7 +237,7 @@ test('真实 Chromium 完成预览、WebSocket 与无版本原子发布闭环', 
     await assetCard.dblclick();
     await expect(editorCanvas).toHaveAttribute('data-scene-object-count', '2');
 
-    await expect(page.getByTestId('status-bar')).toContainText('已保存');
+    await expect(page.getByTestId('top-toolbar')).toContainText('已保存');
     const sceneAfterAddsResponse = await request.get(
       `${apiBaseUrl}/scenes/${sceneId}`,
     );
@@ -306,7 +306,7 @@ test('真实 Chromium 完成预览、WebSocket 与无版本原子发布闭环', 
     );
     await page.getByTestId('save-scene').click();
     expect((await saveResponse).ok()).toBe(true);
-    await expect(page.getByTestId('status-bar')).toContainText('已保存');
+    await expect(page.getByTestId('top-toolbar')).toContainText('已保存');
 
     const previewPromise = page.waitForEvent('popup');
     await page.getByTestId('preview-scene').click();

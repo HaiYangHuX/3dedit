@@ -4,6 +4,7 @@ const runtimeBaseUrl =
   process.env.E2E_RUNTIME_BASE_URL ?? 'http://127.0.0.1:5174';
 
 test('运行时只有 Canvas 没有编辑面板', async ({ page }) => {
+  test.setTimeout(60_000);
   const document = {
     schemaVersion: 1,
     id: 'local-scene',
@@ -41,7 +42,10 @@ test('运行时只有 Canvas 没有编辑面板', async ({ page }) => {
   await page.goto(`${runtimeBaseUrl}/runtime/local-publication`);
 
   const canvasHost = page.getByTestId('runtime-canvas');
-  await expect(canvasHost).toHaveAttribute('data-runtime-ready', 'true');
+  // 全量真实后端 E2E 并行时 Vite 会冷编译完整 Three.js 模块图，按就绪条件等待而非依赖默认 5 秒。
+  await expect(canvasHost).toHaveAttribute('data-runtime-ready', 'true', {
+    timeout: 30_000,
+  });
   await expect(canvasHost.locator('canvas')).toHaveCount(1);
   await expect(page.getByTestId('asset-panel')).toHaveCount(0);
   await expect(page.getByTestId('inspector-panel')).toHaveCount(0);

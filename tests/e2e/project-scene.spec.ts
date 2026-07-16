@@ -68,7 +68,7 @@ test('创建项目和场景并在编辑器保存', async ({ page, request }) => 
       'true',
     );
     // WebGL 初始化和文档请求并行，必须等文档加载完成再点击保存按钮。
-    await expect(page.getByTestId('status-bar')).toContainText('已保存');
+    await expect(page.getByTestId('top-toolbar')).toContainText('已保存');
     const saveResponse = page.waitForResponse(
       (response) =>
         response.url().endsWith(`/scenes/${sceneId}/document`) &&
@@ -76,7 +76,7 @@ test('创建项目和场景并在编辑器保存', async ({ page, request }) => 
     );
     await page.getByTestId('save-scene').click();
     expect((await saveResponse).ok()).toBe(true);
-    await expect(page.getByTestId('status-bar')).toContainText('已保存');
+    await expect(page.getByTestId('top-toolbar')).toContainText('已保存');
   } finally {
     if (projectId) {
       await request.delete(`${apiBaseUrl}/projects/${projectId}`);
