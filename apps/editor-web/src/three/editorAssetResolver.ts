@@ -27,7 +27,10 @@ export const editorAssetResolver: AssetResolver = {
     if (asset.status !== 'ready') {
       throw new Error(`资源尚未处理完成: ${asset.name}`);
     }
-    if (asset.kind !== 'model' || !isModelFormat(asset.format)) {
+    const isModel = asset.kind === 'model' && isModelFormat(asset.format);
+    const isEnvironment =
+      asset.kind === 'environment' && asset.format === 'hdr';
+    if (!isModel && !isEnvironment) {
       throw new Error(`资源不是可加载的三维模型: ${asset.name}`);
     }
     const source = asset.files.find(
@@ -39,7 +42,7 @@ export const editorAssetResolver: AssetResolver = {
     return {
       assetId: asset.id,
       name: asset.name,
-      format: asset.format,
+      format: isEnvironment ? 'hdr' : (asset.format as ModelAssetFormat),
       url: source.downloadUrl,
     };
   },

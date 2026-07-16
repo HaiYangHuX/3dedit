@@ -97,9 +97,13 @@ export class SceneDocumentSystem {
     }
   }
 
-  updateNode(node: SceneNode): void {
+  async updateNode(node: SceneNode): Promise<void> {
     const object = this.objects.get(node.id);
     if (!object) throw new Error(`节点不存在: ${node.id}`);
+    if (this.requiresReplacement(object, node)) {
+      await this.replaceNode(node);
+      return;
+    }
     applySceneNode(object, node);
     const geometry = node.components.find(
       (component) => component.kind === 'geometry',
@@ -123,6 +127,33 @@ export class SceneDocumentSystem {
       object.color.set(light.color);
       if ('castShadow' in object) object.castShadow = light.castShadow;
     }
+  }
+
+  private requiresReplacement(object: Object3D, node: SceneNode): boolean {
+    const model = node.components.find(
+      (component) => component.kind === 'model',
+    );
+    const geometry = node.components.find(
+      (component) => component.kind === 'geometry',
+    );
+    const light = node.components.find(
+      (component) => component.kind === 'light',
+    );
+    const nextPrimaryKind = model
+      ? 'model'
+      : geometry
+        ? 'geometry'
+        : light
+          ? 'light'
+          : (node.components[0]?.kind ?? 'group');
+    if (object.userData.primaryComponentKind !== nextPrimaryKind) return true;
+    if (model?.kind === 'model') {
+      return object.userData.assetId !== model.assetId;
+    }
+    if (light?.kind === 'light') {
+      return object.userData.lightType !== light.lightType;
+    }
+    return false;
   }
 
   /**

@@ -15,6 +15,9 @@ export interface AssetLoaderOptions {
   ktx2TranscoderPath?: string;
 }
 
+export const DEFAULT_DRACO_DECODER_PATH = '/decoders/draco/';
+export const DEFAULT_KTX2_TRANSCODER_PATH = '/decoders/basis/';
+
 function abortIfNeeded(signal?: AbortSignal): void {
   if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 }
@@ -33,9 +36,11 @@ export class AssetLoader implements AssetLoaderLike {
   private readonly usdz = new USDZLoader();
 
   constructor(options: AssetLoaderOptions = {}) {
-    this.draco.setDecoderPath(options.dracoDecoderPath ?? '/decoders/draco/');
+    this.draco.setDecoderPath(
+      options.dracoDecoderPath ?? DEFAULT_DRACO_DECODER_PATH,
+    );
     this.ktx2.setTranscoderPath(
-      options.ktx2TranscoderPath ?? '/decoders/basis/',
+      options.ktx2TranscoderPath ?? DEFAULT_KTX2_TRANSCODER_PATH,
     );
     if (options.renderer) this.ktx2.detectSupport(options.renderer);
     this.gltf.setDRACOLoader(this.draco);
@@ -83,6 +88,8 @@ export class AssetLoader implements AssetLoaderLike {
         loaded = { root, animations: [] };
         break;
       }
+      case 'hdr':
+        throw new Error('HDR 资源必须由 SceneSettingsSystem 加载');
     }
     abortIfNeeded(signal);
     loaded.root.name = descriptor.name;

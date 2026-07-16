@@ -177,6 +177,10 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
   ): Promise<LoadReport> {
     if (!this.renderer) throw new Error('EditorEngine 尚未初始化');
     this.settingsSystem?.apply(document.settings);
+    await this.settingsSystem?.applyEnvironment(
+      document.settings.environmentAssetId,
+      resolver,
+    );
     this.selectionSystem?.setSelection([]);
     this.transformSystem?.setSelection(null);
     if (!this.documentSystem || resolver !== this.assetResolver) {
@@ -217,8 +221,8 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.invalidate();
   }
 
-  updateNode(node: SceneNode): void {
-    this.documentSystem?.updateNode(node);
+  async updateNode(node: SceneNode): Promise<void> {
+    await this.documentSystem?.updateNode(node);
     const selection = this.selectionSystem?.getSelection();
     if (selection?.primaryId === node.id) {
       // 锁定状态可由属性面板实时修改，手柄 attach 状态必须同步刷新。
@@ -228,8 +232,14 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.invalidate();
   }
 
-  updateSettings(settings: SceneDocument['settings']): void {
+  async updateSettings(settings: SceneDocument['settings']): Promise<void> {
     this.settingsSystem?.apply(settings);
+    if (this.assetResolver) {
+      await this.settingsSystem?.applyEnvironment(
+        settings.environmentAssetId,
+        this.assetResolver,
+      );
+    }
     this.invalidate();
   }
 

@@ -236,10 +236,11 @@ describe('SceneDocumentSystem', () => {
     await system.loadDocument(document);
     const oldObject = system.getObject('model');
 
-    const replacement = await system.replaceNode({
+    await system.updateNode({
       ...model,
       components: [{ kind: 'model', assetId: 'asset-new' }],
     });
+    const replacement = system.getObject('model')!;
 
     expect(replacement).not.toBe(oldObject);
     expect(replacement.userData.assetId).toBe('asset-new');

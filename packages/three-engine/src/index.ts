@@ -2,9 +2,16 @@ export {
   AssetInstanceSystem,
   StaleAssetLoadError,
 } from './assets/AssetInstanceSystem';
-export { AssetLoader, type AssetLoaderOptions } from './assets/AssetLoader';
+export {
+  AssetLoader,
+  DEFAULT_DRACO_DECODER_PATH,
+  DEFAULT_KTX2_TRANSCODER_PATH,
+  type AssetLoaderOptions,
+} from './assets/AssetLoader';
 export type {
   AssetDescriptor,
+  EngineAssetFormat,
+  EnvironmentAssetResolver,
   AssetLoaderLike,
   AssetResolver,
   LoadedAsset,
@@ -41,6 +48,9 @@ export {
 } from './runtime/RuntimePointerSystem';
 export {
   SceneSettingsSystem,
+  type EnvironmentMapGenerator,
+  type EnvironmentMapTarget,
+  type EnvironmentTextureLoader,
   type SceneSettingsSystemOptions,
 } from './settings/SceneSettingsSystem';
 export type { AssetInstanceProvider, LoadReport, SceneStats } from './types';

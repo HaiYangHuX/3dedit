@@ -1,6 +1,17 @@
-import { Scene, type Color, type WebGLRenderer } from 'three';
+import { Scene, Texture, type Color, type WebGLRenderer } from 'three';
 import { describe, expect, it, vi } from 'vitest';
-import { SceneSettingsSystem } from '../src/index.js';
+import {
+  SceneSettingsSystem,
+  type EnvironmentAssetResolver,
+} from '../src/index.js';
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
 
 describe('SceneSettingsSystem', () => {
   it('同步背景、曝光和网格并释放辅助几何资源', () => {
@@ -34,6 +45,60 @@ describe('SceneSettingsSystem', () => {
 
     expect(system.grid).toBeUndefined();
     expect(scene.children).toHaveLength(0);
+    system.dispose();
+  });
+
+  it('连续切换 HDR 时丢弃迟到纹理并只保留最新 PMREM', async () => {
+    const scene = new Scene();
+    const renderer = { toneMappingExposure: 1 } as WebGLRenderer;
+    const firstLoad = deferred<Texture>();
+    const secondLoad = deferred<Texture>();
+    const firstTexture = new Texture();
+    const secondTexture = new Texture();
+    const firstDispose = vi.spyOn(firstTexture, 'dispose');
+    const secondDispose = vi.spyOn(secondTexture, 'dispose');
+    const environmentTexture = new Texture();
+    const target = { texture: environmentTexture, dispose: vi.fn() };
+    const generator = {
+      fromEquirectangular: vi.fn(() => target),
+      dispose: vi.fn(),
+    };
+    const loader = {
+      loadAsync: vi
+        .fn()
+        .mockReturnValueOnce(firstLoad.promise)
+        .mockReturnValueOnce(secondLoad.promise),
+    };
+    const resolver: EnvironmentAssetResolver = {
+      resolve: vi.fn(async (assetId: string) => ({
+        assetId,
+        name: assetId,
+        format: 'hdr' as const,
+        url: `http://example.com/${assetId}.hdr`,
+      })),
+    };
+    const system = new SceneSettingsSystem(scene, renderer, {
+      includeGrid: false,
+      environmentLoader: loader,
+      environmentGenerator: generator,
+    });
+
+    const first = system.applyEnvironment('environment-1', resolver);
+    await vi.waitFor(() => expect(loader.loadAsync).toHaveBeenCalledTimes(1));
+    const second = system.applyEnvironment('environment-2', resolver);
+    firstLoad.resolve(firstTexture);
+    await first;
+    expect(firstDispose).toHaveBeenCalledOnce();
+    expect(generator.fromEquirectangular).not.toHaveBeenCalled();
+
+    secondLoad.resolve(secondTexture);
+    await second;
+    expect(secondDispose).toHaveBeenCalledOnce();
+    expect(scene.environment).toBe(environmentTexture);
+
+    await system.applyEnvironment(null, resolver);
+    expect(scene.environment).toBeNull();
+    expect(target.dispose).toHaveBeenCalledOnce();
     system.dispose();
   });
 });

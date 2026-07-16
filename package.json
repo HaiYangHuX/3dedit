@@ -7,6 +7,8 @@
     "node": ">=24 <25"
   },
   "scripts": {
+    "copy:three-decoders": "node scripts/copy-three-decoders.mjs",
+    "prebuild": "pnpm copy:three-decoders",
     "build": "pnpm -r --if-present build",
     "dev": "pnpm -r --parallel --if-present dev",
     "format": "prettier --write .",

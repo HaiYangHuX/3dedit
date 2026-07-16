@@ -72,4 +72,32 @@ describe('editorAssetResolver', () => {
       '资源尚未处理完成',
     );
   });
+
+  it('允许场景环境通过同一 resolver 获取当前 HDR 源文件', async () => {
+    vi.mocked(assetApi.get).mockResolvedValue({
+      ...asset,
+      id: 'environment-1',
+      name: '厂区环境',
+      kind: 'environment',
+      format: 'hdr',
+      sourceHash: 'c'.repeat(64),
+      files: [
+        {
+          ...asset.files[1]!,
+          id: 'environment-source',
+          objectKey: 'factory.hdr',
+          mimeType: 'image/vnd.radiance',
+          checksum: 'c'.repeat(64),
+          downloadUrl: 'https://assets.test/factory.hdr',
+        },
+      ],
+    });
+
+    await expect(
+      editorAssetResolver.resolve('environment-1'),
+    ).resolves.toMatchObject({
+      format: 'hdr',
+      url: 'https://assets.test/factory.hdr',
+    });
+  });
 });

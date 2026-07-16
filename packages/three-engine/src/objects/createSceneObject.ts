@@ -96,16 +96,14 @@ export async function createSceneObject(
   generation: number,
 ): Promise<Object3D> {
   const model = node.components.find((component) => component.kind === 'model');
+  const geometry = node.components.find(
+    (component) => component.kind === 'geometry',
+  );
+  const light = node.components.find((component) => component.kind === 'light');
   let root: Object3D;
   if (model?.kind === 'model') {
     root = await assets.instantiate(model.assetId, generation);
   } else {
-    const geometry = node.components.find(
-      (component) => component.kind === 'geometry',
-    );
-    const light = node.components.find(
-      (component) => component.kind === 'light',
-    );
     if (geometry?.kind === 'geometry') {
       root = geometryObject(geometry.primitive);
       root.userData.geometryPrimitive = geometry.primitive;
@@ -114,5 +112,13 @@ export async function createSceneObject(
   }
   applySceneNode(root, node);
   root.userData.componentKinds = node.components.map(({ kind }) => kind);
+  root.userData.primaryComponentKind = model
+    ? 'model'
+    : geometry
+      ? 'geometry'
+      : light
+        ? 'light'
+        : (node.components[0]?.kind ?? 'group');
+  if (light?.kind === 'light') root.userData.lightType = light.lightType;
   return root;
 }

@@ -107,11 +107,17 @@ function applyNodeRemoved(ids: Iterable<string>): void {
 }
 
 function applyNodeUpdated(node: SceneNode): void {
-  engine.updateNode(node);
+  void engine.updateNode(node).catch((error: unknown) => {
+    errorMessage.value =
+      error instanceof Error ? error.message : '节点运行对象重建失败';
+  });
 }
 
 function applySceneSettings(settings: SceneDocument['settings']): void {
-  engine.updateSettings(settings);
+  void engine.updateSettings(settings).catch((error: unknown) => {
+    errorMessage.value =
+      error instanceof Error ? error.message : '场景环境加载失败';
+  });
 }
 
 function setSelection(ids: Iterable<string>, primaryId?: string | null): void {

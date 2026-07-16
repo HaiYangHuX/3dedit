@@ -98,6 +98,10 @@ export class RuntimeThreeEngine {
     // 先停止旧文档动画和补间，模型异步加载期间不能继续修改已移除的 Object3D。
     this.hostAdapter?.dispose();
     this.hostAdapter = undefined;
+    await this.settings?.applyEnvironment(
+      document.settings.environmentAssetId,
+      resolver,
+    );
     if (!this.documentSystem || resolver !== this.assetResolver) {
       this.pointerSystem?.dispose();
       this.pointerSystem = undefined;

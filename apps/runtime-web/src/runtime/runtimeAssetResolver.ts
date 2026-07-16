@@ -41,10 +41,12 @@ export function createPreviewAssetResolver(
       if (asset.status !== 'ready') {
         throw new Error(`资源尚未处理完成: ${asset.name}`);
       }
-      if (
-        asset.kind !== 'model' ||
-        !modelFormats.has(asset.format as ModelAssetFormat)
-      ) {
+      const isModel =
+        asset.kind === 'model' &&
+        modelFormats.has(asset.format as ModelAssetFormat);
+      const isEnvironment =
+        asset.kind === 'environment' && asset.format === 'hdr';
+      if (!isModel && !isEnvironment) {
         throw new Error(`资源不是可加载的三维模型: ${asset.name}`);
       }
       const source = asset.files.find(
@@ -56,7 +58,7 @@ export function createPreviewAssetResolver(
       return {
         assetId,
         name: asset.name,
-        format: asset.format as ModelAssetFormat,
+        format: isEnvironment ? 'hdr' : (asset.format as ModelAssetFormat),
         url: source.downloadUrl,
       };
     },
@@ -71,13 +73,16 @@ export function createPublicationAssetResolver(
     async resolve(assetId) {
       const asset = assets[assetId];
       if (!asset) throw new Error(`发布包未包含资源: ${assetId}`);
-      if (!modelFormats.has(asset.format as ModelAssetFormat)) {
+      if (
+        asset.format !== 'hdr' &&
+        !modelFormats.has(asset.format as ModelAssetFormat)
+      ) {
         throw new Error(`发布资源不是可加载模型: ${assetId}`);
       }
       return {
         assetId,
         name: asset.name,
-        format: asset.format as ModelAssetFormat,
+        format: asset.format as ModelAssetFormat | 'hdr',
         url: asset.url,
       };
     },
