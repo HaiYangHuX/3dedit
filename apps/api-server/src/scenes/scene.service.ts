@@ -84,7 +84,7 @@ export class SceneService {
             projectId,
             sceneId,
             input.name,
-          ) as Prisma.InputJsonValue,
+          ) as unknown as Prisma.InputJsonValue,
         },
       });
     });

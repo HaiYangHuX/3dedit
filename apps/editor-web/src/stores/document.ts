@@ -8,7 +8,7 @@ import {
   type EditorDocumentContext,
 } from '@digital-twin/editor-core';
 import { defineStore } from 'pinia';
-import { ref, toRaw, triggerRef } from 'vue';
+import { ref, shallowRef, toRaw, triggerRef } from 'vue';
 import { ApiError } from '../api/client';
 import { projectApi } from '../api/projects';
 
@@ -22,7 +22,8 @@ const AUTO_SAVE_DELAY = 1_500;
  * 加载代次防止路由快速切换时的迟到响应覆盖新场景。
  */
 export const useDocumentStore = defineStore('document', () => {
-  const document = ref<SceneDocument>(
+  // 场景文档包含递归条件树，shallowRef 同时避免 Vue 深层解包递归类型和无意义的整树代理。
+  const document = shallowRef<SceneDocument>(
     createDefaultSceneDocument('local-project', 'local-scene', '场景一'),
   );
   const activeSceneId = ref('');

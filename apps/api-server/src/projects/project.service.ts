@@ -98,7 +98,7 @@ export class ProjectService {
             projectId,
             sceneId,
             '场景一',
-          ) as Prisma.InputJsonValue,
+          ) as unknown as Prisma.InputJsonValue,
         },
       });
       return { project, scene };

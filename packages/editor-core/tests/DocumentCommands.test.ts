@@ -60,10 +60,12 @@ describe('文档命令', () => {
         name: '点击',
         enabled: true,
         sourceNodeId: child.id,
-        trigger: { type: 'click', config: {} },
-        conditions: [],
+        trigger: { type: 'click' },
+        conditions: { logic: 'all', conditions: [] },
         execution: 'sequential',
-        actions: [],
+        actions: [
+          { type: 'set-visibility', nodeId: child.id, visible: true },
+        ],
       },
     ];
     editor.document.dataSources = [
