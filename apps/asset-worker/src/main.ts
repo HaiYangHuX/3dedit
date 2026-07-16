@@ -1,9 +1,13 @@
 import { randomUUID } from 'node:crypto';
+import type { AnalyzeAssetJobData } from '@digital-twin/api-contracts';
 import { type Job, Worker } from 'bullmq';
+import { createWorkerInfrastructure } from './infrastructure.js';
+import { analyzeAsset } from './jobs/analyzeAsset.js';
 import { processFoundationPing } from './jobs/foundationPing.js';
 
 const QUEUE_NAME = 'asset-processing';
 const workerId = process.env.WORKER_ID ?? `asset-worker-${randomUUID()}`;
+const infrastructure = createWorkerInfrastructure();
 
 /**
  * 资源队列的单一调度入口。
@@ -13,6 +17,15 @@ async function processJob(job: Job): Promise<unknown> {
   switch (job.name) {
     case 'foundation-ping':
       return processFoundationPing(workerId);
+    case 'analyze-asset':
+      return analyzeAsset(
+        job.data as AnalyzeAssetJobData,
+        {
+          storage: infrastructure.storage,
+          repository: infrastructure.repository,
+        },
+        job.id,
+      );
     default:
       throw new Error(`不支持的资源任务: ${job.name}`);
   }
@@ -42,6 +55,7 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   closing = true;
   console.info(`[${workerId}] 收到 ${signal}，正在关闭 Worker`);
   await worker.close();
+  await infrastructure.prisma.$disconnect();
 }
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {

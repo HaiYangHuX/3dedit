@@ -4,17 +4,22 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "dev": "tsx watch src/main.ts",
+    "prisma:generate": "prisma generate --schema ../api-server/prisma/schema.prisma",
+    "build": "pnpm prisma:generate && tsc -p tsconfig.build.json",
+    "dev": "pnpm prisma:generate && tsx watch src/main.ts",
     "start": "node dist/main.js",
-    "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "test": "pnpm prisma:generate && vitest run",
+    "typecheck": "pnpm prisma:generate && tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "bullmq": "5.80.5"
+    "@digital-twin/api-contracts": "workspace:*",
+    "@prisma/client": "6.19.2",
+    "bullmq": "5.80.5",
+    "minio": "8.0.7"
   },
   "devDependencies": {
     "@types/node": "24.0.0",
+    "prisma": "6.19.2",
     "tsx": "4.21.0",
     "vitest": "4.1.10"
   }

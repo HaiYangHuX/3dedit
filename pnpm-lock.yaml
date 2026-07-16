@@ -116,13 +116,25 @@ importers:
 
   apps/asset-worker:
     dependencies:
+      '@digital-twin/api-contracts':
+        specifier: workspace:*
+        version: link:../../packages/api-contracts
+      '@prisma/client':
+        specifier: 6.19.2
+        version: 6.19.2(prisma@6.19.2(typescript@5.9.3))(typescript@5.9.3)
       bullmq:
         specifier: 5.80.5
         version: 5.80.5
+      minio:
+        specifier: 8.0.7
+        version: 8.0.7
     devDependencies:
       '@types/node':
         specifier: 24.0.0
         version: 24.0.0
+      prisma:
+        specifier: 6.19.2
+        version: 6.19.2(typescript@5.9.3)
       tsx:
         specifier: 4.21.0
         version: 4.21.0
