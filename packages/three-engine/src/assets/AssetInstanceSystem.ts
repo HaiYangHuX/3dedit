@@ -63,12 +63,13 @@ export class AssetInstanceSystem {
     }
   }
 
-  release(root: Object3D): void {
+  release(root: Object3D): boolean {
     const entry = this.instances.get(root);
-    if (!entry) return;
+    if (!entry) return false;
     root.removeFromParent();
     if (entry.ownedResources) disposeObject3D(root);
     this.instances.delete(root);
+    return true;
   }
 
   dispose(): void {

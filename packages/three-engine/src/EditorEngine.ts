@@ -1,4 +1,5 @@
 import {
+  AmbientLight,
   Clock,
   Color,
   PerspectiveCamera,
@@ -6,12 +7,19 @@ import {
   SRGBColorSpace,
   Vector2,
   WebGLRenderer,
+  type Object3D,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { OutlinePass } from 'three/addons/postprocessing/OutlinePass.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import type { SceneDocument, SceneNode } from '@digital-twin/scene-schema';
+import { AssetInstanceSystem } from './assets/AssetInstanceSystem.js';
+import { AssetLoader } from './assets/AssetLoader.js';
+import type { AssetResolver } from './assets/types.js';
+import { SceneDocumentSystem } from './documents/SceneDocumentSystem.js';
 import { ResourceTracker } from './ResourceTracker';
+import type { LoadReport, SceneStats } from './types.js';
 
 /**
  * 统一拥有场景渲染循环、容器尺寸监听、控制器、后期通道和 GPU 资源。
@@ -26,6 +34,8 @@ export class EditorEngine {
   private controls?: OrbitControls;
   private composer?: EffectComposer;
   private outline?: OutlinePass;
+  private documentSystem?: SceneDocumentSystem;
+  private assetResolver?: AssetResolver;
   private resizeObserver?: ResizeObserver;
   private frameId?: number;
   private invalidated = true;
@@ -36,6 +46,10 @@ export class EditorEngine {
     if (this.disposed) throw new Error('已销毁的 EditorEngine 不能重新初始化');
 
     this.scene.background = new Color('#111827');
+    // 编辑器辅助环境光不属于 SceneDocument，确保新建场景中的 PBR 模型仍可辨认。
+    const helperLight = new AmbientLight('#ffffff', 0.8);
+    helperLight.userData.editorHelper = true;
+    this.scene.add(helperLight);
     this.camera.position.set(5, 3, 8);
 
     const renderer = new WebGLRenderer({
@@ -101,6 +115,58 @@ export class EditorEngine {
     this.resources.track(root);
   }
 
+  async loadDocument(
+    document: SceneDocument,
+    resolver: AssetResolver,
+  ): Promise<LoadReport> {
+    if (!this.renderer) throw new Error('EditorEngine 尚未初始化');
+    if (!this.documentSystem || resolver !== this.assetResolver) {
+      this.documentSystem?.dispose();
+      const loader = new AssetLoader({ renderer: this.renderer });
+      this.documentSystem = new SceneDocumentSystem(
+        this.scene,
+        new AssetInstanceSystem(resolver, loader),
+      );
+      this.assetResolver = resolver;
+    }
+    const report = await this.documentSystem.loadDocument(document);
+    this.invalidate();
+    return report;
+  }
+
+  addNode(node: SceneNode): Promise<Object3D> {
+    if (!this.documentSystem) throw new Error('尚未加载场景文档');
+    return this.documentSystem.addNode(node).then((object) => {
+      this.invalidate();
+      return object;
+    });
+  }
+
+  removeNodes(ids: Iterable<string>): void {
+    this.documentSystem?.removeNodes(ids);
+    this.invalidate();
+  }
+
+  updateNode(node: SceneNode): void {
+    this.documentSystem?.updateNode(node);
+    this.invalidate();
+  }
+
+  getObject(nodeId: string): Object3D | undefined {
+    return this.documentSystem?.getObject(nodeId);
+  }
+
+  getStats(): SceneStats {
+    return (
+      this.documentSystem?.getStats() ?? {
+        objectCount: 0,
+        meshCount: 0,
+        vertexCount: 0,
+        faceCount: 0,
+      }
+    );
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
@@ -108,6 +174,7 @@ export class EditorEngine {
     this.resizeObserver?.disconnect();
     this.controls?.removeEventListener('change', this.invalidate);
     this.controls?.dispose();
+    this.documentSystem?.dispose();
     this.composer?.dispose();
     this.resources.dispose();
     const canvas = this.renderer?.domElement;

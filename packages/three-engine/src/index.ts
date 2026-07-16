@@ -10,5 +10,7 @@ export type {
   LoadedAsset,
   ModelAssetFormat,
 } from './assets/types';
+export { SceneDocumentSystem } from './documents/SceneDocumentSystem';
 export { EditorEngine } from './EditorEngine';
 export { disposeObject3D, ResourceTracker } from './ResourceTracker';
+export type { AssetInstanceProvider, LoadReport, SceneStats } from './types';
