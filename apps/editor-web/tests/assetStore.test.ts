@@ -4,6 +4,7 @@ import type {
   UploadSession,
 } from '@digital-twin/api-contracts';
 import { createPinia, setActivePinia } from 'pinia';
+import { nextTick, watchEffect } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { assetApi } from '../src/api/assets';
 import { useAssetStore } from '../src/stores/asset';
@@ -109,8 +110,13 @@ describe('useAssetStore', () => {
       pageSize: 24,
     });
     const store = useAssetStore();
+    let observedAssetCount = -1;
+    const stop = watchEffect(() => {
+      observedAssetCount = store.assets.length;
+    });
 
     const completed = await store.uploadFile(file, { pollInterval: 0 });
+    await nextTick();
 
     expect(completed.status).toBe('ready');
     expect(completed.fileName).toBe('pump.glb');
@@ -119,5 +125,7 @@ describe('useAssetStore', () => {
       progress: 100,
       assetId: 'asset-1',
     });
+    expect(observedAssetCount).toBe(1);
+    stop();
   });
 });

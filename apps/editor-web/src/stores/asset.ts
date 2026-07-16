@@ -121,8 +121,14 @@ export const useAssetStore = defineStore('asset', () => {
 
   function upsertAsset(asset: Asset): void {
     const index = assets.value.findIndex(({ id }) => id === asset.id);
-    if (index === -1) assets.value.unshift(asset);
-    else assets.value[index] = asset;
+    if (index === -1) {
+      assets.value = [asset, ...assets.value];
+      return;
+    }
+    // shallowRef 只跟踪数组引用，服务端 DTO 更新必须使用不可变替换才能刷新页面。
+    assets.value = assets.value.map((current) =>
+      current.id === asset.id ? asset : current,
+    );
   }
 
   async function updateAsset(
@@ -244,11 +250,9 @@ export const useAssetStore = defineStore('asset', () => {
     await assetApi.retry(id);
     const index = assets.value.findIndex((asset) => asset.id === id);
     if (index >= 0 && assets.value[index]) {
-      assets.value[index] = {
-        ...assets.value[index],
-        status: 'queued',
-        error: null,
-      };
+      assets.value = assets.value.map((asset) =>
+        asset.id === id ? { ...asset, status: 'queued', error: null } : asset,
+      );
     }
   }
 

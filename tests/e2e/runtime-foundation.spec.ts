@@ -1,7 +1,10 @@
 import { expect, test } from '@playwright/test';
 
+const runtimeBaseUrl =
+  process.env.E2E_RUNTIME_BASE_URL ?? 'http://127.0.0.1:5174';
+
 test('运行时只有 Canvas 没有编辑面板', async ({ page }) => {
-  await page.goto('http://127.0.0.1:5174/runtime/local-publication');
+  await page.goto(`${runtimeBaseUrl}/runtime/local-publication`);
 
   const canvasHost = page.getByTestId('runtime-canvas');
   await expect(canvasHost).toHaveAttribute('data-engine-ready', 'true');

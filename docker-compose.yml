@@ -33,6 +33,8 @@ services:
     environment:
       MINIO_ROOT_PASSWORD: digital-twin-secret
       MINIO_ROOT_USER: digital-twin
+      # 当前 MinIO 使用服务级 CORS；预签名 PUT 响应会向浏览器暴露 ETag。
+      MINIO_API_CORS_ALLOW_ORIGIN: '*'
     ports:
       - '${MINIO_PORT:-9000}:9000'
       - '${MINIO_CONSOLE_PORT:-9001}:9001'
@@ -55,7 +57,6 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET:-assets}
       MINIO_SECRET_KEY: digital-twin-secret
     volumes:
-      - ./infrastructure/docker/minio-cors.xml:/init/minio-cors.xml:ro
       - ./infrastructure/docker/minio-init.sh:/init/minio-init.sh:ro
 
 volumes:
