@@ -213,6 +213,21 @@ export const uploadSessionSchema = z.object({
   expiresAt: z.string().datetime({ offset: true }),
 });
 
+export const uploadCompletionSchema = z.object({
+  assetId: z.string().min(1),
+  fileId: z.string().min(1),
+  jobId: z.string().min(1),
+  status: z.literal('queued'),
+});
+
+/** API 与 Worker 共享同一队列负载，防止异步边界发生静默字段漂移。 */
+export const analyzeAssetJobDataSchema = z.object({
+  assetId: z.string().min(1),
+  fileId: z.string().min(1),
+  objectKey: z.string().min(1),
+  expectedSha256: z.string().regex(/^[a-f\d]{64}$/i),
+});
+
 export type CreateUploadInput = z.infer<typeof createUploadInputSchema>;
 export type CompleteUploadInput = z.infer<typeof completeUploadInputSchema>;
 export type ListAssetsQuery = z.infer<typeof listAssetsQuerySchema>;
@@ -221,3 +236,5 @@ export type Asset = z.infer<typeof assetSchema>;
 export type AssetDetail = z.infer<typeof assetDetailSchema>;
 export type AssetListResponse = z.infer<typeof assetListResponseSchema>;
 export type UploadSession = z.infer<typeof uploadSessionSchema>;
+export type UploadCompletion = z.infer<typeof uploadCompletionSchema>;
+export type AnalyzeAssetJobData = z.infer<typeof analyzeAssetJobDataSchema>;

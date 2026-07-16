@@ -79,6 +79,9 @@ importers:
       '@prisma/client':
         specifier: 6.19.2
         version: 6.19.2(prisma@6.19.2(typescript@5.9.3))(typescript@5.9.3)
+      bullmq:
+        specifier: 5.80.5
+        version: 5.80.5
       fastify:
         specifier: 5.10.0
         version: 5.10.0

@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { Client } from 'minio';
 
+export interface CompletedMultipartPart {
+  partNumber: number;
+  etag: string;
+}
+
 /** MinIO 客户端单例，ping 同时验证平台资源桶已创建。 */
 @Injectable()
 export class MinioService {
@@ -16,6 +21,50 @@ export class MinioService {
   async ping(): Promise<void> {
     const exists = await this.client.bucketExists(this.bucket);
     if (!exists) throw new Error(`MinIO 资源桶 ${this.bucket} 不存在`);
+  }
+
+  /**
+   * 创建由浏览器直传的 Multipart 会话。
+   * MinIO 的底层方法属于 SDK 细节，业务服务只接触 uploadId 和稳定 objectKey。
+   */
+  createMultipartUpload(objectKey: string, mimeType: string): Promise<string> {
+    return this.client.initiateNewMultipartUpload(this.bucket, objectKey, {
+      'content-type': mimeType,
+    });
+  }
+
+  /** 为单个分片签发 PUT 地址，浏览器无需持有对象存储密钥。 */
+  presignUploadPart(
+    objectKey: string,
+    uploadId: string,
+    partNumber: number,
+    expiresSeconds = 24 * 60 * 60,
+  ): Promise<string> {
+    return this.client.presignedUrl(
+      'PUT',
+      this.bucket,
+      objectKey,
+      expiresSeconds,
+      { uploadId, partNumber: String(partNumber) },
+    );
+  }
+
+  /** 完成前由 UploadService 校验分片集合，这里只负责适配 MinIO 的字段名。 */
+  completeMultipartUpload(
+    objectKey: string,
+    uploadId: string,
+    parts: CompletedMultipartPart[],
+  ): Promise<unknown> {
+    return this.client.completeMultipartUpload(
+      this.bucket,
+      objectKey,
+      uploadId,
+      parts.map(({ partNumber, etag }) => ({ part: partNumber, etag })),
+    );
+  }
+
+  abortMultipartUpload(objectKey: string, uploadId: string): Promise<void> {
+    return this.client.abortMultipartUpload(this.bucket, objectKey, uploadId);
   }
 
   /** 返回短时效下载地址，数据库和 API 永远只保存稳定 objectKey。 */

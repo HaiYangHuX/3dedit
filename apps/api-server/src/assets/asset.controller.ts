@@ -5,6 +5,7 @@ import {
   type AssetListResponse,
   type ListAssetsQuery,
   type UpdateAssetInput,
+  type UploadCompletion,
 } from '@digital-twin/api-contracts';
 import {
   Body,
@@ -15,16 +16,21 @@ import {
   Inject,
   Param,
   Patch,
+  Post,
   Query,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
+import { UploadService } from '../uploads/upload.service.js';
 import { AssetService } from './asset.service.js';
 
 @ApiTags('assets')
 @Controller('assets')
 export class AssetController {
-  constructor(@Inject(AssetService) private readonly assets: AssetService) {}
+  constructor(
+    @Inject(AssetService) private readonly assets: AssetService,
+    @Inject(UploadService) private readonly uploads: UploadService,
+  ) {}
 
   @Get()
   list(
@@ -45,6 +51,11 @@ export class AssetController {
     input: UpdateAssetInput,
   ): Promise<AssetDetail> {
     return this.assets.update(id, input);
+  }
+
+  @Post(':id/retry')
+  retry(@Param('id') id: string): Promise<UploadCompletion> {
+    return this.uploads.retry(id);
   }
 
   @Delete(':id')

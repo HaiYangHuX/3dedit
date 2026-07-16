@@ -1,5 +1,6 @@
 export type { HealthResponse } from './health.js';
 export {
+  analyzeAssetJobDataSchema,
   assetDetailSchema,
   assetFileSchema,
   assetFormatSchema,
@@ -13,8 +14,10 @@ export {
   listAssetsQuerySchema,
   updateAssetInputSchema,
   uploadSessionSchema,
+  uploadCompletionSchema,
 } from './asset.js';
 export type {
+  AnalyzeAssetJobData,
   Asset,
   AssetDetail,
   AssetFormat,
@@ -26,6 +29,7 @@ export type {
   ListAssetsQuery,
   UpdateAssetInput,
   UploadSession,
+  UploadCompletion,
 } from './asset.js';
 export {
   copyProjectInputSchema,

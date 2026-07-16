@@ -1,12 +1,14 @@
 import { createDefaultSceneDocument } from '@digital-twin/scene-schema';
 import { describe, expect, it } from 'vitest';
 import {
+  analyzeAssetJobDataSchema,
   completeUploadInputSchema,
   createProjectInputSchema,
   createSceneInputSchema,
   createUploadInputSchema,
   reorderScenesInputSchema,
   saveSceneInputSchema,
+  uploadCompletionSchema,
   updateProjectInputSchema,
 } from '../src/index.js';
 
@@ -82,5 +84,24 @@ describe('资源上传 API 契约', () => {
         ],
       }),
     ).toThrow();
+  });
+
+  it('约束上传完成后的任务回执', () => {
+    expect(
+      uploadCompletionSchema.parse({
+        assetId: 'asset-1',
+        fileId: 'file-1',
+        jobId: 'job-1',
+        status: 'queued',
+      }),
+    ).toMatchObject({ assetId: 'asset-1', status: 'queued' });
+    expect(
+      analyzeAssetJobDataSchema.parse({
+        assetId: 'asset-1',
+        fileId: 'file-1',
+        objectKey: 'assets/asset-1/source/pump.glb',
+        expectedSha256: sha256,
+      }),
+    ).toMatchObject({ fileId: 'file-1', expectedSha256: sha256 });
   });
 });
