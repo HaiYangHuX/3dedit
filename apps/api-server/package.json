@@ -1,0 +1,32 @@
+{
+  "name": "@digital-twin/api-server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "prisma generate && tsc -p tsconfig.build.json",
+    "dev": "prisma generate && tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "test": "prisma generate && vitest run",
+    "typecheck": "prisma generate && tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@digital-twin/api-contracts": "workspace:*",
+    "@nestjs/common": "11.1.28",
+    "@nestjs/core": "11.1.28",
+    "@nestjs/platform-fastify": "11.1.28",
+    "@nestjs/swagger": "11.2.6",
+    "@prisma/client": "6.19.2",
+    "fastify": "5.10.0",
+    "ioredis": "5.11.1",
+    "minio": "8.0.7",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "24.0.0",
+    "prisma": "6.19.2",
+    "tsx": "4.21.0",
+    "vitest": "4.1.10"
+  }
+}
