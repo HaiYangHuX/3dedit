@@ -1,4 +1,5 @@
 import type { SceneDetail } from '@digital-twin/api-contracts';
+import { AddNodeCommand } from '@digital-twin/editor-core';
 import { createDefaultSceneDocument } from '@digital-twin/scene-schema';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -81,5 +82,60 @@ describe('useDocumentStore', () => {
 
     expect(store.document.name).toBe('本地未保存名称');
     expect(store.saveState).toBe('conflict');
+  });
+
+  it('命令会标记 dirty、维护资源引用并可撤销', async () => {
+    vi.mocked(projectApi.getScene).mockResolvedValue(createSceneDetail());
+    const store = useDocumentStore();
+    await store.loadScene('scene-1');
+    const modelNode = {
+      id: 'model-1',
+      parentId: null,
+      childIds: [],
+      name: '水泵',
+      enabled: true,
+      locked: false,
+      transform: {
+        position: [0, 0, 0] as [number, number, number],
+        rotation: [0, 0, 0] as [number, number, number],
+        scale: [1, 1, 1] as [number, number, number],
+      },
+      components: [{ kind: 'model' as const, assetId: 'asset-1' }],
+      businessData: {},
+    };
+
+    await store.execute(new AddNodeCommand(modelNode));
+
+    expect(store.saveState).toBe('dirty');
+    expect(store.canUndo).toBe(true);
+    expect(store.document.assetReferences).toEqual([
+      { assetId: 'asset-1', nodeIds: ['model-1'] },
+    ]);
+
+    await store.undo();
+    expect(store.document.nodes['model-1']).toBeUndefined();
+    expect(store.canRedo).toBe(true);
+  });
+
+  it('成功保存后将当前历史游标标记为 clean', async () => {
+    vi.mocked(projectApi.getScene).mockResolvedValue(createSceneDetail());
+    vi.mocked(projectApi.saveScene).mockImplementation(
+      async (_sceneId, input) => ({
+        ...createSceneDetail(input.baseRevision + 1),
+        document: {
+          ...structuredClone(input.document),
+          revision: input.baseRevision + 1,
+        },
+      }),
+    );
+    const store = useDocumentStore();
+    await store.loadScene('scene-1');
+    store.document.name = '已修改';
+    store.markDirty();
+
+    await store.save();
+
+    expect(store.saveState).toBe('saved');
+    expect(store.isHistoryDirty).toBe(false);
   });
 });

@@ -1,10 +1,19 @@
 <script setup lang="ts">
 import type { Asset } from '@digital-twin/api-contracts';
+import type {
+  SceneStats,
+  SelectionState,
+  TransformCommit,
+} from '@digital-twin/three-engine';
 import { ElButton, ElButtonGroup, ElMessage } from 'element-plus';
 import { storeToRefs } from 'pinia';
-import { computed, onBeforeUnmount, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import EditorCanvas from '../components/EditorCanvas.vue';
 import AssetLibraryPanel from '../components/AssetLibraryPanel.vue';
+import {
+  useEditorCommands,
+  type EditorCanvasBridge,
+} from '../editor/useEditorCommands';
 import { useDocumentStore, type SaveState } from '../stores/document';
 
 const props = withDefaults(
@@ -12,7 +21,22 @@ const props = withDefaults(
   { projectId: 'local-project', sceneId: 'local-scene' },
 );
 const store = useDocumentStore();
-const { document, saveState, error } = storeToRefs(store);
+const { document, saveState, error, canUndo, canRedo } = storeToRefs(store);
+const canvas = ref<EditorCanvasBridge>();
+
+function showEditorError(reason: unknown, fallback = '编辑操作执行失败'): void {
+  ElMessage.error(reason instanceof Error ? reason.message : fallback);
+}
+
+const commands = useEditorCommands(canvas, {
+  onError: showEditorError,
+});
+const stats = ref<SceneStats>({
+  objectCount: 0,
+  meshCount: 0,
+  vertexCount: 0,
+  faceCount: 0,
+});
 
 const saveStateLabel: Record<SaveState, string> = {
   idle: '尚未加载',
@@ -35,7 +59,12 @@ watch(
   { immediate: true },
 );
 
-onBeforeUnmount(() => store.disposeAutoSave());
+onMounted(() => window.addEventListener('keydown', commands.handleKeydown));
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', commands.handleKeydown);
+  store.disposeAutoSave();
+});
 
 async function saveDocument(): Promise<void> {
   try {
@@ -51,8 +80,43 @@ function reloadScene(): void {
 }
 
 function activateAsset(asset: Asset): void {
-  // 资源列表与拖放协议已接通；模型实例化将在 Loader/命令系统阶段统一落入撤销历史。
-  ElMessage.info(`已选择模型“${asset.name}”，可拖放到视口中`);
+  void commands
+    .addAssetNode(asset, [0, 0, 0])
+    .catch((reason) => showEditorError(reason, '添加模型失败'));
+}
+
+interface AssetDropPayload {
+  assetId: string;
+  name: string;
+  position: [number, number, number];
+}
+
+function dropAsset(payload: AssetDropPayload): void {
+  void commands
+    .addAssetNode({ id: payload.assetId, name: payload.name }, payload.position)
+    .catch((reason) => showEditorError(reason, '添加模型失败'));
+}
+
+function commitTransform(commit: TransformCommit): void {
+  void commands
+    .commitTransform(commit)
+    .catch((reason) => showEditorError(reason, '保存变换失败'));
+}
+
+function undoCommand(): void {
+  void commands.undo().catch(showEditorError);
+}
+
+function redoCommand(): void {
+  void commands.redo().catch(showEditorError);
+}
+
+function changeSelection(selection: SelectionState): void {
+  commands.select(selection);
+}
+
+function changeStats(value: SceneStats): void {
+  stats.value = value;
 }
 </script>
 
@@ -65,8 +129,22 @@ function activateAsset(asset: Asset): void {
         <span class="scene-name">{{ document.name }}</span>
       </div>
       <ElButtonGroup>
-        <ElButton size="small">撤销</ElButton>
-        <ElButton size="small">重做</ElButton>
+        <ElButton
+          size="small"
+          data-testid="undo-scene"
+          :disabled="!canUndo"
+          @click="undoCommand"
+        >
+          撤销
+        </ElButton>
+        <ElButton
+          size="small"
+          data-testid="redo-scene"
+          :disabled="!canRedo"
+          @click="redoCommand"
+        >
+          重做
+        </ElButton>
         <ElButton
           size="small"
           :loading="saveState === 'saving'"
@@ -103,8 +181,44 @@ function activateAsset(asset: Asset): void {
     </aside>
 
     <section class="viewport-shell">
-      <div class="viewport-tools">移动 · 旋转 · 缩放 · 聚焦</div>
-      <EditorCanvas :document="document" />
+      <div class="viewport-tools">
+        <button
+          type="button"
+          data-tool="translate"
+          @click="commands.setTransformMode('translate')"
+        >
+          移动 W
+        </button>
+        <button
+          type="button"
+          data-tool="rotate"
+          @click="commands.setTransformMode('rotate')"
+        >
+          旋转 E
+        </button>
+        <button
+          type="button"
+          data-tool="scale"
+          @click="commands.setTransformMode('scale')"
+        >
+          缩放 R
+        </button>
+        <button
+          type="button"
+          data-tool="focus"
+          @click="commands.focusSelection"
+        >
+          聚焦 F
+        </button>
+      </div>
+      <EditorCanvas
+        ref="canvas"
+        :document="document"
+        @select="changeSelection"
+        @transform-commit="commitTransform"
+        @asset-drop="dropAsset"
+        @stats-change="changeStats"
+      />
     </section>
 
     <aside class="inspector-panel" data-testid="inspector-panel">
@@ -118,8 +232,11 @@ function activateAsset(asset: Asset): void {
     </aside>
 
     <footer class="status-bar" data-testid="status-bar">
-      <span>对象 {{ Object.keys(document.nodes).length }}</span>
-      <span>顶点 0</span><span>面 0</span><span>FPS --</span>
+      <span>对象 {{ stats.objectCount }}</span>
+      <span>网格 {{ stats.meshCount }}</span>
+      <span>顶点 {{ stats.vertexCount.toLocaleString() }}</span>
+      <span>面 {{ stats.faceCount.toLocaleString() }}</span
+      ><span>FPS --</span>
       <span
         class="save-state"
         :class="{

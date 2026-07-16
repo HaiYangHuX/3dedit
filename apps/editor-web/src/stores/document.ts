@@ -2,8 +2,13 @@ import {
   createDefaultSceneDocument,
   type SceneDocument,
 } from '@digital-twin/scene-schema';
+import {
+  CommandHistory,
+  type EditorCommand,
+  type EditorDocumentContext,
+} from '@digital-twin/editor-core';
 import { defineStore } from 'pinia';
-import { ref, toRaw } from 'vue';
+import { ref, toRaw, triggerRef } from 'vue';
 import { ApiError } from '../api/client';
 import { projectApi } from '../api/projects';
 
@@ -23,11 +28,35 @@ export const useDocumentStore = defineStore('document', () => {
   const activeSceneId = ref('');
   const saveState = ref<SaveState>('idle');
   const error = ref('');
+  const canUndo = ref(false);
+  const canRedo = ref(false);
+  const isHistoryDirty = ref(false);
   let loadGeneration = 0;
   let changeGeneration = 0;
   let autoSaveTimer: ReturnType<typeof setTimeout> | undefined;
   let activeSave: Promise<void> | undefined;
   let changedDuringSave = false;
+  let history: CommandHistory<EditorDocumentContext>;
+
+  function syncHistoryState(): void {
+    canUndo.value = history.canUndo;
+    canRedo.value = history.canRedo;
+    isHistoryDirty.value = history.isDirty;
+    // 撤销回最后一次保存游标时，无需再发起一次内容相同的自动保存。
+    if (!history.isDirty && saveState.value === 'dirty') {
+      clearAutoSaveTimer();
+      saveState.value = 'saved';
+    }
+  }
+
+  function resetHistory(): void {
+    history = new CommandHistory<EditorDocumentContext>({
+      // editor-core 不依赖 Vue，命令快照会使用 structuredClone，因此边界上不能传入 Proxy。
+      document: toRaw(document.value),
+      onChanged: markDirty,
+    });
+    syncHistoryState();
+  }
 
   function clearAutoSaveTimer(): void {
     if (!autoSaveTimer) return;
@@ -45,6 +74,7 @@ export const useDocumentStore = defineStore('document', () => {
       const scene = await projectApi.getScene(sceneId);
       if (generation !== loadGeneration) return;
       document.value = structuredClone(scene.document);
+      resetHistory();
       changeGeneration = 0;
       changedDuringSave = false;
       saveState.value = 'saved';
@@ -69,6 +99,8 @@ export const useDocumentStore = defineStore('document', () => {
   }
 
   function markDirty(): void {
+    // 命令直接修改原始文档，在单一出口处通知 Vue 刷新场景树和属性面板。
+    triggerRef(document);
     changeGeneration += 1;
     if (saveState.value === 'saving') {
       changedDuringSave = true;
@@ -76,6 +108,37 @@ export const useDocumentStore = defineStore('document', () => {
       saveState.value = 'dirty';
     }
     scheduleAutoSave();
+  }
+
+  async function execute(
+    command: EditorCommand<EditorDocumentContext>,
+  ): Promise<void> {
+    try {
+      await history.execute(command);
+    } finally {
+      syncHistoryState();
+    }
+  }
+
+  async function undo(): Promise<void> {
+    try {
+      await history.undo();
+    } finally {
+      syncHistoryState();
+    }
+  }
+
+  async function redo(): Promise<void> {
+    try {
+      await history.redo();
+    } finally {
+      syncHistoryState();
+    }
+  }
+
+  function markSaved(): void {
+    history.markSaved();
+    syncHistoryState();
   }
 
   async function performSave(): Promise<void> {
@@ -98,7 +161,9 @@ export const useDocumentStore = defineStore('document', () => {
       if (sceneId !== activeSceneId.value) return;
 
       if (changeGeneration === generation) {
-        document.value = structuredClone(scene.document);
+        // 保持根文档对象身份，否则 CommandHistory 上下文会继续指向已被替换的旧快照。
+        Object.assign(document.value, structuredClone(scene.document));
+        markSaved();
         saveState.value = 'saved';
       } else {
         // 保存期间的本地编辑不能被服务端响应覆盖，只继承新 revision 再排队保存。
@@ -138,13 +203,22 @@ export const useDocumentStore = defineStore('document', () => {
     loadGeneration += 1;
   }
 
+  resetHistory();
+
   return {
     document,
     activeSceneId,
     saveState,
     error,
+    canUndo,
+    canRedo,
+    isHistoryDirty,
     loadScene,
     markDirty,
+    execute,
+    undo,
+    redo,
+    markSaved,
     scheduleAutoSave,
     save,
     disposeAutoSave,

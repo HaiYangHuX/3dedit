@@ -192,6 +192,8 @@ button {
 }
 
 .viewport-tools {
+  display: flex;
+  gap: 4px;
   position: absolute;
   top: 12px;
   left: 50%;
@@ -203,6 +205,21 @@ button {
   border: 1px solid #334155;
   border-radius: 6px;
   transform: translateX(-50%);
+}
+
+.viewport-tools button {
+  padding: 3px 7px;
+  color: inherit;
+  font: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.viewport-tools button:hover {
+  color: #fff;
+  background: #334155;
 }
 
 .editor-canvas {

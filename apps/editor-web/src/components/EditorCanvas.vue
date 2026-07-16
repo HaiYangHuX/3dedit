@@ -123,18 +123,6 @@ function focusSelection(): boolean {
   return engine.focusSelection();
 }
 
-function handleShortcut(event: KeyboardEvent): void {
-  const target = event.target;
-  if (
-    target instanceof HTMLInputElement ||
-    target instanceof HTMLTextAreaElement ||
-    (target instanceof HTMLElement && target.isContentEditable)
-  ) {
-    return;
-  }
-  if (engine.handleShortcut(event.code)) event.preventDefault();
-}
-
 function parseDraggedAsset(event: DragEvent): DraggedAsset | undefined {
   const raw = event.dataTransfer?.getData(ASSET_MIME);
   if (!raw) return undefined;
@@ -179,7 +167,6 @@ onMounted(async () => {
     await engine.initialize(container.value);
     if (disposed) return;
     initialized = true;
-    window.addEventListener('keydown', handleShortcut);
     await loadDocument();
   } catch (error) {
     errorMessage.value =
@@ -200,7 +187,6 @@ onBeforeUnmount(() => {
   disposed = true;
   initialized = false;
   loadGeneration += 1;
-  window.removeEventListener('keydown', handleShortcut);
   engine.removeEventListener('selectionchange', handleSelectionChange);
   engine.removeEventListener('transformend', handleTransformEnd);
   engine.removeEventListener('statschange', handleStatsChange);
