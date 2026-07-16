@@ -104,7 +104,7 @@ function activateAsset(asset: Asset): void {
 
     <section class="viewport-shell">
       <div class="viewport-tools">移动 · 旋转 · 缩放 · 聚焦</div>
-      <EditorCanvas />
+      <EditorCanvas :document="document" />
     </section>
 
     <aside class="inspector-panel" data-testid="inspector-panel">

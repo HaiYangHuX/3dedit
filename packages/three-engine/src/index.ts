@@ -11,6 +11,21 @@ export type {
   ModelAssetFormat,
 } from './assets/types';
 export { SceneDocumentSystem } from './documents/SceneDocumentSystem';
-export { EditorEngine } from './EditorEngine';
+export { EditorEngine, type EditorEngineEventMap } from './EditorEngine';
+export {
+  SelectionSystem,
+  type OutlineSelectionTarget,
+  type SelectionState,
+  type SelectionSystemOptions,
+} from './interaction/SelectionSystem';
+export {
+  TransformSystem,
+  type TransformCommit,
+  type TransformSystemOptions,
+} from './interaction/TransformSystem';
+export {
+  ViewportDropSystem,
+  type ViewportDropOptions,
+} from './interaction/ViewportDropSystem';
 export { disposeObject3D, ResourceTracker } from './ResourceTracker';
 export type { AssetInstanceProvider, LoadReport, SceneStats } from './types';
