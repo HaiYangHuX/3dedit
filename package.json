@@ -10,6 +10,7 @@
     "copy:three-decoders": "node scripts/copy-three-decoders.mjs",
     "prebuild": "pnpm copy:three-decoders",
     "build": "pnpm -r --if-present build",
+    "predev": "pnpm copy:three-decoders",
     "dev": "pnpm -r --parallel --if-present dev",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -22,6 +23,7 @@
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@playwright/test": "1.61.1",
+    "@types/ws": "8.18.1",
     "eslint": "10.7.0",
     "eslint-config-prettier": "10.1.8",
     "eslint-plugin-vue": "10.9.2",
@@ -33,6 +35,7 @@
     "stylelint-config-standard": "40.0.0",
     "typescript": "5.9.3",
     "typescript-eslint": "8.64.0",
-    "vue-eslint-parser": "10.4.1"
+    "vue-eslint-parser": "10.4.1",
+    "ws": "8.18.3"
   }
 }

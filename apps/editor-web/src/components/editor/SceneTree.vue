@@ -15,10 +15,14 @@ interface TreeItem {
   children: TreeItem[];
 }
 
-const props = defineProps<{
-  document: SceneDocument;
-  selection: SelectionState;
-}>();
+const props = withDefaults(
+  defineProps<{
+    document: SceneDocument;
+    selection: SelectionState;
+    changeVersion?: number;
+  }>(),
+  { changeVersion: 0 },
+);
 const emit = defineEmits<{
   select: [selection: SelectionState];
   'toggle-visible': [id: string, enabled: boolean];
@@ -48,14 +52,17 @@ function buildItem(id: string, visited: Set<string>): TreeItem | undefined {
   };
 }
 
-const treeData = computed(() =>
-  props.document.rootNodeIds.flatMap((id) => {
+const treeData = computed(() => {
+  // document 是 shallowRef 中的稳定原始对象；代次是这个计算属性的显式失效信号。
+  void props.changeVersion;
+  return props.document.rootNodeIds.flatMap((id) => {
     const item = buildItem(id, new Set());
     return item ? [item] : [];
-  }),
-);
+  });
+});
 
 const matchingIds = computed(() => {
+  void props.changeVersion;
   const normalized = query.value.trim().toLocaleLowerCase('zh-CN');
   if (!normalized) return new Set(Object.keys(props.document.nodes));
   const matches = new Set<string>();

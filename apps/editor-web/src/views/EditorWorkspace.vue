@@ -30,7 +30,8 @@ const props = withDefaults(
   { projectId: 'local-project', sceneId: 'local-scene' },
 );
 const store = useDocumentStore();
-const { document, saveState, error, canUndo, canRedo } = storeToRefs(store);
+const { document, documentChangeVersion, saveState, error, canUndo, canRedo } =
+  storeToRefs(store);
 const selectionStore = useSelectionStore();
 const { ids: selectedIds, primaryId } = storeToRefs(selectionStore);
 const canvas = ref<EditorCanvasBridge>();
@@ -420,6 +421,7 @@ async function copyText(value: string): Promise<void> {
       <div v-if="inspectorTab === 'scene'" class="scene-content-panel">
         <SceneTree
           :document="document"
+          :change-version="documentChangeVersion"
           :selection="selection"
           @select="changeSelection"
           @toggle-visible="

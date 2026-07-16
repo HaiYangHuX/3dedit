@@ -30,6 +30,24 @@ function node(
 }
 
 describe('SceneTree', () => {
+  it('原地修改文档后通过变更代次重建根节点', async () => {
+    const document = createDefaultSceneDocument('project-1', 'scene-1', '场景');
+    const wrapper = mount(SceneTree, {
+      props: {
+        document,
+        selection: { ids: [], primaryId: null },
+        changeVersion: 0,
+      },
+      global: { stubs: { Teleport: true } },
+    });
+
+    document.nodes.first = node('first', '水泵 A', null);
+    document.rootNodeIds.push('first');
+    await wrapper.setProps({ document, changeVersion: 1 });
+
+    expect(wrapper.get('[data-node-id="first"]').text()).toContain('水泵 A');
+  });
+
   it('按 childIds 恢复层级顺序，搜索子节点时保留祖先', async () => {
     const document = createDefaultSceneDocument('project-1', 'scene-1', '场景');
     document.nodes = {

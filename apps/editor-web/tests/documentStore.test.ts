@@ -43,7 +43,6 @@ describe('useDocumentStore', () => {
     const store = useDocumentStore();
 
     await store.loadScene('scene-1');
-
     expect(store.document.id).toBe('scene-1');
     expect(store.document.revision).toBe(2);
     expect(store.saveState).toBe('saved');
@@ -88,6 +87,7 @@ describe('useDocumentStore', () => {
     vi.mocked(projectApi.getScene).mockResolvedValue(createSceneDetail());
     const store = useDocumentStore();
     await store.loadScene('scene-1');
+    const loadedVersion = store.documentChangeVersion;
     const modelNode = {
       id: 'model-1',
       parentId: null,
@@ -106,6 +106,7 @@ describe('useDocumentStore', () => {
 
     await store.execute(new AddNodeCommand(modelNode));
 
+    expect(store.documentChangeVersion).toBeGreaterThan(loadedVersion);
     expect(store.saveState).toBe('dirty');
     expect(store.canUndo).toBe(true);
     expect(store.document.assetReferences).toEqual([

@@ -21,6 +21,10 @@ import type {
 export interface SceneRuntimeOptions {
   host: RuntimeHost;
   onDiagnostic?: RuntimeDiagnosticListener;
+  onInteractionSettled?: (
+    interaction: InteractionDefinition,
+    event: RuntimeTriggerEvent,
+  ) => void;
   createSocket?: WebSocketFactory;
   onSocketStatus?: (dataSourceId: string, status: WebSocketStatus) => void;
   onSocketTask?: (execution: SocketTaskExecution) => void;
@@ -186,6 +190,10 @@ export class SceneRuntime {
         },
         controller.signal,
       );
+      // 仅通知仍属于当前文档代次的交互，避免销毁后的晚到动作刷新新页面状态。
+      if (!this.disposed && !controller.signal.aborted) {
+        this.options.onInteractionSettled?.(interaction, event);
+      }
     } catch (error) {
       this.options.onDiagnostic?.(
         createDiagnostic({

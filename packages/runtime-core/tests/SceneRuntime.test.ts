@@ -102,7 +102,11 @@ function createHost() {
 describe('SceneRuntime', () => {
   it('启动时注册节点事件、执行 scene-load 并按条件触发动作', async () => {
     const fixture = createHost();
-    const runtime = new SceneRuntime({ host: fixture.host });
+    const onInteractionSettled = vi.fn();
+    const runtime = new SceneRuntime({
+      host: fixture.host,
+      onInteractionSettled,
+    });
     runtime.load(interactiveDocument());
     runtime.setVariable('enabled', true);
 
@@ -113,6 +117,10 @@ describe('SceneRuntime', () => {
 
     await runtime.emitTrigger({ type: 'click', sourceNodeId: 'button' });
     expect(fixture.setVisibility).toHaveBeenCalledWith('device', true);
+    expect(onInteractionSettled).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'click-show' }),
+      expect.objectContaining({ type: 'click', sourceNodeId: 'button' }),
+    );
   });
 
   it('dispose 后注销订阅且晚到触发不能修改场景', async () => {

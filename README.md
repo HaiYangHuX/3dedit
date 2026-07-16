@@ -31,6 +31,7 @@ packages/
 ## 启动
 
 ```bash
+node --version # 要求 v24.x
 corepack prepare pnpm@10.12.1 --activate
 pnpm install
 cp .env.example .env
@@ -42,6 +43,8 @@ pnpm dev
 默认端口：编辑器 `5173`、运行时 `5174`、API `3000`、PostgreSQL `5432`、Redis `6379`、MinIO `9000/9001`。当本机端口被占用时，可在 `.env` 中同步调整 `*_PORT`、`DATABASE_URL` 和 `REDIS_URL`。
 
 `pnpm dev` 会同时启动 `asset-worker`。上传流程为浏览器分块计算 SHA-256 → 3 路并发直传 MinIO → API 完成 Multipart → BullMQ Worker 校验并解析 → 原子切换可用源文件。请勿只启动 Web 与 API 而遗漏 Worker。
+
+`predev` 和 `prebuild` 会自动执行 `pnpm copy:three-decoders`，将当前锁定的 Three.js r183 Draco/Basis 运行文件复制到两个 Web 应用。若只单独启动某个 Vite 应用，请先手动执行该复制命令。
 
 ## 模型与素材库
 
@@ -59,6 +62,51 @@ pnpm dev
 - TransformControls 提供移动、旋转、缩放、local/world 空间、网格吸附；`W/E/R/F`、`Delete`、`Cmd/Ctrl+Z` 可用。
 - 模型拖放位置由 canvas 相对射线与 `y=0` 平面求交，不受左右面板宽度影响。
 - 节点增删、变换、属性、层级、场景背景/曝光/网格均纳入命令历史和自动保存。
+
+## 交互、WebSocket 与运行时
+
+- 右侧“交互事件”可配置加载、单/双击、鼠标进出、定时、WebSocket 和变量触发器，并用递归 AND/OR 条件树执行串行或并行动作。
+- 条件和动作是 Zod 强类型声明式协议，运行时不执行任意 JavaScript、`eval` 或模板脚本。
+- 右侧“Socket 任务”支持心跳、指数退避重连、重连上限、消息模拟，以及位置、旋转、缩放、显隐、颜色、文本、图表、视频、动画和相机任务映射。
+- 路由 `http://127.0.0.1:5174/preview/:sceneId` 读取当前草稿；`http://127.0.0.1:5174/runtime/:publicationId` 只读取已发布 Manifest 及其独立资源副本。
+
+WebSocket 任务消息使用 `taskCode` 匹配编辑器配置，消息中的 `taskType`、`taskTime` 和 `taskData` 可在通过协议校验后覆盖默认值：
+
+```json
+{
+  "taskCode": "device-position",
+  "taskTime": 300,
+  "taskData": { "x": 10, "y": 0, "z": 5 }
+}
+```
+
+运行时也接受由上述对象组成的 JSON 数组，数组内任务依次进入强类型映射器。
+
+## 预览与发布
+
+1. 在编辑器点击“预览”会先保存脏文档，再打开草稿运行时。预览页会展示 Socket 状态和最近运行诊断。
+2. 点击“发布”会把 Scene JSON、Manifest 和当前活动资源复制到 `publications/{publicationId}/releases/{releaseId}/`。
+3. 只有完整发布包写入成功后，PostgreSQL 中每个项目唯一的 Publication 指针才会原子切换；失败不会改变已有线上场景。
+4. 重复发布保持同一 `publicationId`，成功后异步清理旧的内部 release，不向用户暴露业务版本列表。
+
+发布结果会同时给出访问地址和 iframe 代码：
+
+```html
+<iframe
+  src="http://127.0.0.1:5174/runtime/PUBLICATION_ID"
+  width="100%"
+  height="100%"
+  frameborder="0"
+  allowfullscreen
+></iframe>
+```
+
+## Three.js Decoder 与 HDR
+
+- Three.js 运行时和类型声明精确锁定为 `0.183.0` / `0.183.1`，Decoder 不从 CDN 漂移加载。
+- `scripts/copy-three-decoders.mjs` 只从 `three/examples/jsm/libs/draco/gltf` 和 `three/examples/jsm/libs/basis` 复制白名单 JS/WASM；任意文件缺失都会让构建立即失败。
+- 生成的 Decoder 文件被 `.gitignore` 排除，仓库仅保留目录与复制规则；线上部署必须保留 `/decoders/draco/` 和 `/decoders/basis/` 静态路径。
+- HDR 环境由 `RGBELoader + PMREMGenerator` 转换，新环境成功前保留旧环境，路由切换或销毁后的迟到纹理会被立即释放。
 
 ## 验证
 
@@ -111,5 +159,21 @@ E2E_EDITOR_BASE_URL=http://127.0.0.1:5273 \
 E2E_RUNTIME_BASE_URL=http://127.0.0.1:5274 \
 pnpm exec playwright test tests/e2e/scene-editing.spec.ts
 ```
+
+### 真实交互、WebSocket 与发布闭环
+
+下列用例会启动随机端口 WebSocket fixture，创建多模型场景，在编辑器内配置点击交互和 Socket 任务，验证草稿预览、发布运行时、MinIO 复制失败保护、同一 Publication 指针替换及旧 release 清理：
+
+```bash
+set -a && source .env && set +a
+docker compose up -d postgres redis minio minio-init
+E2E_DATABASE=true \
+E2E_API_BASE_URL=http://127.0.0.1:3100/api \
+E2E_EDITOR_BASE_URL=http://127.0.0.1:5273 \
+E2E_RUNTIME_BASE_URL=http://127.0.0.1:5274 \
+pnpm exec playwright test tests/e2e/runtime-publication.spec.ts
+```
+
+Playwright 后端启动脚本会先自动执行 `prisma migrate deploy`，不需要在验收命令前重复手工应用 migration。
 
 中文注释要求见 [docs/COMMENTING.md](docs/COMMENTING.md)，完整架构见 [设计文档](docs/superpowers/specs/2026-07-16-digital-twin-scene-platform-design.md)。

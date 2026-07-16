@@ -28,6 +28,7 @@ const container = ref<HTMLDivElement>();
 const errorMessage = ref('');
 const ready = ref(false);
 const objectCount = ref(0);
+const visibleMeshCount = ref(0);
 const socketStatus = ref('idle');
 const lastTaskCode = ref('');
 const diagnostics = shallowRef<RuntimeDiagnostic[]>([]);
@@ -52,6 +53,13 @@ function createSocket(url: string): WebSocketLike {
   return new WebSocket(url) as unknown as WebSocketLike;
 }
 
+function syncRuntimeStats(): void {
+  const stats = engine.getStats();
+  objectCount.value = stats.objectCount;
+  // SceneStats.meshCount 会过滤被隐藏的祖先节点，可直接用于验收交互显隐结果。
+  visibleMeshCount.value = stats.meshCount;
+}
+
 async function loadRuntime(): Promise<void> {
   if (!initialized || disposed) return;
   const generation = ++loadGeneration;
@@ -71,12 +79,14 @@ async function loadRuntime(): Promise<void> {
       },
       onSocketTask: (execution) => {
         lastTaskCode.value = execution.taskCode;
+        syncRuntimeStats();
       },
+      onInteractionSettled: syncRuntimeStats,
     });
     nextRuntime.load(props.document);
     nextRuntime.start();
     runtime = nextRuntime;
-    objectCount.value = engine.getStats().objectCount;
+    syncRuntimeStats();
     ready.value = true;
   } catch (error) {
     if (disposed || generation !== loadGeneration) return;
@@ -147,6 +157,7 @@ defineExpose({
     :data-runtime-ready="String(ready)"
     :data-runtime-mode="mode"
     :data-scene-object-count="String(objectCount)"
+    :data-visible-mesh-count="String(visibleMeshCount)"
     :data-socket-status="socketStatus"
     :data-last-task-code="lastTaskCode"
   >

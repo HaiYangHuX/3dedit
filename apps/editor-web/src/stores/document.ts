@@ -32,6 +32,8 @@ export const useDocumentStore = defineStore('document', () => {
   const canUndo = ref(false);
   const canRedo = ref(false);
   const isHistoryDirty = ref(false);
+  // CommandHistory 必须持有稳定的原始文档对象，子组件通过此代次感知原地变更。
+  const documentChangeVersion = ref(0);
   let loadGeneration = 0;
   let changeGeneration = 0;
   let autoSaveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -75,6 +77,7 @@ export const useDocumentStore = defineStore('document', () => {
       const scene = await projectApi.getScene(sceneId);
       if (generation !== loadGeneration) return;
       document.value = structuredClone(scene.document);
+      documentChangeVersion.value += 1;
       resetHistory();
       changeGeneration = 0;
       changedDuringSave = false;
@@ -101,6 +104,7 @@ export const useDocumentStore = defineStore('document', () => {
 
   function markDirty(): void {
     // 命令直接修改原始文档，在单一出口处通知 Vue 刷新场景树和属性面板。
+    documentChangeVersion.value += 1;
     triggerRef(document);
     changeGeneration += 1;
     if (saveState.value === 'saving') {
@@ -164,11 +168,13 @@ export const useDocumentStore = defineStore('document', () => {
       if (changeGeneration === generation) {
         // 保持根文档对象身份，否则 CommandHistory 上下文会继续指向已被替换的旧快照。
         Object.assign(document.value, structuredClone(scene.document));
+        documentChangeVersion.value += 1;
         markSaved();
         saveState.value = 'saved';
       } else {
         // 保存期间的本地编辑不能被服务端响应覆盖，只继承新 revision 再排队保存。
         document.value.revision = scene.document.revision;
+        documentChangeVersion.value += 1;
         saveState.value = 'dirty';
       }
     } catch (reason) {
@@ -214,6 +220,7 @@ export const useDocumentStore = defineStore('document', () => {
     canUndo,
     canRedo,
     isHistoryDirty,
+    documentChangeVersion,
     loadScene,
     markDirty,
     execute,

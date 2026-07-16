@@ -5,6 +5,8 @@ import RuntimeCanvas from '../src/RuntimeCanvas.vue';
 
 const fixtures = vi.hoisted(() => {
   const lifecycle: string[] = [];
+  let visibleMeshCount = 0;
+  let runtimeOptions: { onInteractionSettled?: () => void } = {};
   const engine = {
     initialize: vi.fn(async () => lifecycle.push('engine:initialize')),
     loadDocument: vi.fn(async () => ({
@@ -15,7 +17,7 @@ const fixtures = vi.hoisted(() => {
     createHost: vi.fn(() => ({})),
     getStats: vi.fn(() => ({
       objectCount: 0,
-      meshCount: 0,
+      meshCount: visibleMeshCount,
       vertexCount: 0,
       faceCount: 0,
     })),
@@ -27,7 +29,20 @@ const fixtures = vi.hoisted(() => {
     injectSocketMessage: vi.fn(async () => undefined),
     dispose: vi.fn(() => lifecycle.push('runtime:dispose')),
   };
-  return { lifecycle, engine, runtime };
+  return {
+    lifecycle,
+    engine,
+    runtime,
+    setVisibleMeshCount(value: number) {
+      visibleMeshCount = value;
+    },
+    setRuntimeOptions(value: { onInteractionSettled?: () => void }) {
+      runtimeOptions = value;
+    },
+    notifyInteractionSettled() {
+      runtimeOptions.onInteractionSettled?.();
+    },
+  };
 });
 
 vi.mock('@digital-twin/three-engine', () => ({
@@ -40,7 +55,8 @@ vi.mock('@digital-twin/three-engine', () => ({
 
 vi.mock('@digital-twin/runtime-core', () => ({
   SceneRuntime: class {
-    constructor() {
+    constructor(options: { onInteractionSettled?: () => void }) {
+      fixtures.setRuntimeOptions(options);
       return fixtures.runtime;
     }
   },
@@ -72,6 +88,12 @@ describe('RuntimeCanvas', () => {
     expect(fixtures.lifecycle).toEqual(['engine:initialize', 'runtime:start']);
     expect(wrapper.attributes('data-runtime-ready')).toBe('true');
     expect(wrapper.attributes('data-runtime-mode')).toBe('preview');
+    expect(wrapper.attributes('data-visible-mesh-count')).toBe('0');
+
+    fixtures.setVisibleMeshCount(1);
+    fixtures.notifyInteractionSettled();
+    await flushPromises();
+    expect(wrapper.attributes('data-visible-mesh-count')).toBe('1');
     wrapper.unmount();
     expect(fixtures.lifecycle.slice(-2)).toEqual([
       'runtime:dispose',

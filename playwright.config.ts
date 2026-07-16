@@ -32,14 +32,20 @@ export default defineConfig({
       command: `pnpm --filter @digital-twin/editor-web exec vite --host 0.0.0.0 --port ${new URL(editorBaseUrl).port || '5173'}`,
       url: `${editorBaseUrl}/projects`,
       // 真实数据库 E2E 需要注入独立 API 端口，不能复用不同 Vite 环境的旧进程。
-      env: databaseE2E ? { VITE_API_BASE_URL: apiBaseUrl } : undefined,
+      env: databaseE2E
+        ? {
+            VITE_API_BASE_URL: apiBaseUrl,
+            VITE_RUNTIME_ORIGIN: runtimeBaseUrl,
+          }
+        : undefined,
       reuseExistingServer: !process.env.CI && !databaseE2E,
       timeout: 120_000,
     },
     {
       command: `pnpm --filter @digital-twin/runtime-web exec vite --host 0.0.0.0 --port ${new URL(runtimeBaseUrl).port || '5174'}`,
       url: `${runtimeBaseUrl}/runtime/local-publication`,
-      reuseExistingServer: !process.env.CI,
+      env: databaseE2E ? { VITE_API_BASE_URL: apiBaseUrl } : undefined,
+      reuseExistingServer: !process.env.CI && !databaseE2E,
       timeout: 120_000,
     },
     ...(databaseE2E
@@ -49,6 +55,9 @@ export default defineConfig({
             url: `${apiBaseUrl}/health`,
             env: {
               PORT: new URL(apiBaseUrl).port || '3100',
+              // Manifest 内的资源 URL 和返回的运行时 URL 必须指向本次隔离端口。
+              API_PUBLIC_BASE_URL: apiBaseUrl,
+              RUNTIME_PUBLIC_BASE_URL: runtimeBaseUrl,
             },
             reuseExistingServer: false,
             timeout: 120_000,

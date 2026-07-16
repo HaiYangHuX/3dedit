@@ -10,6 +10,8 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+# 真实验收必须先应用全部 migration，包括 Publication 的 release 指针字段。
+pnpm --filter @digital-twin/api-server exec prisma migrate deploy
 # 避免 API 与 Worker 同时 prisma generate 写同一 client；E2E 启动前只生成一次。
 pnpm --filter @digital-twin/api-server exec prisma generate
 pnpm --filter @digital-twin/api-server exec tsx watch src/main.ts &

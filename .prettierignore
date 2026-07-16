@@ -1,4 +1,6 @@
 docs/superpowers/
+apps/editor-web/public/decoders/
+apps/runtime-web/public/decoders/
 node_modules/
 dist/
 coverage/

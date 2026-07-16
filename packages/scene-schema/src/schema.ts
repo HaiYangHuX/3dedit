@@ -2,12 +2,7 @@ import { z } from 'zod';
 
 const identifierSchema = z.string().min(1);
 const vector3Schema = z.tuple([z.number(), z.number(), z.number()]);
-const easingSchema = z.enum([
-  'linear',
-  'ease-in',
-  'ease-out',
-  'ease-in-out',
-]);
+const easingSchema = z.enum(['linear', 'ease-in', 'ease-out', 'ease-in-out']);
 
 export const transformSchema = z.object({
   position: vector3Schema,
@@ -301,7 +296,10 @@ function addDuplicateIssues(
   const seen = new Set<string>();
   for (const value of values) {
     if (seen.has(value.id)) {
-      context.addIssue({ code: 'custom', message: `${label} ID 重复: ${value.id}` });
+      context.addIssue({
+        code: 'custom',
+        message: `${label} ID 重复: ${value.id}`,
+      });
     }
     seen.add(value.id);
   }
@@ -367,7 +365,10 @@ export const sceneDocumentSchema = z
       }
       for (const childId of node.childIds) {
         if (!nodeIds.has(childId)) {
-          context.addIssue({ code: 'custom', message: `子节点不存在: ${childId}` });
+          context.addIssue({
+            code: 'custom',
+            message: `子节点不存在: ${childId}`,
+          });
         }
       }
     }
@@ -445,13 +446,9 @@ export const sceneDocumentSchema = z
 
 export type TriggerDefinition = z.infer<typeof triggerDefinitionSchema>;
 export type ActionDefinition = z.infer<typeof actionDefinitionSchema>;
-export type InteractionDefinition = z.infer<
-  typeof interactionDefinitionSchema
->;
+export type InteractionDefinition = z.infer<typeof interactionDefinitionSchema>;
 export type DataSourceDefinition = z.infer<typeof dataSourceDefinitionSchema>;
-export type SocketTaskDefinition = z.infer<
-  typeof socketTaskDefinitionSchema
->;
+export type SocketTaskDefinition = z.infer<typeof socketTaskDefinitionSchema>;
 export type SocketTaskType = z.infer<typeof socketTaskTypeSchema>;
 export type SceneDocument = z.infer<typeof sceneDocumentSchema>;
 export type SceneNode = z.infer<typeof sceneNodeSchema>;
