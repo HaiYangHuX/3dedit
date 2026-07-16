@@ -125,6 +125,40 @@ export class SceneDocumentSystem {
     }
   }
 
+  /**
+   * 模型资源或主组件类型变化时先在场景外完成新对象创建；只有创建成功且代次仍有效
+   * 才替换旧对象，避免异步失败把当前可见节点删掉。
+   */
+  async replaceNode(node: SceneNode): Promise<Object3D> {
+    const previous = this.objects.get(node.id);
+    if (!previous) throw new Error(`节点不存在: ${node.id}`);
+    const version = this.loadVersion;
+    const generation = this.generation;
+    const replacement = await createSceneObject(node, this.assets, generation);
+    if (
+      this.disposed ||
+      version !== this.loadVersion ||
+      generation !== this.generation ||
+      this.objects.get(node.id) !== previous
+    ) {
+      if (!this.assets.release(replacement)) disposeObject3D(replacement);
+      throw new StaleAssetLoadError();
+    }
+
+    const parent = previous.parent ?? this.root;
+    const previousIndex = Math.max(parent.children.indexOf(previous), 0);
+    parent.add(replacement);
+    previous.removeFromParent();
+    const appendedIndex = parent.children.indexOf(replacement);
+    if (appendedIndex !== previousIndex) {
+      parent.children.splice(appendedIndex, 1);
+      parent.children.splice(previousIndex, 0, replacement);
+    }
+    this.objects.set(node.id, replacement);
+    if (!this.assets.release(previous)) disposeObject3D(previous);
+    return replacement;
+  }
+
   getObject(nodeId: string): Object3D | undefined {
     return this.objects.get(nodeId);
   }

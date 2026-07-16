@@ -12,10 +12,12 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@digital-twin/runtime-core": "workspace:*",
     "@digital-twin/scene-schema": "workspace:*",
     "three": "0.183.0"
   },
   "devDependencies": {
+    "@types/node": "24.0.0",
     "@types/three": "0.183.1",
     "vitest": "4.1.10"
   }

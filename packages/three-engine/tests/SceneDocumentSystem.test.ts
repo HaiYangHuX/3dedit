@@ -215,4 +215,36 @@ describe('SceneDocumentSystem', () => {
     system.dispose();
     expect(assets.dispose).toHaveBeenCalledTimes(1);
   });
+
+  it('模型 assetId 改变时先创建新对象再原子替换旧节点', async () => {
+    const scene = new Scene();
+    const assets: AssetInstanceProvider = {
+      beginGeneration: vi.fn(() => 1),
+      instantiate: vi.fn(async (assetId: string) => {
+        const root = modelRoot();
+        root.userData.assetId = assetId;
+        return root;
+      }),
+      release: vi.fn(() => true),
+      dispose: vi.fn(),
+    };
+    const system = new SceneDocumentSystem(scene, assets);
+    const document = createDefaultSceneDocument('project-1', 'scene-1', '场景');
+    const model = node('model', { kind: 'model', assetId: 'asset-old' });
+    document.nodes = { model };
+    document.rootNodeIds = ['model'];
+    await system.loadDocument(document);
+    const oldObject = system.getObject('model');
+
+    const replacement = await system.replaceNode({
+      ...model,
+      components: [{ kind: 'model', assetId: 'asset-new' }],
+    });
+
+    expect(replacement).not.toBe(oldObject);
+    expect(replacement.userData.assetId).toBe('asset-new');
+    expect(system.root.children).toEqual([replacement]);
+    expect(assets.release).toHaveBeenCalledWith(oldObject);
+    system.dispose();
+  });
 });

@@ -7,18 +7,27 @@ import {
   type WebGLRenderer,
 } from 'three';
 
-/** 管理不属于业务节点的场景级渲染状态和编辑器网格。 */
+export interface SceneSettingsSystemOptions {
+  includeGrid?: boolean;
+}
+
+/** 管理场景级渲染状态；编辑器可选网格不会进入纯运行时实例。 */
 export class SceneSettingsSystem {
-  readonly grid = new GridHelper(100, 100, '#334155', '#1e293b');
+  readonly grid?: GridHelper;
 
   constructor(
     private readonly scene: Scene,
     private readonly renderer: WebGLRenderer,
+    options: SceneSettingsSystemOptions = {},
   ) {
-    this.grid.name = '__editor_grid__';
-    this.grid.userData.editorHelper = true;
-    this.grid.position.y = 0;
-    this.scene.add(this.grid);
+    if (options.includeGrid !== false) {
+      const grid = new GridHelper(100, 100, '#334155', '#1e293b');
+      grid.name = '__editor_grid__';
+      grid.userData.editorHelper = true;
+      grid.position.y = 0;
+      this.grid = grid;
+      this.scene.add(grid);
+    }
   }
 
   apply(settings: SceneDocument['settings']): void {
@@ -28,11 +37,12 @@ export class SceneSettingsSystem {
       this.scene.background = new Color(settings.background);
     }
     this.renderer.toneMappingExposure = settings.exposure;
-    this.grid.visible = settings.gridVisible;
+    if (this.grid) this.grid.visible = settings.gridVisible;
     // environmentAssetId 需要 HDR/PMREM 的独立异步代次，不在同步设置边界内偷偷发起加载。
   }
 
   dispose(): void {
+    if (!this.grid) return;
     this.grid.removeFromParent();
     this.grid.geometry.dispose();
     const materials = Array.isArray(this.grid.material)

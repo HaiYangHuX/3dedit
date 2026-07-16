@@ -12,6 +12,7 @@ export type {
 } from './assets/types';
 export { SceneDocumentSystem } from './documents/SceneDocumentSystem';
 export { EditorEngine, type EditorEngineEventMap } from './EditorEngine';
+export { RuntimeThreeEngine } from './RuntimeThreeEngine';
 export {
   SelectionSystem,
   type OutlineSelectionTarget,
@@ -28,5 +29,18 @@ export {
   type ViewportDropOptions,
 } from './interaction/ViewportDropSystem';
 export { disposeObject3D, ResourceTracker } from './ResourceTracker';
-export { SceneSettingsSystem } from './settings/SceneSettingsSystem';
+export {
+  RuntimeHostAdapter,
+  type RuntimeCameraControls,
+  type RuntimeHostAdapterOptions,
+  type RuntimeOutlineTarget,
+} from './runtime/RuntimeHostAdapter';
+export {
+  RuntimePointerSystem,
+  type RuntimePointerSystemOptions,
+} from './runtime/RuntimePointerSystem';
+export {
+  SceneSettingsSystem,
+  type SceneSettingsSystemOptions,
+} from './settings/SceneSettingsSystem';
 export type { AssetInstanceProvider, LoadReport, SceneStats } from './types';

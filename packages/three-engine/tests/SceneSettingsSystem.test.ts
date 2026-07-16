@@ -7,7 +7,7 @@ describe('SceneSettingsSystem', () => {
     const scene = new Scene();
     const renderer = { toneMappingExposure: 1 } as WebGLRenderer;
     const system = new SceneSettingsSystem(scene, renderer);
-    const geometryDispose = vi.spyOn(system.grid.geometry, 'dispose');
+    const geometryDispose = vi.spyOn(system.grid!.geometry, 'dispose');
 
     system.apply({
       background: '#020617',
@@ -18,10 +18,22 @@ describe('SceneSettingsSystem', () => {
 
     expect((scene.background as Color).getHexString()).toBe('020617');
     expect(renderer.toneMappingExposure).toBe(1.6);
-    expect(system.grid.visible).toBe(false);
+    expect(system.grid!.visible).toBe(false);
 
     system.dispose();
-    expect(system.grid.parent).toBeNull();
+    expect(system.grid!.parent).toBeNull();
     expect(geometryDispose).toHaveBeenCalledOnce();
+  });
+
+  it('纯运行时模式不创建或挂载编辑网格', () => {
+    const scene = new Scene();
+    const renderer = { toneMappingExposure: 1 } as WebGLRenderer;
+    const system = new SceneSettingsSystem(scene, renderer, {
+      includeGrid: false,
+    });
+
+    expect(system.grid).toBeUndefined();
+    expect(scene.children).toHaveLength(0);
+    system.dispose();
   });
 });
