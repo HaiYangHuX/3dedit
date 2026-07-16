@@ -77,13 +77,13 @@
 - Pinia
 - Element Plus
 - Three.js 精确锁定为 `0.183.0`，禁止使用 `^`
-- `@types/three` 精确锁定为 `0.183.0`，与运行时保持同一修订号
+- `@types/three` 精确锁定为 `0.183.1`，使用补齐缺失声明文件的 r183 修订
 - Zod：场景协议和接口数据校验
 - Monaco Editor：JSON、表达式和消息调试
 - Vitest、Vue Test Utils、Playwright
 - ESLint、Prettier、Stylelint、Husky
 
-Three.js r183 的 npm 包不内置 TypeScript 声明，因此同时精确锁定 `@types/three@0.183.0`。运行时包始终是 API 兼容性的最终依据，类型声明不得与运行时使用不同修订号。
+Three.js r183 的 npm 包不内置 TypeScript 声明。`@types/three@0.183.0` 发布包缺少 `RenderPipeline.d.ts`，因此精确锁定修复该缺陷的 `@types/three@0.183.1`。运行时仍以 `three@0.183.0` 为 API 兼容性的最终依据。
 
 ### 4.2 后端与基础设施
 
