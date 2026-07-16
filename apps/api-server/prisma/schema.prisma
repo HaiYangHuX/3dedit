@@ -98,8 +98,8 @@ model UploadSession {
 model AssetDependency {
   assetId      String
   dependencyId String
-  asset        Asset @relation("AssetDependencies", fields: [assetId], references: [id], onDelete: Cascade)
-  dependency   Asset @relation("AssetDependents", fields: [dependencyId], references: [id], onDelete: Restrict)
+  asset        Asset  @relation("AssetDependencies", fields: [assetId], references: [id], onDelete: Cascade)
+  dependency   Asset  @relation("AssetDependents", fields: [dependencyId], references: [id], onDelete: Restrict)
 
   @@id([assetId, dependencyId])
 }
@@ -120,15 +120,17 @@ model ProcessingJob {
 }
 
 model Publication {
-  id          String   @id @default(cuid())
-  projectId   String   @unique
-  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  sceneId     String
-  objectKey   String
-  contentHash String
-  status      String   @default("active")
-  publishedAt DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             String   @id @default(cuid())
+  projectId      String   @unique
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sceneId        String
+  releaseId      String
+  objectKey      String
+  sceneObjectKey String
+  contentHash    String
+  status         String   @default("active")
+  publishedAt    DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model DataSource {

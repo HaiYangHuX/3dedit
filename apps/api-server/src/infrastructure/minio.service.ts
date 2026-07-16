@@ -76,6 +76,42 @@ export class MinioService {
     );
   }
 
+  /** 发布流程用服务端复制生成独立资源，避免线上包依赖模型库活动文件。 */
+  async copyObject(sourceKey: string, destinationKey: string): Promise<void> {
+    await this.client.copyObject(
+      this.bucket,
+      destinationKey,
+      `/${this.bucket}/${sourceKey}`,
+    );
+  }
+
+  async putJson(objectKey: string, value: unknown): Promise<void> {
+    const body = Buffer.from(JSON.stringify(value));
+    await this.client.putObject(this.bucket, objectKey, body, body.length, {
+      'content-type': 'application/json; charset=utf-8',
+    });
+  }
+
+  /** 限制 Manifest 最大体积，损坏或错误对象不能无限占用 API 进程内存。 */
+  async getJson(
+    objectKey: string,
+    maxBytes = 16 * 1024 * 1024,
+  ): Promise<unknown> {
+    const stream = await this.client.getObject(this.bucket, objectKey);
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of stream) {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      size += buffer.length;
+      if (size > maxBytes) {
+        stream.destroy();
+        throw new Error(`JSON 对象超过大小限制: ${objectKey}`);
+      }
+      chunks.push(buffer);
+    }
+    return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
+  }
+
   /** 资源数据库事务提交后清理其所有源文件和派生文件。 */
   async removePrefix(prefix: string): Promise<void> {
     const objectNames: string[] = [];

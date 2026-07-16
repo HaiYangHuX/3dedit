@@ -49,6 +49,18 @@ export type {
   UpdateProjectInput,
 } from './project.js';
 export {
+  publicationAssetEntrySchema,
+  publicationDetailSchema,
+  publicationManifestSchema,
+  publishSceneInputSchema,
+} from './publication.js';
+export type {
+  PublicationAssetEntry,
+  PublicationDetail,
+  PublicationManifest,
+  PublishSceneInput,
+} from './publication.js';
+export {
   copySceneInputSchema,
   createSceneInputSchema,
   reorderScenesInputSchema,

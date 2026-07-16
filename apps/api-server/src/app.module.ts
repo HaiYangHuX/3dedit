@@ -4,6 +4,7 @@ import { HealthController } from './health/health.controller.js';
 import { HealthService } from './health/health.service.js';
 import { InfrastructureModule } from './infrastructure/infrastructure.module.js';
 import { ProjectModule } from './projects/project.module.js';
+import { PublicationModule } from './publications/publication.module.js';
 import { SceneModule } from './scenes/scene.module.js';
 import { UploadModule } from './uploads/upload.module.js';
 
@@ -15,6 +16,7 @@ import { UploadModule } from './uploads/upload.module.js';
     SceneModule,
     AssetModule,
     UploadModule,
+    PublicationModule,
   ],
   controllers: [HealthController],
   providers: [HealthService],

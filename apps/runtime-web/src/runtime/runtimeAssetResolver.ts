@@ -71,10 +71,13 @@ export function createPublicationAssetResolver(
     async resolve(assetId) {
       const asset = assets[assetId];
       if (!asset) throw new Error(`发布包未包含资源: ${assetId}`);
+      if (!modelFormats.has(asset.format as ModelAssetFormat)) {
+        throw new Error(`发布资源不是可加载模型: ${assetId}`);
+      }
       return {
         assetId,
         name: asset.name,
-        format: asset.format,
+        format: asset.format as ModelAssetFormat,
         url: asset.url,
       };
     },

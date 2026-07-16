@@ -7,6 +7,8 @@ import {
   createSceneInputSchema,
   createUploadInputSchema,
   reorderScenesInputSchema,
+  publicationManifestSchema,
+  publishSceneInputSchema,
   saveSceneInputSchema,
   uploadCompletionSchema,
   updateProjectInputSchema,
@@ -103,5 +105,52 @@ describe('资源上传 API 契约', () => {
         expectedSha256: sha256,
       }),
     ).toMatchObject({ fileId: 'file-1', expectedSha256: sha256 });
+  });
+});
+
+describe('当前发布 API 契约', () => {
+  it('校验发布输入和包含独立资源的 Manifest', () => {
+    const document = createDefaultSceneDocument(
+      'project-1',
+      'scene-1',
+      '场景一',
+    );
+    expect(publishSceneInputSchema.parse({ sceneId: 'scene-1' })).toEqual({
+      sceneId: 'scene-1',
+    });
+    expect(
+      publicationManifestSchema.parse({
+        schemaVersion: 1,
+        publicationId: 'publication-1',
+        projectId: 'project-1',
+        sceneId: 'scene-1',
+        releaseId: 'release-1',
+        contentHash: 'hash-1',
+        document,
+        assets: {
+          'asset-1': {
+            name: '设备',
+            format: 'glb',
+            mimeType: 'model/gltf-binary',
+            size: 128,
+            objectKey:
+              'publications/publication-1/releases/release-1/assets/asset-1/source.glb',
+            url: 'http://127.0.0.1:3000/api/publications/publication-1/assets/asset-1',
+          },
+        },
+      }),
+    ).toMatchObject({ publicationId: 'publication-1', releaseId: 'release-1' });
+    expect(() =>
+      publicationManifestSchema.parse({
+        schemaVersion: 1,
+        publicationId: 'publication-1',
+        projectId: 'project-1',
+        sceneId: 'scene-1',
+        releaseId: 'release-1',
+        contentHash: 'hash-1',
+        document: { ...document, projectId: '' },
+        assets: {},
+      }),
+    ).toThrow();
   });
 });
