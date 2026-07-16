@@ -1,18 +1,15 @@
 <script setup lang="ts">
-import RuntimeCanvas from './RuntimeCanvas.vue';
+import { RouterView } from 'vue-router';
 </script>
 
 <template>
-  <main class="runtime-shell">
-    <RuntimeCanvas />
-  </main>
+  <RouterView />
 </template>
 
 <style>
 html,
 body,
-#app,
-.runtime-shell {
+#app {
   width: 100%;
   height: 100%;
   margin: 0;
@@ -20,6 +17,6 @@ body,
 }
 
 body {
-  background: #111827;
+  background: #070a13;
 }
 </style>

@@ -202,6 +202,12 @@ importers:
 
   apps/runtime-web:
     dependencies:
+      '@digital-twin/api-contracts':
+        specifier: workspace:*
+        version: link:../../packages/api-contracts
+      '@digital-twin/runtime-core':
+        specifier: workspace:*
+        version: link:../../packages/runtime-core
       '@digital-twin/scene-schema':
         specifier: workspace:*
         version: link:../../packages/scene-schema
