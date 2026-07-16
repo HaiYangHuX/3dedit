@@ -11,17 +11,29 @@ import { ApiError } from '../api/client';
 import { projectApi } from '../api/projects';
 
 function toProjectSummary(project: ProjectDetail): ProjectSummary {
-  const {
-    scenes: _scenes,
-    publicationStatus: _publicationStatus,
-    ...summary
-  } = project;
-  return summary;
+  return {
+    id: project.id,
+    name: project.name,
+    description: project.description,
+    coverKey: project.coverKey,
+    sceneCount: project.sceneCount,
+    createdAt: project.createdAt,
+    updatedAt: project.updatedAt,
+  };
 }
 
 function toSceneSummary(scene: SceneDetail): SceneSummary {
-  const { document: _document, ...summary } = scene;
-  return summary;
+  return {
+    id: scene.id,
+    projectId: scene.projectId,
+    name: scene.name,
+    sortOrder: scene.sortOrder,
+    revision: scene.revision,
+    contentHash: scene.contentHash,
+    coverKey: scene.coverKey,
+    createdAt: scene.createdAt,
+    updatedAt: scene.updatedAt,
+  };
 }
 
 /** 管理项目列表和当前项目 DTO，不持有编辑器引擎或 Three.js 对象。 */

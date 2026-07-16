@@ -18,6 +18,7 @@ export const router = createRouter({
     {
       path: '/editor/:projectId/:sceneId',
       component: EditorWorkspace,
+      props: true,
     },
   ],
 });

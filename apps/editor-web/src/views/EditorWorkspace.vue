@@ -1,6 +1,52 @@
 <script setup lang="ts">
-import { ElButton, ElButtonGroup } from 'element-plus';
+import { ElButton, ElButtonGroup, ElMessage } from 'element-plus';
+import { storeToRefs } from 'pinia';
+import { computed, onBeforeUnmount, watch } from 'vue';
 import EditorCanvas from '../components/EditorCanvas.vue';
+import { useDocumentStore, type SaveState } from '../stores/document';
+
+const props = withDefaults(
+  defineProps<{ projectId?: string; sceneId?: string }>(),
+  { projectId: 'local-project', sceneId: 'local-scene' },
+);
+const store = useDocumentStore();
+const { document, saveState, error } = storeToRefs(store);
+
+const saveStateLabel: Record<SaveState, string> = {
+  idle: '尚未加载',
+  loading: '加载中',
+  saved: '已保存',
+  dirty: '有未保存更改',
+  saving: '保存中',
+  conflict: '保存冲突',
+  error: '保存失败',
+};
+const stateLabel = computed(() => saveStateLabel[saveState.value]);
+
+watch(
+  () => props.sceneId,
+  (sceneId) => {
+    void Promise.resolve(store.loadScene(sceneId)).catch(() => {
+      // 状态栏展示详细错误，保留引擎视口以便用户重试。
+    });
+  },
+  { immediate: true },
+);
+
+onBeforeUnmount(() => store.disposeAutoSave());
+
+async function saveDocument(): Promise<void> {
+  try {
+    await store.save();
+    ElMessage.success('场景已保存');
+  } catch {
+    ElMessage.error(error.value || '场景保存失败');
+  }
+}
+
+function reloadScene(): void {
+  void store.loadScene(props.sceneId).catch(() => undefined);
+}
 </script>
 
 <template>
@@ -9,12 +55,27 @@ import EditorCanvas from '../components/EditorCanvas.vue';
       <div class="brand-block">
         <span class="brand-dot" />
         <strong>数字孪生场景平台</strong>
-        <span class="scene-name">场景一</span>
+        <span class="scene-name">{{ document.name }}</span>
       </div>
       <ElButtonGroup>
         <ElButton size="small">撤销</ElButton>
         <ElButton size="small">重做</ElButton>
-        <ElButton size="small">保存</ElButton>
+        <ElButton
+          size="small"
+          :loading="saveState === 'saving'"
+          :disabled="saveState === 'loading'"
+          data-testid="save-scene"
+          @click="saveDocument"
+        >
+          保存
+        </ElButton>
+        <ElButton
+          v-if="saveState === 'conflict'"
+          size="small"
+          @click="reloadScene"
+        >
+          重新加载
+        </ElButton>
         <ElButton size="small">预览</ElButton>
         <ElButton type="primary" size="small">发布</ElButton>
       </ElButtonGroup>
@@ -31,7 +92,7 @@ import EditorCanvas from '../components/EditorCanvas.vue';
         <button type="button">视频</button>
         <button type="button">Shader</button>
       </nav>
-      <div class="empty-panel">模型库将在下一阶段接入</div>
+      <div class="empty-panel">模型库将在资源阶段接入</div>
     </aside>
 
     <section class="viewport-shell">
@@ -50,8 +111,18 @@ import EditorCanvas from '../components/EditorCanvas.vue';
     </aside>
 
     <footer class="status-bar" data-testid="status-bar">
-      <span>对象 0</span><span>顶点 0</span><span>面 0</span><span>FPS --</span>
-      <span class="save-state">已保存</span>
+      <span>对象 {{ Object.keys(document.nodes).length }}</span>
+      <span>顶点 0</span><span>面 0</span><span>FPS --</span>
+      <span
+        class="save-state"
+        :class="{
+          'save-state--error':
+            saveState === 'conflict' || saveState === 'error',
+        }"
+        :title="error"
+      >
+        {{ stateLabel }}
+      </span>
     </footer>
   </main>
 </template>
