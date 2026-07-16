@@ -7,30 +7,46 @@ import TransformInspector from './TransformInspector.vue';
 import MaterialInspector from './MaterialInspector.vue';
 
 const props = withDefaults(
-  defineProps<{ node: SceneNode; textureAssets?: Asset[] }>(),
-  { textureAssets: () => [] },
+  defineProps<{
+    node: SceneNode;
+    textureAssets?: Asset[];
+    changeVersion?: number;
+  }>(),
+  { textureAssets: () => [], changeVersion: 0 },
 );
 const emit = defineEmits<{ update: [patch: EditableNodePatch] }>();
 
 const nameDraft = ref('');
 const businessDataDraft = ref('{}');
 const businessDataError = ref('');
-const geometry = computed(() =>
-  props.node.components.find((component) => component.kind === 'geometry'),
-);
-const light = computed(() =>
-  props.node.components.find((component) => component.kind === 'light'),
-);
-const model = computed(() =>
-  props.node.components.find((component) => component.kind === 'model'),
-);
-const material = computed(() =>
-  props.node.components.find((component) => component.kind === 'material'),
-);
+function componentOf<T extends SceneNode['components'][number]['kind']>(
+  kind: T,
+): Extract<SceneNode['components'][number], { kind: T }> | undefined {
+  // SceneDocument 存在 shallowRef 中；显式读取代次让原地命令更新可以使 computed 失效。
+  void props.changeVersion;
+  const component = props.node.components.find(
+    (
+      component,
+    ): component is Extract<SceneNode['components'][number], { kind: T }> =>
+      component.kind === kind,
+  );
+  // 返回新身份，确保依赖浅响应式文档的子检查器能收到 prop 更新，而不是命中 Object.is 缓存。
+  return component
+    ? (JSON.parse(JSON.stringify(component)) as Extract<
+        SceneNode['components'][number],
+        { kind: T }
+      >)
+    : undefined;
+}
+
+const geometry = computed(() => componentOf('geometry'));
+const light = computed(() => componentOf('light'));
+const model = computed(() => componentOf('model'));
+const material = computed(() => componentOf('material'));
 
 watch(
-  () => props.node,
-  (node) => {
+  () => [props.node, props.changeVersion] as const,
+  ([node]) => {
     nameDraft.value = node.name;
     businessDataDraft.value = JSON.stringify(node.businessData, null, 2);
     businessDataError.value = '';

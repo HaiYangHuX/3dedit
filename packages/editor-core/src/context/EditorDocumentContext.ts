@@ -1,4 +1,7 @@
-import type { SceneDocument } from '@digital-twin/scene-schema';
+import {
+  collectAssetReferences,
+  type SceneDocument,
+} from '@digital-twin/scene-schema';
 
 /** 所有文档命令共享的最小上下文，不包含 Vue、Pinia 或 Three.js 运行对象。 */
 export interface EditorDocumentContext {
@@ -8,27 +11,7 @@ export interface EditorDocumentContext {
 
 /** 服务端仍会重算引用；前端同步维护可让删除保护、状态栏和保存快照即时准确。 */
 export function rebuildAssetReferences(document: SceneDocument): void {
-  const references = new Map<string, Set<string>>();
-  for (const node of Object.values(document.nodes)) {
-    for (const component of node.components) {
-      if (component.kind !== 'model') continue;
-      const nodeIds = references.get(component.assetId) ?? new Set<string>();
-      nodeIds.add(node.id);
-      references.set(component.assetId, nodeIds);
-    }
-  }
-  if (document.settings.environmentAssetId) {
-    references.set(
-      document.settings.environmentAssetId,
-      references.get(document.settings.environmentAssetId) ?? new Set(),
-    );
-  }
-  document.assetReferences = [...references.entries()]
-    .sort(([first], [second]) => first.localeCompare(second))
-    .map(([assetId, nodeIds]) => ({
-      assetId,
-      nodeIds: [...nodeIds].sort(),
-    }));
+  document.assetReferences = collectAssetReferences(document);
 }
 
 export function notifyDocumentChanged(context: EditorDocumentContext): void {

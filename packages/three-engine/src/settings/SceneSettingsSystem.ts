@@ -8,7 +8,7 @@ import {
   type Texture,
   type WebGLRenderer,
 } from 'three';
-import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
 import type { EnvironmentAssetResolver } from '../assets/types.js';
 
 export interface EnvironmentTextureLoader {
@@ -53,7 +53,7 @@ export class SceneSettingsSystem {
       this.grid = grid;
       this.scene.add(grid);
     }
-    this.environmentLoader = options.environmentLoader ?? new RGBELoader();
+    this.environmentLoader = options.environmentLoader ?? new HDRLoader();
     this.environmentGenerator = options.environmentGenerator;
   }
 

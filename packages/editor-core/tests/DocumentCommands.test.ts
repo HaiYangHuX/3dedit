@@ -1,4 +1,5 @@
 import {
+  createDefaultMaterialComponent,
   createDefaultSceneDocument,
   type SceneNode,
   type Transform,
@@ -162,6 +163,30 @@ describe('文档命令', () => {
     await history.undo();
     expect(editor.document.nodes[target.id]?.name).toBe('node-1');
     expect(editor.document.assetReferences).toEqual([]);
+  });
+
+  it('更新材质贴图时同步重建贴图资源引用', async () => {
+    const editor = context();
+    const target = node('node-1');
+    editor.document.nodes[target.id] = target;
+    editor.document.rootNodeIds = [target.id];
+    const material = createDefaultMaterialComponent();
+    material.textures.baseColor = {
+      assetId: 'texture-1',
+      offset: [0, 0],
+      repeat: [1, 1],
+      rotation: 0,
+      wrapS: 'repeat',
+      wrapT: 'repeat',
+    };
+
+    await new CommandHistory(editor).execute(
+      new UpdateNodeCommand(target.id, { components: [material] }),
+    );
+
+    expect(editor.document.assetReferences).toEqual([
+      { assetId: 'texture-1', nodeIds: [target.id] },
+    ]);
   });
 
   it('拒绝把节点移动到自身后代并保持原层级不变', async () => {

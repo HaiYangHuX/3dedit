@@ -1,13 +1,13 @@
 import {
   AmbientLight,
   Box3,
-  Clock,
   Color,
   EventDispatcher,
   PerspectiveCamera,
   Scene,
   Sphere,
   SRGBColorSpace,
+  Timer,
   Vector2,
   Vector3,
   WebGLRenderer,
@@ -68,7 +68,7 @@ export interface EditorEngineEventMap {
 export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
   readonly scene = new Scene();
   readonly camera = new PerspectiveCamera(50, 1, 0.01, 10_000);
-  private readonly clock = new Clock();
+  private readonly timer = new Timer();
   private readonly resources = new ResourceTracker();
   private renderer?: WebGLRenderer;
   private controls?: OrbitControls;
@@ -158,6 +158,7 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
       );
     });
     this.resizeObserver.observe(container);
+    this.timer.connect(document);
     this.renderStatsStartedAt = performance.now();
     this.loop();
   }
@@ -179,10 +180,11 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.invalidate();
   }
 
-  private readonly loop = (): void => {
+  private readonly loop = (timestamp?: number): void => {
     if (this.disposed) return;
     this.frameId = requestAnimationFrame(this.loop);
-    const delta = this.clock.getDelta();
+    this.timer.update(timestamp);
+    const delta = this.timer.getDelta();
     const cameraAnimating = this.cameraSystem?.update(delta) ?? false;
     if (!cameraAnimating) this.controls?.update(delta);
     if (cameraAnimating) this.invalidated = true;
@@ -394,6 +396,7 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     if (this.disposed) return;
     this.disposed = true;
     if (this.frameId !== undefined) cancelAnimationFrame(this.frameId);
+    this.timer.dispose();
     this.resizeObserver?.disconnect();
     this.selectionSystem?.dispose();
     this.transformSystem?.dispose();

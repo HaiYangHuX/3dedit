@@ -57,11 +57,21 @@ pnpm dev
 
 ## 场景编辑器
 
+- 工作台按 ThreeFlowX 的高密度比例组织为 33px 顶栏、180px 竖向资源区、中央视口和 340px 检查器；统计浮层与方向方块不占用画布布局空间。
 - 同一场景可实例化多个模型，并支持立方体、球体、平面、圆柱体和五种灯光。
 - 场景树、视口射线选择、OutlinePass 和属性面板通过 SceneNode ID 双向同步。
-- TransformControls 提供移动、旋转、缩放、local/world 空间、网格吸附；`W/E/R/F`、`Delete`、`Cmd/Ctrl+Z` 可用。
+- TransformControls 提供移动、旋转、缩放、local/world 空间、网格吸附；`W/E/R/F`、`Delete`、`Cmd/Ctrl+Z` 可用。视口工具条还支持六向视图、相机重置、PNG 截图和视口全屏。
 - 模型拖放位置由 canvas 相对射线与 `y=0` 平面求交，不受左右面板宽度影响。
 - 节点增删、变换、属性、层级、场景背景/曝光/网格均纳入命令历史和自动保存。
+
+### PBR 材质与贴图
+
+- 模型和基础几何体支持节点级材质覆盖，覆盖范围是该节点下全部 Mesh；“恢复原始”会回到模型资源自带材质或几何体默认材质。
+- 支持 Standard、Physical、Phong、Basic，以及颜色、透明、线框、渲染面、深度、阴影、粗糙度、金属度、发光、清漆、反射率、高光和法线强度。
+- Base Color、Normal、Roughness、Metalness、AO、Emissive 六类贴图都保存独立素材 ID、offset、repeat、rotation 与包裹方式。
+- Base Color/Emissive 使用 sRGB，数据贴图保持无颜色空间；异步贴图通过场景代次丢弃迟到结果，覆盖 Material/Texture clone 在更新、恢复和销毁时对称释放。
+- 贴图资源与模型/HDR 一起进入服务端重建的 `assetReferences` 和独立发布包，草稿预览与正式运行时使用同一个 `MaterialSystem`。
+- 当前周期有意采用节点级统一覆盖；子网格/材质槽分别配置将在模型解析生成稳定 slot ID 后扩展，避免持久化不稳定遍历下标。
 
 ## 交互、WebSocket 与运行时
 
@@ -85,7 +95,7 @@ WebSocket 任务消息使用 `taskCode` 匹配编辑器配置，消息中的 `ta
 ## 预览与发布
 
 1. 在编辑器点击“预览”会先保存脏文档，再打开草稿运行时。预览页会展示 Socket 状态和最近运行诊断。
-2. 点击“发布”会把 Scene JSON、Manifest 和当前活动资源复制到 `publications/{publicationId}/releases/{releaseId}/`。
+2. 点击“发布”会把 Scene JSON、Manifest 和当前活动模型、HDR、材质贴图复制到 `publications/{publicationId}/releases/{releaseId}/`。
 3. 只有完整发布包写入成功后，PostgreSQL 中每个项目唯一的 Publication 指针才会原子切换；失败不会改变已有线上场景。
 4. 重复发布保持同一 `publicationId`，成功后异步清理旧的内部 release，不向用户暴露业务版本列表。
 
@@ -106,7 +116,7 @@ WebSocket 任务消息使用 `taskCode` 匹配编辑器配置，消息中的 `ta
 - Three.js 运行时和类型声明精确锁定为 `0.183.0` / `0.183.1`，Decoder 不从 CDN 漂移加载。
 - `scripts/copy-three-decoders.mjs` 只从 `three/examples/jsm/libs/draco/gltf` 和 `three/examples/jsm/libs/basis` 复制白名单 JS/WASM；任意文件缺失都会让构建立即失败。
 - 生成的 Decoder 文件被 `.gitignore` 排除，仓库仅保留目录与复制规则；线上部署必须保留 `/decoders/draco/` 和 `/decoders/basis/` 静态路径。
-- HDR 环境由 `RGBELoader + PMREMGenerator` 转换，新环境成功前保留旧环境，路由切换或销毁后的迟到纹理会被立即释放。
+- HDR 环境由 r183 `HDRLoader + PMREMGenerator` 转换，新环境成功前保留旧环境，路由切换或销毁后的迟到纹理会被立即释放；渲染循环使用 `Timer`，USDZ 使用 `USDLoader`，不实例化 r183 已弃用入口。
 
 ## 验证
 

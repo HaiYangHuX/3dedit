@@ -464,6 +464,7 @@ async function copyText(value: string): Promise<void> {
         <NodeInspector
           v-if="selectedNode"
           :node="selectedNode"
+          :change-version="documentChangeVersion"
           :texture-assets="textureAssets"
           @update="
             (patch) => runCommand(commands.updateNode(selectedNode!.id, patch))

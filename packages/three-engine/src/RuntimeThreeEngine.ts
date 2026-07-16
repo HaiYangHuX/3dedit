@@ -2,11 +2,11 @@ import type { RuntimeHost } from '@digital-twin/runtime-core';
 import type { SceneDocument } from '@digital-twin/scene-schema';
 import {
   ACESFilmicToneMapping,
-  Clock,
   Color,
   PerspectiveCamera,
   Scene,
   SRGBColorSpace,
+  Timer,
   Vector2,
   WebGLRenderer,
 } from 'three';
@@ -28,7 +28,7 @@ import type { LoadReport, SceneStats } from './types.js';
 export class RuntimeThreeEngine {
   readonly scene = new Scene();
   readonly camera = new PerspectiveCamera(50, 1, 0.01, 10_000);
-  private readonly clock = new Clock();
+  private readonly timer = new Timer();
   private renderer?: WebGLRenderer;
   private controls?: OrbitControls;
   private composer?: EffectComposer;
@@ -85,6 +85,7 @@ export class RuntimeThreeEngine {
       );
     });
     this.resizeObserver.observe(container);
+    this.timer.connect(document);
     this.loop();
   }
 
@@ -154,6 +155,7 @@ export class RuntimeThreeEngine {
     if (this.disposed) return;
     this.disposed = true;
     if (this.frameId !== undefined) cancelAnimationFrame(this.frameId);
+    this.timer.dispose();
     this.resizeObserver?.disconnect();
     this.hostAdapter?.dispose();
     this.pointerSystem?.dispose();
@@ -166,10 +168,11 @@ export class RuntimeThreeEngine {
     canvas?.remove();
   }
 
-  private readonly loop = (): void => {
+  private readonly loop = (timestamp?: number): void => {
     if (this.disposed) return;
     this.frameId = requestAnimationFrame(this.loop);
-    const delta = this.clock.getDelta();
+    this.timer.update(timestamp);
+    const delta = this.timer.getDelta();
     this.controls?.update(delta);
     this.hostAdapter?.update(delta);
     // 后期管线启用后由 Composer 唯一写入 canvas，避免同一帧重复渲染。

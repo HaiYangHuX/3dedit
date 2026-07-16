@@ -6,6 +6,8 @@ import {
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import MaterialInspector from '../src/components/editor/MaterialInspector.vue';
+import NodeInspector from '../src/components/editor/NodeInspector.vue';
+import { createGeometryNode } from '../src/editor/createSceneNode';
 
 const texture: Asset = {
   id: 'texture-1',
@@ -32,6 +34,26 @@ function latestUpdate(wrapper: ReturnType<typeof mount>): MaterialComponent {
 }
 
 describe('MaterialInspector', () => {
+  it('文档原地更新后通过 changeVersion 刷新材质条件面板', async () => {
+    const node = createGeometryNode('box');
+    const wrapper = mount(NodeInspector, {
+      props: { node, changeVersion: 0 },
+    });
+    expect(wrapper.find('[data-testid="material-clearcoat"]').exists()).toBe(
+      false,
+    );
+    const material = node.components.find(
+      (component) => component.kind === 'material',
+    );
+    if (material?.kind === 'material') material.materialType = 'physical';
+
+    await wrapper.setProps({ changeVersion: 1 });
+
+    expect(wrapper.find('[data-testid="material-clearcoat"]').exists()).toBe(
+      true,
+    );
+  });
+
   it('为没有覆盖的模型创建完整 Standard 默认材质', async () => {
     const wrapper = mount(MaterialInspector);
 

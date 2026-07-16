@@ -6,7 +6,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
-import { USDZLoader } from 'three/addons/loaders/USDZLoader.js';
+import { USDLoader } from 'three/addons/loaders/USDLoader.js';
 import type { AssetDescriptor, AssetLoaderLike, LoadedAsset } from './types.js';
 
 export interface AssetLoaderOptions {
@@ -33,7 +33,7 @@ export class AssetLoader implements AssetLoaderLike {
   private readonly fbx = new FBXLoader();
   private readonly obj = new OBJLoader();
   private readonly stl = new STLLoader();
-  private readonly usdz = new USDZLoader();
+  private readonly usd = new USDLoader();
 
   constructor(options: AssetLoaderOptions = {}) {
     this.draco.setDecoderPath(
@@ -84,7 +84,7 @@ export class AssetLoader implements AssetLoaderLike {
         break;
       }
       case 'usdz': {
-        const root = await this.usdz.loadAsync(descriptor.url);
+        const root = await this.usd.loadAsync(descriptor.url);
         loaded = { root, animations: [] };
         break;
       }

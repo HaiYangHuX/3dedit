@@ -1076,11 +1076,18 @@ button {
 
 .viewport-tools button {
   display: inline-flex;
+  flex: 0 0 30px;
   gap: 4px;
   align-items: center;
+  justify-content: center;
+  width: 30px;
   height: 26px;
-  padding: 0 6px;
+  padding: 0 4px;
   white-space: nowrap;
+}
+
+.viewport-tools button :where(span, kbd) {
+  display: none;
 }
 
 .viewport-tools button b {
@@ -1100,6 +1107,13 @@ button {
   color: #e0f2fe;
   background: rgb(14 165 233 / 18%);
   box-shadow: inset 0 0 0 1px rgb(56 189 248 / 28%);
+}
+
+.viewport-tools button:focus-visible,
+.asset-category-item:focus-visible,
+.element-palette button:focus-visible {
+  outline: 1px solid #38bdf8;
+  outline-offset: -1px;
 }
 
 .editor-canvas canvas {
