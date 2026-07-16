@@ -1,4 +1,5 @@
 import {
+  collectAssetReferences,
   sceneDocumentSchema,
   type SceneDocument,
 } from '@digital-twin/scene-schema';
@@ -20,34 +21,12 @@ export function normalizeSceneDocument(
   revision: number,
 ): SceneDocument {
   const parsed = sceneDocumentSchema.parse(input);
-  const references = new Map<string, Set<string>>();
-
-  for (const node of Object.values(parsed.nodes)) {
-    for (const component of node.components) {
-      if (component.kind !== 'model') continue;
-      const nodeIds = references.get(component.assetId) ?? new Set<string>();
-      nodeIds.add(node.id);
-      references.set(component.assetId, nodeIds);
-    }
-  }
-
-  if (parsed.settings.environmentAssetId) {
-    references.set(
-      parsed.settings.environmentAssetId,
-      references.get(parsed.settings.environmentAssetId) ?? new Set<string>(),
-    );
-  }
 
   return sceneDocumentSchema.parse({
     ...parsed,
     ...identity,
     revision,
-    assetReferences: [...references.entries()]
-      .sort(([first], [second]) => first.localeCompare(second))
-      .map(([assetId, nodeIds]) => ({
-        assetId,
-        nodeIds: [...nodeIds].sort(),
-      })),
+    assetReferences: collectAssetReferences(parsed),
   });
 }
 

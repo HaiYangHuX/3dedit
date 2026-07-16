@@ -1,4 +1,5 @@
 import {
+  createDefaultMaterialComponent,
   createDefaultSceneDocument,
   type SceneDocument,
   type SceneNode,
@@ -40,6 +41,16 @@ describe('场景文档服务端归一化', () => {
     };
     document.rootNodeIds = ['node-2', 'node-1'];
     document.settings.environmentAssetId = 'asset-env';
+    const material = createDefaultMaterialComponent();
+    material.textures.baseColor = {
+      assetId: 'asset-texture',
+      offset: [0, 0],
+      repeat: [1, 1],
+      rotation: 0,
+      wrapS: 'repeat',
+      wrapT: 'repeat',
+    };
+    document.nodes['node-1']!.components.push(material);
     document.assetReferences = [{ assetId: 'forged', nodeIds: [] }];
 
     const result = normalizeSceneDocument(
@@ -57,6 +68,7 @@ describe('场景文档服务端归一化', () => {
     expect(result.assetReferences).toEqual([
       { assetId: 'asset-a', nodeIds: ['node-1', 'node-2'] },
       { assetId: 'asset-env', nodeIds: [] },
+      { assetId: 'asset-texture', nodeIds: ['node-1'] },
     ]);
   });
 

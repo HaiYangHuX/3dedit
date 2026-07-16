@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { materialComponentSchema } from './material.js';
 
 const identifierSchema = z.string().min(1);
 const vector3Schema = z.tuple([z.number(), z.number(), z.number()]);
@@ -29,6 +30,7 @@ const componentSchema = z.discriminatedUnion('kind', [
     intensity: z.number().nonnegative(),
     castShadow: z.boolean(),
   }),
+  materialComponentSchema,
   z.object({
     kind: z.enum([
       'camera',

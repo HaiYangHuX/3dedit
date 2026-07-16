@@ -1,5 +1,24 @@
 export { createDefaultSceneDocument } from './defaultDocument.js';
 export {
+  collectAssetReferences,
+  type AssetReference,
+} from './assetReferences.js';
+export {
+  createDefaultMaterialComponent,
+  materialComponentSchema,
+  materialSideSchema,
+  materialTextureBindingSchema,
+  materialTextureSlotSchema,
+  materialTypeSchema,
+  textureWrapSchema,
+  type MaterialComponent,
+  type MaterialSide,
+  type MaterialTextureBinding,
+  type MaterialTextureSlot,
+  type MaterialType,
+  type TextureWrap,
+} from './material.js';
+export {
   actionDefinitionSchema,
   conditionGroupSchema,
   dataSourceDefinitionSchema,
