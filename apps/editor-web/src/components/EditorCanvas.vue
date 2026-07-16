@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import {
   EditorEngine,
+  type CameraOrientation,
+  type CameraView,
   type ModelAssetFormat,
+  type RenderStats,
   type SceneStats,
   type SelectionState,
   type TransformCommit,
@@ -42,6 +45,8 @@ const emit = defineEmits<{
   'transform-commit': [commit: TransformCommit];
   'asset-drop': [payload: AssetDropPayload];
   'stats-change': [stats: SceneStats];
+  'camera-change': [orientation: CameraOrientation];
+  'render-stats-change': [stats: RenderStats];
 }>();
 
 const container = ref<HTMLDivElement>();
@@ -79,9 +84,26 @@ function handleStatsChange(event: SceneStats & { type: 'statschange' }): void {
   });
 }
 
+function handleCameraChange(
+  event: CameraOrientation & { type: 'camerachange' },
+): void {
+  emit('camera-change', { quaternion: [...event.quaternion] });
+}
+
+function handleRenderStatsChange(
+  event: RenderStats & { type: 'renderstatschange' },
+): void {
+  emit('render-stats-change', {
+    fps: event.fps,
+    drawCalls: event.drawCalls,
+  });
+}
+
 engine.addEventListener('selectionchange', handleSelectionChange);
 engine.addEventListener('transformend', handleTransformEnd);
 engine.addEventListener('statschange', handleStatsChange);
+engine.addEventListener('camerachange', handleCameraChange);
+engine.addEventListener('renderstatschange', handleRenderStatsChange);
 
 async function loadDocument(document = props.document): Promise<void> {
   if (!initialized) return;
@@ -134,6 +156,18 @@ function setTransformSpace(space: 'local' | 'world'): void {
 
 function focusSelection(): boolean {
   return engine.focusSelection();
+}
+
+function setCameraView(view: CameraView): void {
+  engine.setCameraView(view);
+}
+
+function resetCamera(): void {
+  engine.resetCamera();
+}
+
+function captureScreenshot(): Promise<Blob> {
+  return engine.captureScreenshot();
 }
 
 function parseDraggedAsset(event: DragEvent): DraggedAsset | undefined {
@@ -203,6 +237,8 @@ onBeforeUnmount(() => {
   engine.removeEventListener('selectionchange', handleSelectionChange);
   engine.removeEventListener('transformend', handleTransformEnd);
   engine.removeEventListener('statschange', handleStatsChange);
+  engine.removeEventListener('camerachange', handleCameraChange);
+  engine.removeEventListener('renderstatschange', handleRenderStatsChange);
   engine.dispose();
 });
 
@@ -216,6 +252,9 @@ defineExpose({
   setTransformMode,
   setTransformSpace,
   focusSelection,
+  setCameraView,
+  resetCamera,
+  captureScreenshot,
 });
 </script>
 

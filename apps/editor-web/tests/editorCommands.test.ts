@@ -222,4 +222,28 @@ describe('editor commands', () => {
     expect(store.document.nodes[second.id]?.parentId).toBe(group.id);
     expect(bridge.loadDocument).toHaveBeenCalled();
   });
+
+  it('通过唯一 Canvas bridge 调用相机方向、重置与截图', async () => {
+    const bridge: EditorCanvasBridge = {
+      applyNodeAdded: vi.fn().mockResolvedValue(undefined),
+      applyNodeRemoved: vi.fn(),
+      applyNodeUpdated: vi.fn(),
+      loadDocument: vi.fn().mockResolvedValue(undefined),
+      setSelection: vi.fn(),
+      setTransformMode: vi.fn(),
+      focusSelection: vi.fn(),
+      setCameraView: vi.fn(),
+      resetCamera: vi.fn(),
+      captureScreenshot: vi.fn().mockResolvedValue(new Blob(['png'])),
+    };
+    const commands = useEditorCommands(shallowRef(bridge));
+
+    commands.setCameraView('right');
+    commands.resetCamera();
+    await commands.captureScreenshot();
+
+    expect(bridge.setCameraView).toHaveBeenCalledWith('right');
+    expect(bridge.resetCamera).toHaveBeenCalledOnce();
+    expect(bridge.captureScreenshot).toHaveBeenCalledOnce();
+  });
 });

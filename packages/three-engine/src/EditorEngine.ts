@@ -35,11 +35,21 @@ import {
   TransformSystem,
   type TransformCommit,
 } from './interaction/TransformSystem.js';
+import {
+  ViewportCameraSystem,
+  type CameraOrientation,
+  type CameraView,
+} from './interaction/ViewportCameraSystem.js';
 import { ViewportDropSystem } from './interaction/ViewportDropSystem.js';
 import { MaterialSystem } from './materials/MaterialSystem.js';
 import { ResourceTracker } from './ResourceTracker';
 import { SceneSettingsSystem } from './settings/SceneSettingsSystem.js';
-import type { LoadReport, SceneStats } from './types.js';
+import type { LoadReport, RenderStats, SceneStats } from './types.js';
+
+interface ScreenshotRequest {
+  resolve(blob: Blob): void;
+  reject(reason: Error): void;
+}
 
 export interface EditorEngineEventMap {
   selectionchange: SelectionState;
@@ -47,6 +57,8 @@ export interface EditorEngineEventMap {
   transformchange: { nodeId: string; transform: Transform };
   transformend: TransformCommit;
   statschange: SceneStats;
+  camerachange: CameraOrientation;
+  renderstatschange: RenderStats;
 }
 
 /**
@@ -66,10 +78,15 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
   private selectionSystem?: SelectionSystem;
   private transformSystem?: TransformSystem;
   private dropSystem?: ViewportDropSystem;
+  private cameraSystem?: ViewportCameraSystem;
   private settingsSystem?: SceneSettingsSystem;
   private assetResolver?: AssetResolver;
   private resizeObserver?: ResizeObserver;
   private frameId?: number;
+  private renderStatsStartedAt = 0;
+  private renderStatsFrames = 0;
+  private screenshotQueue: ScreenshotRequest[] = [];
+  private activeScreenshot?: ScreenshotRequest[];
   private invalidated = true;
   private disposed = false;
 
@@ -97,6 +114,11 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.controls = new OrbitControls(this.camera, renderer.domElement);
     this.controls.target.set(0, 0.5, 0);
     this.controls.addEventListener('change', this.invalidate);
+    this.controls.addEventListener('change', this.emitCameraOrientation);
+    this.controls.addEventListener('start', this.cancelCameraAnimation);
+    this.cameraSystem = new ViewportCameraSystem(this.camera, this.controls);
+    this.controls.update();
+    this.emitCameraOrientation();
 
     this.composer = new EffectComposer(renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
@@ -136,6 +158,7 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
       );
     });
     this.resizeObserver.observe(container);
+    this.renderStatsStartedAt = performance.now();
     this.loop();
   }
 
@@ -160,12 +183,16 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     if (this.disposed) return;
     this.frameId = requestAnimationFrame(this.loop);
     const delta = this.clock.getDelta();
-    this.controls?.update(delta);
+    const cameraAnimating = this.cameraSystem?.update(delta) ?? false;
+    if (!cameraAnimating) this.controls?.update(delta);
+    if (cameraAnimating) this.invalidated = true;
+    this.emitRenderStatsIfNeeded();
     if (!this.invalidated) return;
 
     // Composer 是启用后期处理时唯一的最终渲染路径，不能再调用 renderer.render。
     this.composer?.render(delta);
     this.invalidated = false;
+    this.flushScreenshotRequests();
   };
 
   track(root: Parameters<ResourceTracker['track']>[0]): void {
@@ -297,6 +324,7 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
       return object ? [object] : [];
     });
     if (objects.length === 0) return false;
+    this.cameraSystem?.cancel();
 
     const bounds = new Box3();
     for (const object of objects) bounds.expandByObject(object, true);
@@ -324,6 +352,35 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     return true;
   }
 
+  setCameraView(view: CameraView): void {
+    this.cameraSystem?.setView(view);
+    this.invalidate();
+  }
+
+  resetCamera(): void {
+    this.cameraSystem?.reset();
+    this.invalidate();
+  }
+
+  getCameraOrientation(): CameraOrientation {
+    return (
+      this.cameraSystem?.getOrientation() ?? {
+        quaternion: this.camera.quaternion.toArray(),
+      }
+    );
+  }
+
+  /** 在下一次 Composer 写完默认 framebuffer 后立即读取，避免得到透明空图。 */
+  captureScreenshot(): Promise<Blob> {
+    if (!this.renderer || this.disposed) {
+      return Promise.reject(new Error('EditorEngine 尚未初始化'));
+    }
+    this.invalidate();
+    return new Promise<Blob>((resolve, reject) => {
+      this.screenshotQueue.push({ resolve, reject });
+    });
+  }
+
   /** W/E/R 切换变换工具，F 聚焦当前选择。 */
   handleShortcut(code: string): boolean {
     if (this.transformSystem?.handleShortcut(code)) {
@@ -342,6 +399,8 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.transformSystem?.dispose();
     this.settingsSystem?.dispose();
     this.controls?.removeEventListener('change', this.invalidate);
+    this.controls?.removeEventListener('change', this.emitCameraOrientation);
+    this.controls?.removeEventListener('start', this.cancelCameraAnimation);
     this.controls?.dispose();
     this.documentSystem?.dispose();
     this.composer?.dispose();
@@ -349,6 +408,11 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     const canvas = this.renderer?.domElement;
     this.renderer?.dispose();
     canvas?.remove();
+    const reason = new Error('EditorEngine 已销毁，截图请求已取消');
+    for (const request of this.screenshotQueue) request.reject(reason);
+    for (const request of this.activeScreenshot ?? []) request.reject(reason);
+    this.screenshotQueue = [];
+    this.activeScreenshot = undefined;
   }
 
   private ensureSelectionSystem(): void {
@@ -378,5 +442,62 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
 
   private emitStats(): void {
     this.dispatchEvent({ type: 'statschange', ...this.getStats() });
+  }
+
+  private readonly emitCameraOrientation = (): void => {
+    this.dispatchEvent({
+      type: 'camerachange',
+      ...this.getCameraOrientation(),
+    });
+    this.invalidate();
+  };
+
+  private readonly cancelCameraAnimation = (): void => {
+    this.cameraSystem?.cancel();
+  };
+
+  private emitRenderStatsIfNeeded(): void {
+    this.renderStatsFrames += 1;
+    const now = performance.now();
+    const elapsed = now - this.renderStatsStartedAt;
+    if (elapsed < 500) return;
+    this.dispatchEvent({
+      type: 'renderstatschange',
+      fps: Math.round((this.renderStatsFrames * 1_000) / elapsed),
+      drawCalls: this.renderer?.info.render.calls ?? 0,
+    });
+    this.renderStatsStartedAt = now;
+    this.renderStatsFrames = 0;
+  }
+
+  private flushScreenshotRequests(): void {
+    if (
+      !this.renderer ||
+      this.activeScreenshot ||
+      this.screenshotQueue.length === 0
+    ) {
+      return;
+    }
+    const requests = this.screenshotQueue.splice(0);
+    this.activeScreenshot = requests;
+    try {
+      this.renderer.domElement.toBlob((blob) => {
+        // dispose 可能已拒绝该批次；迟到回调不能再次 resolve。
+        if (this.activeScreenshot !== requests) return;
+        this.activeScreenshot = undefined;
+        if (blob) {
+          for (const request of requests) request.resolve(blob);
+        } else {
+          const reason = new Error('浏览器未能生成视口截图');
+          for (const request of requests) request.reject(reason);
+        }
+        if (this.screenshotQueue.length > 0) this.invalidate();
+      }, 'image/png');
+    } catch (reason) {
+      this.activeScreenshot = undefined;
+      const error =
+        reason instanceof Error ? reason : new Error('视口截图失败');
+      for (const request of requests) request.reject(error);
+    }
   }
 }

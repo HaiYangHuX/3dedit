@@ -17,6 +17,7 @@ import type {
   Transform,
 } from '@digital-twin/scene-schema';
 import type {
+  CameraView,
   SelectionState,
   TransformCommit,
 } from '@digital-twin/three-engine';
@@ -42,6 +43,9 @@ export interface EditorCanvasBridge {
   setTransformMode(mode: 'translate' | 'rotate' | 'scale'): void;
   setTransformSpace?(space: 'local' | 'world'): void;
   focusSelection(): boolean;
+  setCameraView?(view: CameraView): void;
+  resetCamera?(): void;
+  captureScreenshot?(): Promise<Blob>;
 }
 
 export interface UseEditorCommandOptions {
@@ -223,6 +227,19 @@ export function useEditorCommands(
     canvas.value?.focusSelection();
   }
 
+  function setCameraView(view: CameraView): void {
+    canvas.value?.setCameraView?.(view);
+  }
+
+  function resetCamera(): void {
+    canvas.value?.resetCamera?.();
+  }
+
+  function captureScreenshot(): Promise<Blob> {
+    const operation = canvas.value?.captureScreenshot?.();
+    return operation ?? Promise.reject(new Error('三维视口尚未就绪'));
+  }
+
   function handleKeydown(event: KeyboardEvent): void {
     if (isEditableTarget(event.target)) return;
     const commandModifier = event.metaKey || event.ctrlKey;
@@ -272,6 +289,9 @@ export function useEditorCommands(
     redo,
     setTransformMode,
     focusSelection,
+    setCameraView,
+    resetCamera,
+    captureScreenshot,
     handleKeydown,
   };
 }

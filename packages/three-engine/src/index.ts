@@ -33,6 +33,13 @@ export {
   type TransformSystemOptions,
 } from './interaction/TransformSystem';
 export {
+  ViewportCameraSystem,
+  type CameraControlsTarget,
+  type CameraOrientation,
+  type CameraView,
+  type ViewportCameraSystemOptions,
+} from './interaction/ViewportCameraSystem';
+export {
   ViewportDropSystem,
   type ViewportDropOptions,
 } from './interaction/ViewportDropSystem';
@@ -63,4 +70,9 @@ export {
   type EnvironmentTextureLoader,
   type SceneSettingsSystemOptions,
 } from './settings/SceneSettingsSystem';
-export type { AssetInstanceProvider, LoadReport, SceneStats } from './types';
+export type {
+  AssetInstanceProvider,
+  LoadReport,
+  RenderStats,
+  SceneStats,
+} from './types';

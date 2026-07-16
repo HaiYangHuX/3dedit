@@ -24,6 +24,9 @@ const mocks = vi.hoisted(() => {
     setTransformMode: vi.fn(),
     setTransformSpace: vi.fn(),
     focusSelection: vi.fn().mockReturnValue(true),
+    setCameraView: vi.fn(),
+    resetCamera: vi.fn(),
+    captureScreenshot: vi.fn().mockResolvedValue(new Blob(['png'])),
     getDropPosition: vi.fn().mockReturnValue([1, 0, 2]),
     getStats: vi.fn().mockReturnValue({
       objectCount: 0,
@@ -83,6 +86,15 @@ describe('EditorCanvas bridge', () => {
       vertexCount: 24,
       faceCount: 12,
     });
+    mocks.listeners.get('camerachange')?.({
+      type: 'camerachange',
+      quaternion: [0, 0, 0, 1],
+    });
+    mocks.listeners.get('renderstatschange')?.({
+      type: 'renderstatschange',
+      fps: 60,
+      drawCalls: 3,
+    });
 
     expect(wrapper.emitted('select')?.at(-1)).toEqual([
       { ids: ['node-1'], primaryId: 'node-1' },
@@ -92,6 +104,12 @@ describe('EditorCanvas bridge', () => {
     ]);
     expect(wrapper.emitted('stats-change')?.at(-1)).toEqual([
       expect.objectContaining({ vertexCount: 24, faceCount: 12 }),
+    ]);
+    expect(wrapper.emitted('camera-change')?.at(-1)).toEqual([
+      { quaternion: [0, 0, 0, 1] },
+    ]);
+    expect(wrapper.emitted('render-stats-change')?.at(-1)).toEqual([
+      { fps: 60, drawCalls: 3 },
     ]);
     expect(
       wrapper
@@ -139,11 +157,17 @@ describe('EditorCanvas bridge', () => {
       setTransformMode(mode: 'translate' | 'rotate' | 'scale'): void;
       setTransformSpace(space: 'local' | 'world'): void;
       focusSelection(): boolean;
+      setCameraView(view: 'front'): void;
+      resetCamera(): void;
+      captureScreenshot(): Promise<Blob>;
     };
 
     bridge.setSelection(['node-1'], 'node-1');
     bridge.setTransformMode('rotate');
     bridge.setTransformSpace('local');
+    bridge.setCameraView('front');
+    bridge.resetCamera();
+    await bridge.captureScreenshot();
     expect(bridge.focusSelection()).toBe(true);
 
     expect(mocks.engine.setSelection).toHaveBeenCalledWith(
@@ -153,6 +177,9 @@ describe('EditorCanvas bridge', () => {
     expect(mocks.engine.setTransformMode).toHaveBeenCalledWith('rotate');
     expect(mocks.engine.setTransformSpace).toHaveBeenCalledWith('local');
     expect(mocks.engine.focusSelection).toHaveBeenCalled();
+    expect(mocks.engine.setCameraView).toHaveBeenCalledWith('front');
+    expect(mocks.engine.resetCamera).toHaveBeenCalled();
+    expect(mocks.engine.captureScreenshot).toHaveBeenCalled();
     wrapper.unmount();
   });
 });

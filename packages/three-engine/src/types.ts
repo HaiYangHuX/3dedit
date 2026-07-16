@@ -13,6 +13,11 @@ export interface SceneStats {
   faceCount: number;
 }
 
+export interface RenderStats {
+  fps: number;
+  drawCalls: number;
+}
+
 /** SceneDocumentSystem 只依赖实例能力，单元测试无需创建真实网络 Loader。 */
 export interface AssetInstanceProvider {
   beginGeneration(): number;
