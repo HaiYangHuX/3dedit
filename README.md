@@ -50,4 +50,17 @@ pnpm verify
 
 `verify` 依次执行格式、Lint、类型检查、单元测试、全量构建和真实浏览器 WebGL 冒烟测试。
 
+### 真实项目与场景纵向验收
+
+该测试会创建临时项目、验证两次同 revision 保存的 `409`、进入真实 WebGL 编辑器再删除测试数据：
+
+```bash
+set -a && source .env && set +a
+docker compose up -d postgres redis minio minio-init
+pnpm --filter @digital-twin/api-server exec prisma migrate deploy
+E2E_DATABASE=true E2E_API_BASE_URL=http://127.0.0.1:3100/api pnpm test:e2e
+```
+
+本机 `3000` 端口被其他项目占用时，上述验收默认在 `3100` 启动 API，不会停止或修改其他容器。
+
 中文注释要求见 [docs/COMMENTING.md](docs/COMMENTING.md)，完整架构见 [设计文档](docs/superpowers/specs/2026-07-16-digital-twin-scene-platform-design.md)。

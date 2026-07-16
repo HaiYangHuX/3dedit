@@ -14,7 +14,12 @@ async function bootstrap(): Promise<void> {
     new FastifyAdapter(),
   );
   app.setGlobalPrefix('api');
-  app.enableCors({ origin: true });
+  app.enableCors({
+    origin: true,
+    // JSON PUT/PATCH/DELETE 会触发浏览器预检，必须显式允许编辑器的完整 REST 方法集。
+    methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Accept', 'Content-Type'],
+  });
   app.enableShutdownHooks();
 
   const swaggerConfig = new DocumentBuilder()
