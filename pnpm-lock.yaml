@@ -22,6 +22,9 @@ importers:
       globals:
         specifier: 17.7.0
         version: 17.7.0
+      postcss-html:
+        specifier: 1.8.1
+        version: 1.8.1
       prettier:
         specifier: 3.9.5
         version: 3.9.5
@@ -30,7 +33,7 @@ importers:
         version: 17.14.0(typescript@5.9.3)
       stylelint-config-recommended-vue:
         specifier: 1.6.1
-        version: 1.6.1(stylelint@17.14.0(typescript@5.9.3))
+        version: 1.6.1(postcss-html@1.8.1)(stylelint@17.14.0(typescript@5.9.3))
       stylelint-config-standard:
         specifier: 40.0.0
         version: 40.0.0(stylelint@17.14.0(typescript@5.9.3))
@@ -43,6 +46,16 @@ importers:
       vue-eslint-parser:
         specifier: 10.4.1
         version: 10.4.1(eslint@10.7.0)
+
+  packages/editor-core:
+    dependencies:
+      '@digital-twin/scene-schema':
+        specifier: workspace:*
+        version: link:../scene-schema
+    devDependencies:
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10
 
   packages/scene-schema:
     dependencies:
@@ -854,11 +867,43 @@ packages:
       }
     engines: { node: '>=8' }
 
+  dom-serializer@2.0.0:
+    resolution:
+      {
+        integrity: sha512-wIkAryiqt/nV5EQKqQpo3SToSOV9J0DnbJqwK7Wv/Trc92zIAYZ4FlMu+JPFW1DfGFt81ZTCGgDEabffXeLyJg==,
+      }
+
+  domelementtype@2.3.0:
+    resolution:
+      {
+        integrity: sha512-OLETBj6w0OsagBwdXnPdN0cnMfF9opN69co+7ZrbfPGrdpPVNBUj02spi6B1N7wChLQiPn4CSH/zJvXw56gmHw==,
+      }
+
+  domhandler@5.0.3:
+    resolution:
+      {
+        integrity: sha512-cgwlv/1iFQiFnU96XXgROh8xTeetsnJiDsTc7TYCLFd9+/WNkIqPTxiM/8pSd8VIrhXGTf1Ny1q1hquVqDJB5w==,
+      }
+    engines: { node: '>= 4' }
+
+  domutils@3.2.2:
+    resolution:
+      {
+        integrity: sha512-6kZKyUajlDuqlHKVX1w7gyslj9MPIXzIFiz/rGu35uC1wMi+kMhQwGhl4lt9unC9Vb9INnY9Z3/ZA3+FhASLaw==,
+      }
+
   emoji-regex@8.0.0:
     resolution:
       {
         integrity: sha512-MSjYzcWNOA0ewAHpz0MxpYFvwg6yjy1NG3xteoqz644VCo/RPgnr1/GGt+ic3iJTzQ8Eu3TdM14SawnVUmGE6A==,
       }
+
+  entities@4.5.0:
+    resolution:
+      {
+        integrity: sha512-V0hjH4dGPh9Ao5p0MoRY6BVqtwCjhz6vI5LT8AJ55H+4g9/4vbHx1I54fS0XuclLhDHArPQCiMjDxjaL8fPxhw==,
+      }
+    engines: { node: '>=0.12' }
 
   env-paths@2.2.1:
     resolution:
@@ -1192,6 +1237,12 @@ packages:
       }
     engines: { node: '>=20.10' }
 
+  htmlparser2@8.0.2:
+    resolution:
+      {
+        integrity: sha512-GYdjWKDkbRLkZ5geuHs5NY1puJ+PXwP7+fHPRz06Eirsb9ugf6d8kkXav6ADhcODhFFPMIXyxkxSuMf3D6NCFA==,
+      }
+
   ignore@5.3.2:
     resolution:
       {
@@ -1283,6 +1334,12 @@ packages:
     resolution:
       {
         integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==,
+      }
+
+  js-tokens@9.0.1:
+    resolution:
+      {
+        integrity: sha512-mxa9E9ITFOt0ban3j6L5MpjwegGz6lBQmM1IJkWeBZGcMxto50+eWdjC/52xDbS2vy0k7vIMK0Fe2wfL9OQSpQ==,
       }
 
   js-yaml@4.3.0:
@@ -1633,6 +1690,22 @@ packages:
         integrity: sha512-RvwwcruNjI1ncT5xRakeyS9Lf8lcItv34KD+aif+VH9kduAyfYBipGh12274xtenIPZ119/R9BdTBa8gAwSh0A==,
       }
     engines: { node: '>=12' }
+
+  postcss-html@1.8.1:
+    resolution:
+      {
+        integrity: sha512-OLF6P7qctfAWayOhLpcVnTGqVeJzu2W3WpIYelfz2+JV5oGxfkcEvweN9U4XpeqE0P98dcD9ssusGwlF0TK0uQ==,
+      }
+    engines: { node: ^12 || >=14 }
+
+  postcss-safe-parser@6.0.0:
+    resolution:
+      {
+        integrity: sha512-FARHN8pwH+WiS2OPCxJI8FuRJpTVnn6ZNFiqAM2aeW2LwTHWWmWgIyKC6cUo0L8aeKiF/14MNvnpls6R2PBeMQ==,
+      }
+    engines: { node: '>=12.0' }
+    peerDependencies:
+      postcss: ^8.3.3
 
   postcss-safe-parser@7.0.1:
     resolution:
@@ -2601,7 +2674,27 @@ snapshots:
 
   detect-libc@2.1.2: {}
 
+  dom-serializer@2.0.0:
+    dependencies:
+      domelementtype: 2.3.0
+      domhandler: 5.0.3
+      entities: 4.5.0
+
+  domelementtype@2.3.0: {}
+
+  domhandler@5.0.3:
+    dependencies:
+      domelementtype: 2.3.0
+
+  domutils@3.2.2:
+    dependencies:
+      dom-serializer: 2.0.0
+      domelementtype: 2.3.0
+      domhandler: 5.0.3
+
   emoji-regex@8.0.0: {}
+
+  entities@4.5.0: {}
 
   env-paths@2.2.1: {}
 
@@ -2804,6 +2897,13 @@ snapshots:
 
   html-tags@5.1.0: {}
 
+  htmlparser2@8.0.2:
+    dependencies:
+      domelementtype: 2.3.0
+      domhandler: 5.0.3
+      domutils: 3.2.2
+      entities: 4.5.0
+
   ignore@5.3.2: {}
 
   ignore@7.0.6: {}
@@ -2836,6 +2936,8 @@ snapshots:
   isexe@2.0.0: {}
 
   js-tokens@4.0.0: {}
+
+  js-tokens@9.0.1: {}
 
   js-yaml@4.3.0:
     dependencies:
@@ -2998,6 +3100,17 @@ snapshots:
 
   picomatch@4.0.5: {}
 
+  postcss-html@1.8.1:
+    dependencies:
+      htmlparser2: 8.0.2
+      js-tokens: 9.0.1
+      postcss: 8.5.19
+      postcss-safe-parser: 6.0.0(postcss@8.5.19)
+
+  postcss-safe-parser@6.0.0(postcss@8.5.19):
+    dependencies:
+      postcss: 8.5.19
+
   postcss-safe-parser@7.0.1(postcss@8.5.19):
     dependencies:
       postcss: 8.5.19
@@ -3103,15 +3216,17 @@ snapshots:
     dependencies:
       ansi-regex: 6.2.2
 
-  stylelint-config-html@1.1.0(stylelint@17.14.0(typescript@5.9.3)):
+  stylelint-config-html@1.1.0(postcss-html@1.8.1)(stylelint@17.14.0(typescript@5.9.3)):
     dependencies:
+      postcss-html: 1.8.1
       stylelint: 17.14.0(typescript@5.9.3)
 
-  stylelint-config-recommended-vue@1.6.1(stylelint@17.14.0(typescript@5.9.3)):
+  stylelint-config-recommended-vue@1.6.1(postcss-html@1.8.1)(stylelint@17.14.0(typescript@5.9.3)):
     dependencies:
+      postcss-html: 1.8.1
       semver: 7.8.5
       stylelint: 17.14.0(typescript@5.9.3)
-      stylelint-config-html: 1.1.0(stylelint@17.14.0(typescript@5.9.3))
+      stylelint-config-html: 1.1.0(postcss-html@1.8.1)(stylelint@17.14.0(typescript@5.9.3))
       stylelint-config-recommended: 18.0.0(stylelint@17.14.0(typescript@5.9.3))
 
   stylelint-config-recommended@18.0.0(stylelint@17.14.0(typescript@5.9.3)):
