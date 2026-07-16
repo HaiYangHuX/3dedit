@@ -1144,7 +1144,7 @@ Expected: FAIL，编辑器应用尚不存在。
 
 - [ ] **Step 3: 创建 Vite、Pinia 和路由入口**
 
-应用精确依赖 `vue@3.5.40`、`vue-router@5.2.0`、`pinia@4.0.2`、`element-plus@2.14.3`、工作区内 `scene-schema`、`editor-core`、`three-engine`；开发依赖 Vite、Vue 插件、vue-tsc、Vitest、Vue Test Utils、Pinia Testing 和 happy-dom。
+应用精确依赖 `vue@3.5.40`、`vue-router@4.6.3`、`pinia@4.0.2`、`element-plus@2.14.3`、工作区内 `scene-schema`、`editor-core`、`three-engine`；开发依赖 Vite、Vue 插件、vue-tsc、Vitest、Vue Test Utils、Pinia Testing 和 happy-dom。
 
 `src/main.ts`：
 
