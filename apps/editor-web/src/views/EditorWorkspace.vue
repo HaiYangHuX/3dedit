@@ -32,6 +32,9 @@ const canvas = ref<EditorCanvasBridge>();
 const inspectorTab = ref<'scene' | 'interaction' | 'socket' | 'settings'>(
   'scene',
 );
+const assetCategory = ref<
+  'model' | 'geometry' | 'light' | 'chart' | 'text' | 'video' | 'shader'
+>('model');
 
 function showEditorError(reason: unknown, fallback = '编辑操作执行失败'): void {
   ElMessage.error(reason instanceof Error ? reason.message : fallback);
@@ -189,15 +192,74 @@ function changeStats(value: SceneStats): void {
     <aside class="asset-panel" data-testid="asset-panel">
       <h2>场景元素</h2>
       <nav class="asset-categories">
-        <button type="button" class="active">模型</button>
-        <button type="button">几何体</button>
-        <button type="button">灯光</button>
-        <button type="button">图表</button>
-        <button type="button">文本</button>
-        <button type="button">视频</button>
-        <button type="button">Shader</button>
+        <button
+          v-for="item in [
+            ['model', '模型'],
+            ['geometry', '几何体'],
+            ['light', '灯光'],
+            ['chart', '图表'],
+            ['text', '文本'],
+            ['video', '视频'],
+            ['shader', 'Shader'],
+          ] as const"
+          :key="item[0]"
+          type="button"
+          :data-asset-category="item[0]"
+          :class="{ active: assetCategory === item[0] }"
+          @click="assetCategory = item[0]"
+        >
+          {{ item[1] }}
+        </button>
       </nav>
-      <AssetLibraryPanel @activate="activateAsset" />
+      <AssetLibraryPanel
+        v-if="assetCategory === 'model'"
+        @activate="activateAsset"
+      />
+      <div v-else-if="assetCategory === 'geometry'" class="element-palette">
+        <button
+          v-for="item in [
+            ['box', '立方体'],
+            ['sphere', '球体'],
+            ['plane', '平面'],
+            ['cylinder', '圆柱体'],
+          ] as const"
+          :key="item[0]"
+          type="button"
+          :data-testid="`add-geometry-${item[0]}`"
+          @click="runCommand(commands.addGeometry(item[0]))"
+        >
+          <span class="element-palette-icon">{{ item[1].slice(0, 1) }}</span>
+          {{ item[1] }}
+        </button>
+      </div>
+      <div v-else-if="assetCategory === 'light'" class="element-palette">
+        <button
+          v-for="item in [
+            ['ambient', '环境光'],
+            ['directional', '平行光'],
+            ['hemisphere', '半球光'],
+            ['point', '点光源'],
+            ['spot', '聚光灯'],
+          ] as const"
+          :key="item[0]"
+          type="button"
+          :data-testid="`add-light-${item[0]}`"
+          @click="runCommand(commands.addLight(item[0]))"
+        >
+          <span class="element-palette-icon">✦</span>
+          {{ item[1] }}
+        </button>
+      </div>
+      <div v-else class="empty-panel">
+        {{
+          {
+            chart: '图表组件将在低代码组件阶段接入',
+            text: '文本与标注组件将在低代码组件阶段接入',
+            video: '视频组件将在媒体资源阶段接入',
+            shader: 'Shader 组件将在特效阶段接入',
+          }[assetCategory]
+        }}
+      </div>
     </aside>
 
     <section class="viewport-shell">

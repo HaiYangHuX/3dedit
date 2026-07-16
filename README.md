@@ -52,6 +52,14 @@ pnpm dev
 - 被当前场景引用的资源不能删除，接口返回 `ASSET_IN_USE` 409。
 - 编辑器左侧模型面板与模型库页面复用同一个 Asset Pinia，并提供平台专用拖放 MIME。
 
+## 场景编辑器
+
+- 同一场景可实例化多个模型，并支持立方体、球体、平面、圆柱体和五种灯光。
+- 场景树、视口射线选择、OutlinePass 和属性面板通过 SceneNode ID 双向同步。
+- TransformControls 提供移动、旋转、缩放、local/world 空间、网格吸附；`W/E/R/F`、`Delete`、`Cmd/Ctrl+Z` 可用。
+- 模型拖放位置由 canvas 相对射线与 `y=0` 平面求交，不受左右面板宽度影响。
+- 节点增删、变换、属性、层级、场景背景/曝光/网格均纳入命令历史和自动保存。
+
 ## 验证
 
 ```bash
@@ -87,6 +95,21 @@ E2E_API_BASE_URL=http://127.0.0.1:3100/api \
 E2E_EDITOR_BASE_URL=http://127.0.0.1:5273 \
 E2E_RUNTIME_BASE_URL=http://127.0.0.1:5274 \
 pnpm exec playwright test tests/e2e/asset-upload.spec.ts
+```
+
+### 真实多模型编辑闭环
+
+下列用例会在真实 Chromium 中上传 GLB，向同一场景添加两个模型实例和点光源，执行变换、撤销/重做、保存与刷新还原，最后对照 API SceneDocument 和 WebGL 业务对象数：
+
+```bash
+set -a && source .env && set +a
+docker compose up -d postgres redis minio minio-init
+pnpm --filter @digital-twin/api-server exec prisma migrate deploy
+E2E_DATABASE=true \
+E2E_API_BASE_URL=http://127.0.0.1:3100/api \
+E2E_EDITOR_BASE_URL=http://127.0.0.1:5273 \
+E2E_RUNTIME_BASE_URL=http://127.0.0.1:5274 \
+pnpm exec playwright test tests/e2e/scene-editing.spec.ts
 ```
 
 中文注释要求见 [docs/COMMENTING.md](docs/COMMENTING.md)，完整架构见 [设计文档](docs/superpowers/specs/2026-07-16-digital-twin-scene-platform-design.md)。

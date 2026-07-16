@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import EditorWorkspace from '../src/views/EditorWorkspace.vue';
 
 describe('EditorWorkspace', () => {
-  it('呈现资源区、视口、场景区和状态栏', () => {
+  it('呈现资源区、视口、场景区和状态栏', async () => {
     const wrapper = mount(EditorWorkspace, {
       global: {
         plugins: [createTestingPinia({ createSpy: vi.fn })],
@@ -32,6 +32,14 @@ describe('EditorWorkspace', () => {
         .attributes('data-document-id'),
     ).toBe('local-scene');
     expect(wrapper.get('[data-testid="asset-panel"]').text()).toContain('模型');
+    await wrapper.get('[data-asset-category="geometry"]').trigger('click');
+    expect(wrapper.get('[data-testid="add-geometry-box"]').text()).toContain(
+      '立方体',
+    );
+    await wrapper.get('[data-asset-category="light"]').trigger('click');
+    expect(wrapper.get('[data-testid="add-light-point"]').text()).toContain(
+      '点光源',
+    );
     expect(wrapper.get('[data-testid="inspector-panel"]').text()).toContain(
       '场景内容',
     );

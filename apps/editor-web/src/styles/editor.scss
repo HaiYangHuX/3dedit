@@ -400,6 +400,44 @@ button {
   margin-top: 12px;
 }
 
+.element-palette {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.element-palette button {
+  display: grid;
+  gap: 5px;
+  place-items: center;
+  min-height: 74px;
+  padding: 8px 5px;
+  color: #a3b8cc;
+  font-size: 11px;
+  background: #0d1527;
+  border: 1px solid #263047;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+:where(.element-palette button:hover) {
+  color: #fff;
+  background: rgb(56 189 248 / 8%);
+  border-color: #38bdf8;
+}
+
+.element-palette-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  color: #7dd3fc;
+  font-size: 15px;
+  background: #111e34;
+  border-radius: 5px;
+}
+
 .editor-asset-toolbar {
   display: flex;
   gap: 8px;

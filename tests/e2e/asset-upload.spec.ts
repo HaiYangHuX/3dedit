@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { createMinimalGlb } from './fixtures/minimalGlb';
 
 const apiBaseUrl = process.env.E2E_API_BASE_URL ?? 'http://127.0.0.1:3100/api';
 
@@ -6,49 +7,6 @@ test.skip(
   process.env.E2E_DATABASE !== 'true',
   '真实资源验收需要 PostgreSQL、Redis、MinIO 和 asset-worker',
 );
-
-/** 为每次 E2E 写入唯一 generator，避免上次异常中断留下相同 sourceHash。 */
-function createMinimalGlb(unique: string): Buffer {
-  const document = {
-    asset: { version: '2.0', generator: unique },
-    buffers: [{ byteLength: 42 }],
-    bufferViews: [
-      { buffer: 0, byteOffset: 0, byteLength: 36 },
-      { buffer: 0, byteOffset: 36, byteLength: 6 },
-    ],
-    accessors: [
-      {
-        bufferView: 0,
-        componentType: 5126,
-        count: 3,
-        type: 'VEC3',
-        min: [-1, 0, -1],
-        max: [1, 2, 1],
-      },
-      { bufferView: 1, componentType: 5123, count: 3, type: 'SCALAR' },
-    ],
-    meshes: [{ primitives: [{ attributes: { POSITION: 0 }, indices: 1 }] }],
-  };
-  const json = Buffer.from(JSON.stringify(document));
-  const jsonChunk = Buffer.concat([
-    json,
-    Buffer.alloc((4 - (json.length % 4)) % 4, 0x20),
-  ]);
-  const binary = Buffer.alloc(44);
-  const total = 12 + 8 + jsonChunk.length + 8 + binary.length;
-  const glb = Buffer.alloc(total);
-  glb.writeUInt32LE(0x46546c67, 0);
-  glb.writeUInt32LE(2, 4);
-  glb.writeUInt32LE(total, 8);
-  glb.writeUInt32LE(jsonChunk.length, 12);
-  glb.writeUInt32LE(0x4e4f534a, 16);
-  jsonChunk.copy(glb, 20);
-  const binaryOffset = 20 + jsonChunk.length;
-  glb.writeUInt32LE(binary.length, binaryOffset);
-  glb.writeUInt32LE(0x004e4942, binaryOffset + 4);
-  binary.copy(glb, binaryOffset + 8);
-  return glb;
-}
 
 test('浏览器分片上传、Worker 解析和引用删除保护闭环', async ({
   page,

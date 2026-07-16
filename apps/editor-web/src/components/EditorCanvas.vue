@@ -68,6 +68,9 @@ function handleTransformEnd(
 }
 
 function handleStatsChange(event: SceneStats & { type: 'statschange' }): void {
+  if (container.value) {
+    container.value.dataset.sceneObjectCount = String(event.objectCount);
+  }
   emit('stats-change', {
     objectCount: event.objectCount,
     meshCount: event.meshCount,

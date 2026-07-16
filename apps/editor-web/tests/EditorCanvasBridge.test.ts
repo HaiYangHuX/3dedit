@@ -93,6 +93,11 @@ describe('EditorCanvas bridge', () => {
     expect(wrapper.emitted('stats-change')?.at(-1)).toEqual([
       expect.objectContaining({ vertexCount: 24, faceCount: 12 }),
     ]);
+    expect(
+      wrapper
+        .get('[data-testid="editor-canvas"]')
+        .attributes('data-scene-object-count'),
+    ).toBe('1');
 
     await wrapper.get('[data-testid="editor-canvas"]').trigger('drop', {
       clientX: 200,
