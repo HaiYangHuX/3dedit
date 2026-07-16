@@ -17,4 +17,28 @@ export class MinioService {
     const exists = await this.client.bucketExists(this.bucket);
     if (!exists) throw new Error(`MinIO 资源桶 ${this.bucket} 不存在`);
   }
+
+  /** 返回短时效下载地址，数据库和 API 永远只保存稳定 objectKey。 */
+  presignGet(objectKey: string, expiresSeconds = 3_600): Promise<string> {
+    return this.client.presignedGetObject(
+      this.bucket,
+      objectKey,
+      expiresSeconds,
+    );
+  }
+
+  /** 资源数据库事务提交后清理其所有源文件和派生文件。 */
+  async removePrefix(prefix: string): Promise<void> {
+    const objectNames: string[] = [];
+    for await (const item of this.client.listObjectsV2(
+      this.bucket,
+      prefix,
+      true,
+    )) {
+      if (item.name) objectNames.push(item.name);
+    }
+    if (objectNames.length > 0) {
+      await this.client.removeObjects(this.bucket, objectNames);
+    }
+  }
 }
