@@ -3,7 +3,10 @@ import { createPinia, setActivePinia } from 'pinia';
 import { shallowRef } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { projectApi } from '../src/api/projects';
-import { createAssetNode } from '../src/editor/createSceneNode';
+import {
+  createAssetNode,
+  createGeometryNode,
+} from '../src/editor/createSceneNode';
 import {
   useEditorCommands,
   type EditorCanvasBridge,
@@ -85,6 +88,19 @@ describe('editor commands', () => {
       components: [{ kind: 'model', assetId: 'asset-1' }],
       businessData: {},
     });
+  });
+
+  it('基础几何体使用可保存的显式默认材质', () => {
+    const node = createGeometryNode('box');
+
+    expect(node.components).toEqual([
+      { kind: 'geometry', primitive: 'box' },
+      expect.objectContaining({
+        kind: 'material',
+        materialType: 'standard',
+        roughness: 0.72,
+      }),
+    ]);
   });
 
   it('模型拖放通过命令写入文档并增量加入引擎', async () => {

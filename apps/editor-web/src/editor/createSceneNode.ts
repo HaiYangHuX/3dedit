@@ -1,5 +1,9 @@
 import type { Asset } from '@digital-twin/api-contracts';
-import type { SceneNode, Transform } from '@digital-twin/scene-schema';
+import {
+  createDefaultMaterialComponent,
+  type SceneNode,
+  type Transform,
+} from '@digital-twin/scene-schema';
 
 type SceneComponent = SceneNode['components'][number];
 export type GeometryPrimitive = Extract<
@@ -70,7 +74,7 @@ export function createGeometryNode(
 ): SceneNode {
   return createSceneNode(
     geometryNames[primitive],
-    [{ kind: 'geometry', primitive }],
+    [{ kind: 'geometry', primitive }, createDefaultMaterialComponent()],
     { position },
   );
 }

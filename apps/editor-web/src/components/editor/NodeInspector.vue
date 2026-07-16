@@ -1,10 +1,15 @@
 <script setup lang="ts">
+import type { Asset } from '@digital-twin/api-contracts';
 import type { EditableNodePatch } from '@digital-twin/editor-core';
 import type { SceneNode } from '@digital-twin/scene-schema';
 import { computed, ref, watch } from 'vue';
 import TransformInspector from './TransformInspector.vue';
+import MaterialInspector from './MaterialInspector.vue';
 
-const props = defineProps<{ node: SceneNode }>();
+const props = withDefaults(
+  defineProps<{ node: SceneNode; textureAssets?: Asset[] }>(),
+  { textureAssets: () => [] },
+);
 const emit = defineEmits<{ update: [patch: EditableNodePatch] }>();
 
 const nameDraft = ref('');
@@ -18,6 +23,9 @@ const light = computed(() =>
 );
 const model = computed(() =>
   props.node.components.find((component) => component.kind === 'model'),
+);
+const material = computed(() =>
+  props.node.components.find((component) => component.kind === 'material'),
 );
 
 watch(
@@ -64,6 +72,22 @@ function updateLight(patch: {
   if (component?.kind !== 'light') return;
   Object.assign(component, patch);
   emit('update', { components });
+}
+
+function updateMaterial(
+  value: Extract<SceneNode['components'][number], { kind: 'material' }>,
+): void {
+  const components = cloneComponents();
+  const index = components.findIndex((item) => item.kind === 'material');
+  if (index >= 0) components[index] = value;
+  else components.push(value);
+  emit('update', { components });
+}
+
+function restoreMaterial(): void {
+  emit('update', {
+    components: cloneComponents().filter((item) => item.kind !== 'material'),
+  });
 }
 
 function commitBusinessData(): void {
@@ -197,6 +221,15 @@ function commitBusinessData(): void {
       <div class="inspector-section-title">模型资源</div>
       <code class="asset-id">{{ model.assetId }}</code>
     </section>
+
+    <MaterialInspector
+      v-if="model?.kind === 'model' || geometry?.kind === 'geometry'"
+      :component="material?.kind === 'material' ? material : undefined"
+      :disabled="node.locked"
+      :texture-assets="textureAssets"
+      @update="updateMaterial"
+      @restore="restoreMaterial"
+    />
 
     <section class="component-inspector">
       <div class="inspector-section-title">业务数据 JSON</div>
