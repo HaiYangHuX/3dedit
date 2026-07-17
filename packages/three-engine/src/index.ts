@@ -91,6 +91,11 @@ export {
   type GroundSystemOptions,
   type GroundTextureLoader,
 } from './settings/GroundSystem';
+export {
+  WeatherSystem,
+  type WeatherSystemOptions,
+  type WeatherTextureLoader,
+} from './settings/WeatherSystem';
 export type {
   AssetInstanceProvider,
   LoadReport,
