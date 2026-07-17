@@ -1,6 +1,7 @@
 import { createTestingPinia } from '@pinia/testing';
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useAssetStore } from '../src/stores/asset';
 
 const commandMocks = vi.hoisted(() => {
   const operation = () => vi.fn().mockResolvedValue(undefined);
@@ -161,5 +162,75 @@ describe('EditorWorkspace', () => {
       { id: 'asset-1', name: '水泵' },
       [1, 0, 2],
     );
+  });
+
+  it('将视口网格开关映射为真实地面类型', async () => {
+    const wrapper = mount(EditorWorkspace, {
+      global: {
+        plugins: [createTestingPinia({ createSpy: vi.fn })],
+        stubs: {
+          EditorCanvas: { template: '<div data-testid="editor-canvas" />' },
+          RouterLink: { template: '<a><slot /></a>' },
+        },
+      },
+    });
+    const toolbar = wrapper.findComponent({ name: 'ViewportToolbar' });
+
+    toolbar.vm.$emit('grid', false);
+    toolbar.vm.$emit('grid', true);
+    await flushPromises();
+
+    expect(commandMocks.updateSceneSettings).toHaveBeenNthCalledWith(1, {
+      groundType: 'none',
+      gridVisible: false,
+    });
+    expect(commandMocks.updateSceneSettings).toHaveBeenNthCalledWith(2, {
+      groundType: 'grid',
+      gridVisible: true,
+    });
+  });
+
+  it('背景与环境文件经素材库处理完成后才写入场景', async () => {
+    const pinia = createTestingPinia({ createSpy: vi.fn });
+    const assetStore = useAssetStore(pinia);
+    vi.mocked(assetStore.uploadFile).mockResolvedValue({
+      id: 'upload-1',
+      fileName: 'factory.hdr',
+      size: 3,
+      progress: 100,
+      status: 'ready',
+      error: '',
+      assetId: 'environment-1',
+      createdAt: '2026-07-17T00:00:00.000Z',
+    });
+    const wrapper = mount(EditorWorkspace, {
+      global: {
+        plugins: [pinia],
+        stubs: {
+          EditorCanvas: { template: '<div data-testid="editor-canvas" />' },
+          RouterLink: { template: '<a><slot /></a>' },
+        },
+      },
+    });
+    const settingsTab = wrapper
+      .findAll('.inspector-tabs button')
+      .find((tab) => tab.text() === '项目配置');
+    await settingsTab!.trigger('click');
+    wrapper.findComponent({ name: 'SceneSettingsInspector' }).vm.$emit(
+      'upload-environment',
+      new File(['hdr'], 'factory.hdr', {
+        type: 'application/octet-stream',
+      }),
+    );
+    await flushPromises();
+
+    expect(assetStore.uploadFile).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'factory.hdr' }),
+      expect.objectContaining({ category: '场景环境' }),
+    );
+    expect(commandMocks.updateSceneSettings).toHaveBeenCalledWith({
+      environmentAssetId: 'environment-1',
+      environmentEnabled: true,
+    });
   });
 });

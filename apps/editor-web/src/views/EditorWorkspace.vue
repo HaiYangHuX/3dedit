@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import type { Asset, PublicationDetail } from '@digital-twin/api-contracts';
 import type { RuntimeConfigPatch } from '@digital-twin/editor-core';
-import type {
-  CameraOrientation,
-  CameraView,
-  RenderStats,
-  SceneStats,
-  SelectionState,
-  TransformCommit,
+import {
+  BUILTIN_ENVIRONMENT_PREVIEW_URL,
+  type CameraOrientation,
+  type CameraView,
+  type RenderStats,
+  type SceneStats,
+  type SelectionState,
+  type TransformCommit,
 } from '@digital-twin/three-engine';
 import { ElMessage } from 'element-plus';
 import { storeToRefs } from 'pinia';
@@ -62,6 +63,7 @@ const runtimeNodes = computed(() => Object.values(document.value.nodes));
 const runtimeDiagnostics = ref<string[]>([]);
 const publication = ref<PublicationDetail>();
 const publishing = ref(false);
+const settingsUploading = ref(false);
 const transformMode = ref<'translate' | 'rotate' | 'scale'>('translate');
 const transformSpace = ref<'local' | 'world'>('world');
 const cameraOrientation = ref<CameraOrientation>({
@@ -213,6 +215,48 @@ function redoCommand(): void {
 
 function runCommand(operation: Promise<unknown>): void {
   void operation.catch(showEditorError);
+}
+
+function toggleGrid(gridVisible: boolean): void {
+  runCommand(
+    commands.updateSceneSettings({
+      groundType: gridVisible ? 'grid' : 'none',
+      gridVisible,
+    }),
+  );
+}
+
+async function uploadSceneSettingAsset(
+  file: File,
+  target: 'background' | 'environment',
+): Promise<void> {
+  const extension = file.name.split('.').at(-1)?.toLowerCase();
+  if (!extension || !['jpg', 'png', 'hdr'].includes(extension)) {
+    ElMessage.error('仅支持 .jpg、.png、.hdr 场景资源');
+    return;
+  }
+  settingsUploading.value = true;
+  try {
+    const task = await assetStore.uploadFile(file, {
+      category: target === 'background' ? '场景背景' : '场景环境',
+      tags: ['项目配置', target === 'background' ? '背景' : '环境'],
+    });
+    if (task.status !== 'ready' || !task.assetId) {
+      throw new Error('资源尚未处理完成');
+    }
+    await commands.updateSceneSettings(
+      target === 'background'
+        ? { backgroundType: 'texture', backgroundAssetId: task.assetId }
+        : { environmentEnabled: true, environmentAssetId: task.assetId },
+    );
+    ElMessage.success(
+      target === 'background' ? '背景图已更新' : '环境贴图已更新',
+    );
+  } catch (reason) {
+    showEditorError(reason, '场景资源上传失败');
+  } finally {
+    settingsUploading.value = false;
+  }
 }
 
 function changeSelection(selection: SelectionState): void {
@@ -424,14 +468,14 @@ async function copyText(value: string): Promise<void> {
       <ViewportToolbar
         :mode="transformMode"
         :space="transformSpace"
-        :grid-visible="document.settings.gridVisible"
+        :grid-visible="
+          document.settings.groundType === 'grid' &&
+          document.settings.gridVisible
+        "
         :is-fullscreen="isFullscreen"
         @mode="changeTransformMode"
         @space="changeTransformSpace"
-        @grid="
-          (gridVisible) =>
-            runCommand(commands.updateSceneSettings({ gridVisible }))
-        "
+        @grid="toggleGrid"
         @focus="commands.focusSelection"
         @reset="commands.resetCamera"
         @screenshot="downloadScreenshot"
@@ -539,7 +583,12 @@ async function copyText(value: string): Promise<void> {
       <SceneSettingsInspector
         v-else
         :settings="document.settings"
+        :assets="assets"
+        :uploading="settingsUploading"
+        :builtin-environment-preview-url="BUILTIN_ENVIRONMENT_PREVIEW_URL"
         @update="(patch) => runCommand(commands.updateSceneSettings(patch))"
+        @upload-background="uploadSceneSettingAsset($event, 'background')"
+        @upload-environment="uploadSceneSettingAsset($event, 'environment')"
       />
     </aside>
 

@@ -437,6 +437,157 @@ button {
   font-size: 12px;
 }
 
+.scene-settings-inspector {
+  --el-bg-color: #111827;
+  --el-bg-color-overlay: #151f31;
+  --el-border-color: #314158;
+  --el-border-color-hover: #4b617e;
+  --el-fill-color-blank: #0b1220;
+  --el-fill-color-light: #172238;
+  --el-text-color-primary: #dbeafe;
+  --el-text-color-regular: #b7c5d8;
+  --el-text-color-placeholder: #64748b;
+  --el-color-primary: #21d4e8;
+}
+
+.project-settings-title {
+  margin: 15px 0 10px;
+  padding-left: 8px;
+  color: #e6f7fb;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  border-left: 3px solid #21d4e8;
+}
+
+.project-settings-title:first-of-type {
+  margin-top: 5px;
+}
+
+.project-settings-row {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-height: 32px;
+  margin-bottom: 7px;
+}
+
+.project-settings-row > label {
+  color: #9eacc0;
+  line-height: 1.35;
+}
+
+.project-settings-row > .el-select,
+.project-settings-row > .el-input-number,
+.project-settings-inline > .el-select {
+  width: 100%;
+}
+
+.project-settings-row--slider {
+  min-height: 40px;
+}
+
+.project-settings-row--slider .el-slider {
+  min-width: 0;
+}
+
+.project-settings-row--slider .el-slider__runway.show-input {
+  margin-right: 84px;
+}
+
+.project-settings-row--slider .el-slider__input {
+  width: 72px;
+}
+
+.project-settings-row--slider .el-input-number {
+  width: 72px;
+}
+
+.project-settings-inline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+  align-items: center;
+  min-width: 0;
+}
+
+.project-settings-conditional {
+  display: contents;
+}
+
+.project-number-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.project-number-pair .el-input-number {
+  width: 100%;
+}
+
+.project-asset-picker {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  overflow: hidden;
+  color: #7dd3fc;
+  font-size: 18px;
+  background: #0b1220;
+  border: 1px dashed #3a536f;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.project-asset-picker:hover {
+  border-color: #21d4e8;
+}
+
+.project-asset-picker:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.project-asset-picker img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.project-asset-picker span {
+  max-width: 100%;
+  padding: 2px;
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-file-input {
+  display: none;
+}
+
+.project-settings-hint {
+  margin: -2px 0 8px 82px;
+  color: #667991;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.scene-settings-inspector .el-select__wrapper,
+.scene-settings-inspector .el-input__wrapper,
+.scene-settings-inspector .el-input-number__decrease,
+.scene-settings-inspector .el-input-number__increase {
+  background: #0b1220;
+  box-shadow: 0 0 0 1px #2a3850 inset;
+}
+
+.scene-settings-inspector .el-color-picker__trigger {
+  border-color: #314158;
+}
+
 .node-inspector {
   border-top: 1px solid #263047;
 }

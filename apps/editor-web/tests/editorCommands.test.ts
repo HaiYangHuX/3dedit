@@ -1,4 +1,5 @@
 import type { Asset } from '@digital-twin/api-contracts';
+import { createDefaultSceneDocument } from '@digital-twin/scene-schema';
 import { createPinia, setActivePinia } from 'pinia';
 import { shallowRef } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -41,31 +42,16 @@ describe('editor commands', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     vi.clearAllMocks();
+    const document = createDefaultSceneDocument('project-1', 'scene-1', '场景');
+    document.settings.background = '#111827';
+    document.settings.exposure = 1;
     vi.mocked(projectApi.getScene).mockResolvedValue({
       id: 'scene-1',
       projectId: 'project-1',
       name: '场景',
       sortOrder: 0,
       revision: 0,
-      document: {
-        schemaVersion: 1,
-        id: 'scene-1',
-        projectId: 'project-1',
-        name: '场景',
-        revision: 0,
-        rootNodeIds: [],
-        nodes: {},
-        settings: {
-          background: '#111827',
-          environmentAssetId: null,
-          exposure: 1,
-          gridVisible: true,
-        },
-        interactions: [],
-        dataSources: [],
-        socketTasks: [],
-        assetReferences: [],
-      },
+      document,
       contentHash: '',
       coverKey: null,
       createdAt: '2026-07-16T08:00:00.000Z',
