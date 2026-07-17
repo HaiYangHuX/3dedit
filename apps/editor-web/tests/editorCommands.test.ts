@@ -15,6 +15,7 @@ import {
   type EditorCanvasBridge,
 } from '../src/editor/useEditorCommands';
 import { useDocumentStore } from '../src/stores/document';
+import { useSelectionStore } from '../src/stores/selection';
 
 vi.mock('../src/api/projects', () => ({
   projectApi: { getScene: vi.fn(), saveScene: vi.fn() },
@@ -127,6 +128,24 @@ describe('editor commands', () => {
     expect(store.document.nodes[node.id]).toEqual(node);
     expect(bridge.applyNodeAdded).toHaveBeenCalledWith(node);
     expect(bridge.setSelection).toHaveBeenCalledWith([node.id], node.id);
+  });
+
+  it('画布发出的选择只更新 Pinia，不再反向刷新同一个 BoxHelper', () => {
+    const bridge: EditorCanvasBridge = {
+      applyNodeAdded: vi.fn().mockResolvedValue(undefined),
+      applyNodeRemoved: vi.fn(),
+      applyNodeUpdated: vi.fn(),
+      loadDocument: vi.fn().mockResolvedValue(undefined),
+      setSelection: vi.fn(),
+      setTransformMode: vi.fn(),
+      focusSelection: vi.fn(),
+    };
+    const commands = useEditorCommands(shallowRef(bridge));
+
+    commands.selectFromCanvas({ ids: ['model-1'], primaryId: 'model-1' });
+
+    expect(useSelectionStore().primaryId).toBe('model-1');
+    expect(bridge.setSelection).not.toHaveBeenCalled();
   });
 
   it('处理撤销、删除和 W/E/R/F，但输入框聚焦时不拦截', async () => {
@@ -266,5 +285,40 @@ describe('editor commands', () => {
     expect(bridge.setCameraView).toHaveBeenCalledWith('right');
     expect(bridge.resetCamera).toHaveBeenCalledOnce();
     expect(bridge.captureScreenshot).toHaveBeenCalledOnce();
+  });
+
+  it('Camera 属性和漫游路径通过撤销命令增量同步到 Engine', async () => {
+    const store = useDocumentStore();
+    await store.loadScene('scene-1');
+    const bridge: EditorCanvasBridge = {
+      applyNodeAdded: vi.fn().mockResolvedValue(undefined),
+      applyNodeRemoved: vi.fn(),
+      applyNodeUpdated: vi.fn(),
+      applyCamera: vi.fn(),
+      applyCameraRoamingList: vi.fn(),
+      loadDocument: vi.fn().mockResolvedValue(undefined),
+      setSelection: vi.fn(),
+      setTransformMode: vi.fn(),
+      focusSelection: vi.fn(),
+    };
+    const commands = useEditorCommands(shallowRef(bridge));
+    const paths = [
+      {
+        id: 'path-1',
+        name: '漫游路径 1',
+        pathPoints: [
+          [0, 0.55, 0],
+          [4, 0.55, 4],
+        ] as [[number, number, number], [number, number, number]],
+      },
+    ];
+
+    await commands.updateCamera({ fov: 60, position: [1, 2, 3] });
+    await commands.replaceCameraRoamingList(paths);
+
+    expect(store.document.camera.fov).toBe(60);
+    expect(bridge.applyCamera).toHaveBeenCalledWith(store.document.camera);
+    expect(store.document.cameraRoamingList).toEqual(paths);
+    expect(bridge.applyCameraRoamingList).toHaveBeenCalledWith(paths);
   });
 });

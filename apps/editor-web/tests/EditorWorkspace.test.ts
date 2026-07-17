@@ -1,6 +1,7 @@
 import { createTestingPinia } from '@pinia/testing';
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ElMessageBox } from 'element-plus';
 import { useAssetStore } from '../src/stores/asset';
 import { useDocumentStore } from '../src/stores/document';
 
@@ -20,7 +21,14 @@ const commandMocks = vi.hoisted(() => {
     removeNodes: operation(),
     reparentNode: operation(),
     resetCamera: vi.fn(),
+    replaceCameraRoamingList: operation(),
     select: vi.fn(),
+    selectFromCanvas: vi.fn(),
+    startCameraRoamingDrawing: vi.fn(() => true),
+    cancelCameraRoamingDrawing: vi.fn(),
+    previewCameraRoaming: vi.fn(() => true),
+    stopCameraRoaming: vi.fn(),
+    syncCameraFromCanvas: operation(),
     setCameraView: vi.fn(),
     setMeasurementEnabled: vi.fn(() => false),
     setSelectWholeModel: vi.fn(),
@@ -28,6 +36,7 @@ const commandMocks = vi.hoisted(() => {
     togglePointerLock: vi.fn(() => false),
     undo: operation(),
     updateNode: operation(),
+    updateCamera: operation(),
     updateRuntimeConfig: operation(),
     updateSceneSettings: operation(),
   };
@@ -117,7 +126,6 @@ describe('EditorWorkspace', () => {
     expect(wrapper.get('[data-testid="viewport-stats"]').text()).toContain(
       'FPS',
     );
-    expect(wrapper.get('[data-testid="viewport-gizmo"]')).toBeTruthy();
     expect(wrapper.get('[data-testid="preview-scene"]')).toBeTruthy();
     expect(wrapper.get('[data-testid="publish-scene"]')).toBeTruthy();
     expect(wrapper.get('[data-testid="scene-camera"]').text()).toContain(
@@ -232,6 +240,66 @@ describe('EditorWorkspace', () => {
     await flushPromises();
     expect(tree.props('selectedModelPart')).toBeNull();
     expect(setSelection).toHaveBeenCalled();
+  });
+
+  it('选择 Camera 后显示属性/漫游面板并闭环绘制、播放和删除', async () => {
+    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue({
+      action: 'confirm',
+      value: '',
+    } as never);
+    const wrapper = mount(EditorWorkspace, {
+      global: {
+        plugins: [createTestingPinia({ createSpy: vi.fn })],
+        stubs: {
+          EditorCanvas: {
+            name: 'EditorCanvas',
+            methods: { setSelection: vi.fn() },
+            template: '<div data-testid="editor-canvas" />',
+          },
+          RouterLink: { template: '<a><slot /></a>' },
+        },
+      },
+    });
+
+    wrapper.findComponent({ name: 'SceneTree' }).vm.$emit('select-camera');
+    await flushPromises();
+    const inspector = wrapper.findComponent({ name: 'CameraInspector' });
+    expect(inspector.exists()).toBe(true);
+    expect(commandMocks.select).toHaveBeenCalledWith({
+      ids: [],
+      primaryId: null,
+    });
+
+    inspector.vm.$emit('update', { fov: 60 });
+    inspector.vm.$emit('start-drawing');
+    inspector.vm.$emit('preview', 'path-1');
+    inspector.vm.$emit('stop');
+    await flushPromises();
+    expect(commandMocks.updateCamera).toHaveBeenCalledWith({ fov: 60 });
+    expect(commandMocks.startCameraRoamingDrawing).toHaveBeenCalled();
+    expect(commandMocks.previewCameraRoaming).toHaveBeenCalledWith('path-1');
+    expect(commandMocks.stopCameraRoaming).toHaveBeenCalled();
+
+    wrapper
+      .findComponent({ name: 'EditorCanvas' })
+      .vm.$emit('camera-roaming-path-created', [
+        [0, 0.55, 0],
+        [4, 0.55, 4],
+      ]);
+    await flushPromises();
+    expect(commandMocks.replaceCameraRoamingList).toHaveBeenCalledWith([
+      expect.objectContaining({
+        name: '漫游路径 1',
+        pathPoints: [
+          [0, 0.55, 0],
+          [4, 0.55, 4],
+        ],
+      }),
+    ]);
+
+    inspector.vm.$emit('remove', 'path-1');
+    await flushPromises();
+    expect(ElMessageBox.confirm).toHaveBeenCalled();
   });
 
   it('将源站视口工具转发到对应编辑命令', async () => {

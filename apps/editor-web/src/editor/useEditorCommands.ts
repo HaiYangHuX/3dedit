@@ -4,15 +4,20 @@ import {
   RemoveNodesCommand,
   ReparentNodeCommand,
   TransformNodesCommand,
+  UpdateCameraCommand,
+  UpdateCameraRoamingListCommand,
   UpdateNodeCommand,
   UpdateRuntimeConfigCommand,
   UpdateSceneSettingsCommand,
   type EditableNodePatch,
+  type EditableCameraPatch,
   type EditableSceneSettingsPatch,
   type RuntimeConfigPatch,
 } from '@digital-twin/editor-core';
 import type {
+  CameraRoamingPath,
   SceneDocument,
+  SceneCamera,
   SceneNode,
   Transform,
 } from '@digital-twin/scene-schema';
@@ -40,6 +45,12 @@ export interface EditorCanvasBridge {
   applyNodeRemoved(ids: Iterable<string>): void;
   applyNodeUpdated(node: SceneNode): Promise<void>;
   applySceneSettings?(settings: SceneDocument['settings']): void;
+  applyCamera?(camera: SceneCamera): void;
+  applyCameraRoamingList?(paths: readonly CameraRoamingPath[]): void;
+  startCameraRoamingDrawing?(): boolean;
+  cancelCameraRoamingDrawing?(): void;
+  previewCameraRoaming?(pathId: string): boolean;
+  stopCameraRoaming?(): void;
   setSelection(ids: Iterable<string>, primaryId?: string | null): void;
   selectModelPart?(nodeId: string, objectId: string): boolean;
   setTransformMode(mode: 'translate' | 'rotate' | 'scale'): void;
@@ -82,6 +93,14 @@ export function useEditorCommands(
   function select(selection: SelectionState): void {
     selectionStore.set(selection);
     syncCanvasSelection();
+  }
+
+  /**
+   * Engine 已经完成射线选择和 BoxHelper 更新，此入口只同步响应式状态。
+   * 若再调用 setSelection，大模型会在一次点击内重复计算整棵包围盒。
+   */
+  function selectFromCanvas(selection: SelectionState): void {
+    selectionStore.set(selection);
   }
 
   async function addNode(node: SceneNode): Promise<SceneNode> {
@@ -210,6 +229,41 @@ export function useEditorCommands(
     canvas.value?.applySceneSettings?.(documentStore.document.settings);
   }
 
+  async function updateCamera(patch: EditableCameraPatch): Promise<void> {
+    await documentStore.execute(new UpdateCameraCommand(patch));
+    canvas.value?.applyCamera?.(documentStore.document.camera);
+  }
+
+  async function replaceCameraRoamingList(
+    paths: readonly CameraRoamingPath[],
+  ): Promise<void> {
+    await documentStore.execute(new UpdateCameraRoamingListCommand(paths));
+    canvas.value?.applyCameraRoamingList?.(
+      documentStore.document.cameraRoamingList,
+    );
+  }
+
+  /** Orbit/Gizmo 已经修改活动 Camera，此入口只落文档，不能再反向应用到 Engine。 */
+  async function syncCameraFromCanvas(camera: SceneCamera): Promise<void> {
+    await documentStore.execute(new UpdateCameraCommand(camera));
+  }
+
+  function startCameraRoamingDrawing(): boolean {
+    return canvas.value?.startCameraRoamingDrawing?.() ?? false;
+  }
+
+  function cancelCameraRoamingDrawing(): void {
+    canvas.value?.cancelCameraRoamingDrawing?.();
+  }
+
+  function previewCameraRoaming(pathId: string): boolean {
+    return canvas.value?.previewCameraRoaming?.(pathId) ?? false;
+  }
+
+  function stopCameraRoaming(): void {
+    canvas.value?.stopCameraRoaming?.();
+  }
+
   async function updateRuntimeConfig(patch: RuntimeConfigPatch): Promise<void> {
     await documentStore.execute(new UpdateRuntimeConfigCommand(patch));
   }
@@ -330,6 +384,7 @@ export function useEditorCommands(
 
   return {
     select,
+    selectFromCanvas,
     addAssetNode,
     addGeometry,
     addLight,
@@ -341,6 +396,13 @@ export function useEditorCommands(
     duplicateNode,
     groupNodes,
     updateSceneSettings,
+    updateCamera,
+    replaceCameraRoamingList,
+    syncCameraFromCanvas,
+    startCameraRoamingDrawing,
+    cancelCameraRoamingDrawing,
+    previewCameraRoaming,
+    stopCameraRoaming,
     updateRuntimeConfig,
     commitTransform,
     undo,

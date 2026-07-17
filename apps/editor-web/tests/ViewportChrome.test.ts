@@ -1,14 +1,9 @@
-import type {
-  CameraOrientation,
-  RenderStats,
-  SceneStats,
-} from '@digital-twin/three-engine';
+import type { RenderStats, SceneStats } from '@digital-twin/three-engine';
 import { mount } from '@vue/test-utils';
 import { ElTooltip } from 'element-plus';
 import { describe, expect, it } from 'vitest';
 import AssetPalette from '../src/components/editor/AssetPalette.vue';
 import EditorTopBar from '../src/components/editor/EditorTopBar.vue';
-import ViewportGizmo from '../src/components/editor/ViewportGizmo.vue';
 import ViewportStats from '../src/components/editor/ViewportStats.vue';
 import ViewportToolbar from '../src/components/editor/ViewportToolbar.vue';
 
@@ -105,22 +100,6 @@ describe('编辑器高密度框架组件', () => {
     expect(wrapper.emitted('measure')).toHaveLength(1);
     expect(wrapper.emitted('reset')).toHaveLength(1);
     expect(wrapper.emitted('choose-all')?.at(-1)).toEqual([false]);
-  });
-
-  it('纯 DOM 方向方块随四元数旋转并提供六个视图按钮', async () => {
-    const orientation: CameraOrientation = { quaternion: [0, 0, 0, 1] };
-    const wrapper = mount(ViewportGizmo, {
-      props: { quaternion: orientation.quaternion },
-    });
-    const initial = wrapper.get('.viewport-gizmo-cube').attributes('style');
-
-    expect(wrapper.findAll('[data-view]')).toHaveLength(6);
-    await wrapper.setProps({ quaternion: [0, 0.7071, 0, 0.7071] });
-    expect(wrapper.get('.viewport-gizmo-cube').attributes('style')).not.toBe(
-      initial,
-    );
-    await wrapper.get('[data-view="top"]').trigger('click');
-    expect(wrapper.emitted('view')?.at(-1)).toEqual(['top']);
   });
 
   it('统计浮层组合场景数据与限频渲染数据', () => {

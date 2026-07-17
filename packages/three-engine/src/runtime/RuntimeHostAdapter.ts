@@ -41,6 +41,8 @@ export interface RuntimeHostAdapterOptions {
     event: RuntimeNodeEvent,
     listener: () => void,
   ): () => void;
+  /** 宿主在 Camera tween 前释放第一人称、漫游等互斥的写入模式。 */
+  beforeCameraChange?: () => void;
   invalidate?: () => void;
   onSwitchScene?: (sceneId: string) => void | Promise<void>;
   onOpenLink?: (
@@ -194,6 +196,7 @@ export class RuntimeHostAdapter implements RuntimeHost {
     signal?: AbortSignal,
   ): Promise<void> {
     const object = this.requireObject(nodeId);
+    this.options.beforeCameraChange?.();
     object.updateWorldMatrix(true, true);
     const bounds = new Box3().expandByObject(object, true);
     const sphere = new Sphere();

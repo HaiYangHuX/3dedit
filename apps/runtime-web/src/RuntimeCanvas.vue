@@ -8,6 +8,7 @@ import type { SceneDocument } from '@digital-twin/scene-schema';
 import {
   RuntimeThreeEngine,
   type AssetResolver,
+  type RuntimeNavigationState,
 } from '@digital-twin/three-engine';
 import {
   computed,
@@ -17,6 +18,9 @@ import {
   shallowRef,
   watch,
 } from 'vue';
+import RuntimeLoadingOverlay from './components/RuntimeLoadingOverlay.vue';
+import RuntimePreviewToolbar from './components/RuntimePreviewToolbar.vue';
+import RuntimeRoamingStatus from './components/RuntimeRoamingStatus.vue';
 
 const props = defineProps<{
   document: SceneDocument;
@@ -32,11 +36,18 @@ const visibleMeshCount = ref(0);
 const socketStatus = ref('idle');
 const lastTaskCode = ref('');
 const diagnostics = shallowRef<RuntimeDiagnostic[]>([]);
+const navigation = ref<RuntimeNavigationState>({
+  mode: 'orbit',
+  paths: [],
+  activePathId: null,
+});
+const loadingText = ref('正在初始化三维引擎...');
 const engine = new RuntimeThreeEngine();
 let runtime: SceneRuntime | undefined;
 let initialized = false;
 let disposed = false;
 let loadGeneration = 0;
+let unsubscribeNavigation: (() => void) | undefined;
 
 const showDiagnostics = computed(
   () =>
@@ -64,6 +75,7 @@ async function loadRuntime(): Promise<void> {
   if (!initialized || disposed) return;
   const generation = ++loadGeneration;
   ready.value = false;
+  loadingText.value = '正在加载场景资源...';
   errorMessage.value = '';
   runtime?.dispose();
   runtime = undefined;
@@ -88,11 +100,21 @@ async function loadRuntime(): Promise<void> {
     runtime = nextRuntime;
     syncRuntimeStats();
     ready.value = true;
+    loadingText.value = '';
   } catch (error) {
     if (disposed || generation !== loadGeneration) return;
     errorMessage.value =
       error instanceof Error ? error.message : '三维场景初始化失败';
   }
+}
+
+function toggleFirstPerson(): void {
+  if (navigation.value.mode === 'first-person') engine.exitFirstPerson();
+  else engine.requestFirstPerson();
+}
+
+function playCameraRoaming(pathId: string): void {
+  engine.playCameraRoaming(pathId);
 }
 
 function onRuntimeMessage(event: MessageEvent): void {
@@ -119,6 +141,9 @@ onMounted(async () => {
     await engine.initialize(container.value);
     if (disposed) return;
     initialized = true;
+    unsubscribeNavigation = engine.subscribeNavigation((state) => {
+      navigation.value = state;
+    });
     window.addEventListener('message', onRuntimeMessage);
     await loadRuntime();
   } catch (error) {
@@ -139,6 +164,8 @@ onBeforeUnmount(() => {
   // 动作和 Socket 必须先停，避免销毁 Three 对象后仍有晚到任务访问 Host。
   runtime?.dispose();
   runtime = undefined;
+  unsubscribeNavigation?.();
+  unsubscribeNavigation = undefined;
   engine.dispose();
 });
 
@@ -156,12 +183,25 @@ defineExpose({
     data-testid="runtime-canvas"
     :data-runtime-ready="String(ready)"
     :data-runtime-mode="mode"
+    :data-navigation-mode="navigation.mode"
     :data-scene-object-count="String(objectCount)"
     :data-visible-mesh-count="String(visibleMeshCount)"
     :data-socket-status="socketStatus"
     :data-last-task-code="lastTaskCode"
   >
     <div v-if="errorMessage" class="runtime-error">{{ errorMessage }}</div>
+    <RuntimePreviewToolbar
+      v-if="mode === 'preview' && ready"
+      :state="navigation"
+      @reset="engine.resetCamera()"
+      @toggle-first-person="toggleFirstPerson"
+      @play="playCameraRoaming"
+    />
+    <RuntimeRoamingStatus
+      v-if="mode === 'preview' && navigation.mode === 'roaming'"
+      @stop="engine.stopCameraRoaming()"
+    />
+    <RuntimeLoadingOverlay v-if="!ready && !errorMessage" :text="loadingText" />
     <details
       v-if="showDiagnostics && diagnostics.length > 0"
       class="runtime-diagnostics"

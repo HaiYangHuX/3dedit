@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import {
+  cameraRoamingListSchema,
+  createDefaultSceneCamera,
+  sceneCameraSchema,
+} from './camera.js';
 import { materialComponentSchema } from './material.js';
 
 const identifierSchema = z.string().min(1);
@@ -390,6 +395,8 @@ export const sceneDocumentSchema = z
     rootNodeIds: z.array(identifierSchema),
     nodes: z.record(z.string(), sceneNodeSchema),
     settings: sceneSettingsSchema,
+    camera: sceneCameraSchema.default(() => createDefaultSceneCamera()),
+    cameraRoamingList: cameraRoamingListSchema.default(() => []),
     interactions: z.array(interactionDefinitionSchema),
     dataSources: z.array(dataSourceDefinitionSchema),
     socketTasks: z.array(socketTaskDefinitionSchema),

@@ -32,6 +32,24 @@ function node(
 }
 
 describe('SceneTree', () => {
+  it('Camera 行可选择并显示独立 current，不伪装成 SceneNode', async () => {
+    const document = createDefaultSceneDocument('project-1', 'scene-1', '场景');
+    const wrapper = mount(SceneTree, {
+      props: {
+        document,
+        selection: { ids: [], primaryId: null },
+        cameraSelected: true,
+      },
+      global: { stubs: { Teleport: true } },
+    });
+    const camera = wrapper.get('[data-testid="scene-camera"]');
+
+    expect(camera.classes('is-selected')).toBe(true);
+    await camera.trigger('click');
+    expect(wrapper.emitted('select-camera')).toHaveLength(1);
+    expect(wrapper.emitted('select')).toBeUndefined();
+  });
+
   it('显示 Camera 和固定两级模型列表，并可独立选择二级项', async () => {
     const document = createDefaultSceneDocument('project-1', 'scene-1', '场景');
     const model = node('model', '酸洗清洗机.glb', null);

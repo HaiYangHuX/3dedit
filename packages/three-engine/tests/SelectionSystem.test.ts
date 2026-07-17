@@ -204,7 +204,7 @@ describe('SelectionSystem', () => {
     selection.dispose();
   });
 
-  it('OrbitControls 已拖动时不把 pointerup 误判为选择点击', () => {
+  it('OrbitControls 轻微 change 不额外否决 5px 内的有效点击', () => {
     const canvas = new CanvasStub();
     const controls = new EventDispatcher<{ change: object }>();
     const camera = new PerspectiveCamera(50, 2, 0.1, 100);
@@ -222,14 +222,98 @@ describe('SelectionSystem', () => {
       getNodeId: () => 'node-1',
       getObject: () => node,
       highlight: { setObjects: vi.fn(), clear: vi.fn() },
-      orbitControls: controls,
     });
 
     canvas.dispatchEvent(pointerEvent('pointerdown', 300, 150));
     controls.dispatchEvent({ type: 'change' });
-    canvas.dispatchEvent(pointerEvent('pointerup', 300, 150));
+    canvas.dispatchEvent(pointerEvent('pointerup', 303, 154));
+
+    expect(selection.getSelection().ids).toEqual(['node-1']);
+    selection.dispose();
+  });
+
+  it('超过源站 5px 点击门槛时不触发拾取', () => {
+    const canvas = new CanvasStub();
+    const camera = new PerspectiveCamera(50, 2, 0.1, 100);
+    camera.position.set(0, 0, 5);
+    camera.lookAt(0, 0, 0);
+    camera.updateMatrixWorld();
+    const sceneRoot = new Scene();
+    const node = businessNode('node-1', 0);
+    sceneRoot.add(node);
+    sceneRoot.updateMatrixWorld(true);
+    const selection = new SelectionSystem({
+      camera,
+      canvas: canvas as unknown as HTMLElement,
+      root: sceneRoot,
+      getNodeId: () => 'node-1',
+      getObject: () => node,
+      highlight: { setObjects: vi.fn(), clear: vi.fn() },
+    });
+
+    canvas.dispatchEvent(pointerEvent('pointerdown', 300, 150));
+    canvas.dispatchEvent(pointerEvent('pointerup', 304, 154));
 
     expect(selection.getSelection().ids).toEqual([]);
+    selection.dispose();
+  });
+
+  it('关闭整模选择后高亮真实命中 Mesh，但业务选择仍使用 SceneNode ID', () => {
+    const canvas = new CanvasStub();
+    const camera = new PerspectiveCamera(50, 2, 0.1, 100);
+    camera.position.set(0, 0, 5);
+    camera.lookAt(0, 0, 0);
+    camera.updateMatrixWorld();
+    const sceneRoot = new Scene();
+    const node = businessNode('node-1', 0);
+    const mesh = node.children[0]!;
+    sceneRoot.add(node);
+    sceneRoot.updateMatrixWorld(true);
+    const setObjects = vi.fn();
+    const selection = new SelectionSystem({
+      camera,
+      canvas: canvas as unknown as HTMLElement,
+      root: sceneRoot,
+      getNodeId: () => 'node-1',
+      getObject: () => node,
+      highlight: { setObjects, clear: vi.fn() },
+    });
+    selection.setSelectWholeModel(false);
+    const [x, y] = screenPoint(
+      new Vector3(),
+      camera,
+      canvas.getBoundingClientRect(),
+    );
+
+    selection.selectAt(x, y);
+
+    expect(selection.getSelection()).toEqual({
+      ids: ['node-1'],
+      primaryId: 'node-1',
+    });
+    expect(setObjects).toHaveBeenLastCalledWith([mesh]);
+    selection.dispose();
+  });
+
+  it('相同选择和相同对象不重复刷新 BoxHelper', () => {
+    const canvas = new CanvasStub();
+    const camera = new PerspectiveCamera();
+    const sceneRoot = new Scene();
+    const node = businessNode('node-1', 0);
+    const highlight = { setObjects: vi.fn(), clear: vi.fn() };
+    const selection = new SelectionSystem({
+      camera,
+      canvas: canvas as unknown as HTMLElement,
+      root: sceneRoot,
+      getNodeId: () => 'node-1',
+      getObject: () => node,
+      highlight,
+    });
+
+    selection.setSelection(['node-1'], 'node-1');
+    selection.setSelection(['node-1'], 'node-1');
+
+    expect(highlight.setObjects).toHaveBeenCalledOnce();
     selection.dispose();
   });
 });

@@ -22,13 +22,20 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import type {
+  CameraRoamingPath,
   SceneDocument,
+  SceneCamera,
   SceneNode,
   Transform,
 } from '@digital-twin/scene-schema';
+import { createDefaultSceneCamera } from '@digital-twin/scene-schema';
 import { AssetInstanceSystem } from './assets/AssetInstanceSystem.js';
 import { AssetLoader } from './assets/AssetLoader.js';
 import type { AssetResolver } from './assets/types.js';
+import {
+  CameraRoamingSystem,
+  type CameraRoamingState,
+} from './camera/CameraRoamingSystem.js';
 import { SceneDocumentSystem } from './documents/SceneDocumentSystem.js';
 import {
   SelectionSystem,
@@ -48,6 +55,7 @@ import {
   type CameraOrientation,
   type CameraView,
 } from './interaction/ViewportCameraSystem.js';
+import { ViewportGizmoSystem } from './interaction/ViewportGizmoSystem.js';
 import { ViewportDropSystem } from './interaction/ViewportDropSystem.js';
 import { MaterialSystem } from './materials/MaterialSystem.js';
 import { ResourceTracker } from './ResourceTracker';
@@ -95,6 +103,11 @@ export interface EditorEngineEventMap {
   transformend: TransformCommit;
   statschange: SceneStats;
   camerachange: CameraOrientation;
+  camerastatechange: { camera: SceneCamera };
+  cameraroamingstatechange: CameraRoamingState;
+  cameraroamingpathcreated: {
+    pathPoints: Array<[number, number, number]>;
+  };
   renderstatschange: RenderStats;
 }
 
@@ -124,6 +137,9 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
   private measurementSystem?: MeasurementSystem;
   private dropSystem?: ViewportDropSystem;
   private cameraSystem?: ViewportCameraSystem;
+  private cameraRoamingSystem?: CameraRoamingSystem;
+  private cameraRoamingList: CameraRoamingPath[] = [];
+  private viewportGizmo?: ViewportGizmoSystem;
   private settingsSystem?: SceneSettingsSystem;
   private groundSystem?: GroundSystem;
   private weatherSystem?: WeatherSystem;
@@ -222,6 +238,7 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.controls.addEventListener('change', this.invalidate);
     this.controls.addEventListener('change', this.emitCameraOrientation);
     this.controls.addEventListener('start', this.cancelCameraAnimation);
+    this.controls.addEventListener('end', this.emitCameraState);
     this.pointerLockSystem = new PointerLockSystem(
       this.camera,
       renderer.domElement,
@@ -238,6 +255,35 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
       },
     );
     this.cameraSystem = new ViewportCameraSystem(this.camera, this.controls);
+    this.cameraRoamingSystem = new CameraRoamingSystem({
+      scene: this.scene,
+      camera: this.camera,
+      canvas: renderer.domElement,
+      controls: this.controls,
+      invalidate: this.invalidate,
+      onStateChange: (state) => {
+        this.selectionSystem?.setEnabled(
+          state.mode === 'idle' &&
+            !this.pointerLockSystem?.isActive &&
+            !this.measurementSystem?.active,
+        );
+        this.dispatchEvent({ type: 'cameraroamingstatechange', ...state });
+        this.invalidate();
+      },
+      onPathCreated: (pathPoints) => {
+        this.dispatchEvent({
+          type: 'cameraroamingpathcreated',
+          pathPoints,
+        });
+      },
+    });
+    this.viewportGizmo = new ViewportGizmoSystem({
+      camera: this.camera,
+      renderer,
+      controls: this.controls,
+      container,
+      invalidate: this.invalidate,
+    });
     this.controls.update();
     this.emitCameraOrientation();
 
@@ -299,6 +345,7 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.renderer.setSize(width, height, false);
     this.composer.setPixelRatio(pixelRatio);
     this.composer.setSize(width, height);
+    this.viewportGizmo?.resize();
     this.invalidate();
   }
 
@@ -313,22 +360,32 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     if (this.groundSystem?.isAnimated || this.weatherSystem?.isActive) {
       this.invalidated = true;
     }
-    const cameraAnimating = this.cameraSystem?.update(delta) ?? false;
-    if (!cameraAnimating) {
+    const roamingChanged = this.cameraRoamingSystem?.update(delta) ?? false;
+    const roamingActive =
+      this.cameraRoamingSystem?.getState().mode === 'previewing';
+    const cameraAnimating =
+      !roamingActive && !roamingChanged
+        ? (this.cameraSystem?.update(delta) ?? false)
+        : false;
+    if (!roamingActive && !roamingChanged && !cameraAnimating) {
       if (this.pointerLockSystem?.isLocked) {
         this.pointerLockSystem.update(delta);
       } else {
         this.controls?.update(delta);
       }
     }
-    if (cameraAnimating) this.invalidated = true;
+    if (roamingChanged || cameraAnimating || this.viewportGizmo?.animating) {
+      this.invalidated = true;
+    }
     this.emitRenderStatsIfNeeded();
     if (!this.invalidated) return;
 
     this.selectionHighlight?.update();
+    // 先消费当前脏标记，渲染期间产生的新事件才能正确请求下一帧。
+    this.invalidated = false;
     // Composer 是启用后期处理时唯一的最终渲染路径，不能再调用 renderer.render。
     this.composer?.render(delta);
-    this.invalidated = false;
+    if (this.viewportGizmo?.render()) this.invalidated = true;
     this.flushScreenshotRequests();
   };
 
@@ -341,6 +398,8 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     resolver: AssetResolver,
   ): Promise<LoadReport> {
     if (!this.renderer) throw new Error('EditorEngine 尚未初始化');
+    this.applyCameraRoamingList(document.cameraRoamingList);
+    this.applyCamera(document.camera);
     this.settingsSystem?.apply(document.settings);
     await Promise.all([
       this.settingsSystem?.applyBackground(document.settings, resolver),
@@ -428,6 +487,108 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.invalidate();
   }
 
+  /** 把持久化 DTO 应用到活动 PerspectiveCamera，aspect 始终保留容器派生值。 */
+  applyCamera(camera: SceneCamera): void {
+    this.cameraRoamingSystem?.stopPreview();
+    this.cameraRoamingSystem?.cancelDrawing();
+    this.cameraSystem?.cancel();
+    this.camera.name = camera.name;
+    this.camera.position.fromArray(camera.position);
+    this.camera.rotation.fromArray([
+      ...camera.rotation,
+      this.camera.rotation.order,
+    ]);
+    this.camera.scale.fromArray(camera.scale);
+    this.camera.visible = camera.visible;
+    this.camera.frustumCulled = camera.frustumCulled;
+    const shadowCamera = this.camera as PerspectiveCamera & {
+      castShadow: boolean;
+      receiveShadow: boolean;
+    };
+    shadowCamera.castShadow = camera.castShadow;
+    shadowCamera.receiveShadow = camera.receiveShadow;
+    this.camera.fov = camera.fov;
+    this.camera.near = camera.near;
+    this.camera.far = camera.far;
+    this.camera.updateProjectionMatrix();
+    this.controls?.target.fromArray(camera.target);
+    // 源站应用/重置 Camera 时不调用 controls.update，否则会立即用 target 覆盖持久化 rotation。
+    this.emitCameraState();
+    this.emitCameraOrientation();
+    this.invalidate();
+  }
+
+  getCameraState(): SceneCamera {
+    const fallbackTarget = createDefaultSceneCamera().target;
+    const shadowCamera = this.camera as PerspectiveCamera & {
+      castShadow?: boolean;
+      receiveShadow?: boolean;
+    };
+    return {
+      type: 'perspective',
+      name: this.camera.name || 'Camera',
+      position: this.camera.position.toArray(),
+      rotation: [
+        this.camera.rotation.x,
+        this.camera.rotation.y,
+        this.camera.rotation.z,
+      ],
+      scale: this.camera.scale.toArray(),
+      target:
+        this.controls?.target.toArray() ??
+        ([...fallbackTarget] as SceneCamera['target']),
+      visible: this.camera.visible,
+      castShadow: shadowCamera.castShadow ?? false,
+      receiveShadow: shadowCamera.receiveShadow ?? false,
+      frustumCulled: this.camera.frustumCulled,
+      fov: this.camera.fov,
+      near: this.camera.near,
+      far: this.camera.far,
+    };
+  }
+
+  applyCameraRoamingList(paths: readonly CameraRoamingPath[]): void {
+    this.cameraRoamingSystem?.stopPreview();
+    this.cameraRoamingSystem?.cancelDrawing();
+    this.cameraRoamingList = paths.map((path) => structuredClone(path));
+  }
+
+  getCameraRoamingList(): CameraRoamingPath[] {
+    return structuredClone(this.cameraRoamingList);
+  }
+
+  startCameraRoamingDrawing(): boolean {
+    if (!this.cameraRoamingSystem) return false;
+    this.pointerLockSystem?.deactivate();
+    this.measurementSystem?.end();
+    this.cameraSystem?.cancel();
+    this.activeModelPart = undefined;
+    this.selectionSystem?.setSelection([]);
+    this.transformSystem?.setSelection(null);
+    this.cameraRoamingSystem.startDrawing();
+    return true;
+  }
+
+  cancelCameraRoamingDrawing(): void {
+    this.cameraRoamingSystem?.cancelDrawing();
+  }
+
+  previewCameraRoaming(pathId: string): boolean {
+    const path = this.cameraRoamingList.find((item) => item.id === pathId);
+    if (!path || !this.cameraRoamingSystem) return false;
+    this.pointerLockSystem?.deactivate();
+    this.measurementSystem?.end();
+    this.cameraSystem?.cancel();
+    this.activeModelPart = undefined;
+    this.selectionSystem?.setSelection([]);
+    this.transformSystem?.setSelection(null);
+    return this.cameraRoamingSystem.preview(path);
+  }
+
+  stopCameraRoaming(): void {
+    this.cameraRoamingSystem?.stopPreview();
+  }
+
   getObject(nodeId: string): Object3D | undefined {
     return this.documentSystem?.getObject(nodeId);
   }
@@ -508,6 +669,8 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
   togglePointerLock(): boolean {
     if (!this.pointerLockSystem) return false;
     if (!this.pointerLockSystem.isActive) {
+      this.cameraRoamingSystem?.stopPreview();
+      this.cameraRoamingSystem?.cancelDrawing();
       this.measurementSystem?.end();
       this.activeModelPart = undefined;
       this.selectionSystem?.setSelection([]);
@@ -521,6 +684,8 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
   setMeasurementEnabled(enabled: boolean): boolean {
     if (!this.measurementSystem) return false;
     if (enabled) {
+      this.cameraRoamingSystem?.stopPreview();
+      this.cameraRoamingSystem?.cancelDrawing();
       this.pointerLockSystem?.deactivate();
       this.activeModelPart = undefined;
       this.selectionSystem?.setSelection([]);
@@ -627,6 +792,8 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
   }
 
   setCameraView(view: CameraView): void {
+    this.cameraRoamingSystem?.stopPreview();
+    this.cameraRoamingSystem?.cancelDrawing();
     this.cameraSystem?.setView(view);
     this.invalidate();
   }
@@ -634,14 +801,7 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
   resetCamera(): void {
     this.pointerLockSystem?.deactivate();
     this.measurementSystem?.end();
-    this.cameraSystem?.cancel();
-    this.camera.position.set(0.607, 3.347, 7.966);
-    this.camera.rotation.set(-0.304, 0.048, 0.016);
-    this.controls?.target.set(0, 0.5, 0);
-    this.camera.updateProjectionMatrix();
-    this.controls?.update();
-    this.emitCameraOrientation();
-    this.invalidate();
+    this.applyCamera(createDefaultSceneCamera());
   }
 
   getCameraOrientation(): CameraOrientation {
@@ -666,6 +826,15 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
   /** W/E/R 切换变换工具，F 聚焦当前选择。 */
   handleShortcut(code: string): boolean {
     if (code === 'Escape') {
+      const roamingMode = this.cameraRoamingSystem?.getState().mode;
+      if (roamingMode === 'drawing') {
+        this.cameraRoamingSystem?.cancelDrawing();
+        return true;
+      }
+      if (roamingMode === 'previewing') {
+        this.cameraRoamingSystem?.stopPreview();
+        return true;
+      }
       if (this.measurementSystem?.active) {
         this.setMeasurementEnabled(false);
         return true;
@@ -694,6 +863,7 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.selectionSystem?.dispose();
     this.measurementSystem?.dispose();
     this.pointerLockSystem?.dispose();
+    this.cameraRoamingSystem?.dispose();
     this.selectionHighlight?.dispose();
     this.transformSystem?.dispose();
     this.weatherSystem?.dispose();
@@ -701,9 +871,12 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.settingsSystem?.dispose();
     this.fallbackEnvironmentTarget?.dispose();
     this.fallbackEnvironmentTarget = undefined;
+    // Gizmo 订阅 OrbitControls，必须在 controls 前对称释放。
+    this.viewportGizmo?.dispose();
     this.controls?.removeEventListener('change', this.invalidate);
     this.controls?.removeEventListener('change', this.emitCameraOrientation);
     this.controls?.removeEventListener('start', this.cancelCameraAnimation);
+    this.controls?.removeEventListener('end', this.emitCameraState);
     this.controls?.dispose();
     this.documentSystem?.dispose();
     this.output?.dispose();
@@ -731,7 +904,6 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
         getNodeId: (object) => this.documentSystem?.getNodeId(object),
         getObject: (nodeId) => this.documentSystem?.getObject(nodeId),
         highlight: this.selectionHighlight,
-        orbitControls: this.controls,
         onSelectionChange: (selection) => {
           // 画布射线选中业务节点后，SelectionSystem 已经恢复了整模包围盒。
           this.activeModelPart = undefined;
@@ -769,6 +941,13 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
       ...this.getCameraOrientation(),
     });
     this.invalidate();
+  };
+
+  private readonly emitCameraState = (): void => {
+    this.dispatchEvent({
+      type: 'camerastatechange',
+      camera: this.getCameraState(),
+    });
   };
 
   private readonly cancelCameraAnimation = (): void => {

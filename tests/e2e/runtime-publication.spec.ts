@@ -5,9 +5,12 @@ import { once } from 'node:events';
 import { readFile, readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { WebSocket, WebSocketServer } from 'ws';
+import { createDefaultSceneDocument } from '../../packages/scene-schema/src/index.js';
 import { createMinimalGlb } from './fixtures/minimalGlb';
 
 const apiBaseUrl = process.env.E2E_API_BASE_URL ?? 'http://127.0.0.1:3100/api';
+const runtimeBaseUrl =
+  process.env.E2E_RUNTIME_BASE_URL ?? 'http://127.0.0.1:5174';
 const databaseE2E = process.env.E2E_DATABASE === 'true';
 const bucket = process.env.MINIO_BUCKET ?? 'assets';
 
@@ -151,6 +154,7 @@ test('runtime 产物不携带编辑器依赖且保持首期体积预算', async 
 
   expect(runtimeCode).not.toContain('TransformControls');
   expect(runtimeCode).not.toContain('CommandHistory');
+  expect(runtimeCode).not.toContain('indexedDB');
   expect(runtimeCode).not.toContain('应用数据源');
   expect(runtimeCode).not.toContain('项目配置');
   expect(runtimeStyles).not.toContain('.el-button');
@@ -170,6 +174,94 @@ test('runtime 产物不携带编辑器依赖且保持首期体积预算', async 
     ),
     contentType: 'application/json',
   });
+});
+
+test('草稿预览支持第一人称、相机重置和路径漫游', async ({ page }) => {
+  const sceneId = 'runtime-navigation-e2e';
+  const sceneDocument = createDefaultSceneDocument(
+    'runtime-navigation-project',
+    sceneId,
+    '运行时导航验收',
+  );
+  sceneDocument.settings.groundType = 'none';
+  sceneDocument.cameraRoamingList = [
+    {
+      id: 'path-e2e',
+      name: '验收漫游路径',
+      pathPoints: [
+        [0, 0.55, 0],
+        [40, 0.55, 40],
+      ],
+    },
+  ];
+  const timestamp = new Date().toISOString();
+  await page.route(`${apiBaseUrl}/scenes/${sceneId}`, (route) =>
+    route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: sceneId,
+        projectId: sceneDocument.projectId,
+        name: sceneDocument.name,
+        sortOrder: 0,
+        revision: sceneDocument.revision,
+        contentHash: 'runtime-navigation-e2e',
+        coverKey: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        document: sceneDocument,
+      }),
+    }),
+  );
+  // Headless Chromium 不授予真实 Pointer Lock；模拟浏览器标准事件，稳定验收 UI 与引擎状态桥接。
+  await page.addInitScript(() => {
+    let lockedElement: Element | null = null;
+    const setLockedElement = (element: Element | null): void => {
+      lockedElement = element;
+    };
+    Object.defineProperty(Document.prototype, 'pointerLockElement', {
+      configurable: true,
+      get: () => lockedElement,
+    });
+    HTMLElement.prototype.requestPointerLock = function () {
+      setLockedElement(this);
+      document.dispatchEvent(new Event('pointerlockchange'));
+      return Promise.resolve();
+    };
+    Document.prototype.exitPointerLock = function () {
+      setLockedElement(null);
+      document.dispatchEvent(new Event('pointerlockchange'));
+    };
+  });
+  const pageErrors: string[] = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+
+  await page.goto(`${runtimeBaseUrl}/preview/${sceneId}`);
+  const canvas = page.getByTestId('runtime-canvas');
+  await expect(canvas).toHaveAttribute('data-runtime-ready', 'true', {
+    timeout: 30_000,
+  });
+  await expect(page.getByTestId('runtime-preview-toolbar')).toBeVisible();
+  await expect(canvas).toHaveAttribute('data-navigation-mode', 'orbit');
+
+  await page.getByRole('button', { name: '进入第一人称视角' }).click();
+  await expect(canvas).toHaveAttribute('data-navigation-mode', 'first-person');
+  await page.getByRole('button', { name: '退出第一人称视角' }).click();
+  await expect(canvas).toHaveAttribute('data-navigation-mode', 'orbit');
+
+  const playRoaming = async (): Promise<void> => {
+    await page.getByRole('button', { name: '选择漫游路径' }).click();
+    await page.getByRole('button', { name: '播放验收漫游路径' }).click();
+    await expect(canvas).toHaveAttribute('data-navigation-mode', 'roaming');
+    await expect(page.getByRole('status')).toContainText('漫游中');
+  };
+  await playRoaming();
+  await page.getByRole('button', { name: '重置场景相机位置' }).click();
+  await expect(canvas).toHaveAttribute('data-navigation-mode', 'orbit');
+
+  await playRoaming();
+  await page.getByRole('button', { name: '取消相机漫游' }).click();
+  await expect(canvas).toHaveAttribute('data-navigation-mode', 'orbit');
+  expect(pageErrors).toEqual([]);
 });
 
 test('真实 Chromium 完成预览、WebSocket 与无版本原子发布闭环', async ({

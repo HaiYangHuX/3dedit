@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import type { Asset, PublicationDetail } from '@digital-twin/api-contracts';
 import type { RuntimeConfigPatch } from '@digital-twin/editor-core';
+import type { SceneCamera } from '@digital-twin/scene-schema';
 import {
   BUILTIN_ENVIRONMENT_PREVIEW_URL,
-  type CameraOrientation,
-  type CameraView,
+  type CameraRoamingState,
   type ModelAssetFormat,
   type ModelStructureMap,
   type RenderStats,
@@ -12,20 +12,20 @@ import {
   type SelectionState,
   type TransformCommit,
 } from '@digital-twin/three-engine';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { storeToRefs } from 'pinia';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import EditorCanvas from '../components/EditorCanvas.vue';
 import AssetLibraryPanel from '../components/AssetLibraryPanel.vue';
 import AssetPalette from '../components/editor/AssetPalette.vue';
 import EditorTopBar from '../components/editor/EditorTopBar.vue';
+import CameraInspector from '../components/editor/CameraInspector.vue';
 import NodeInspector from '../components/editor/NodeInspector.vue';
 import InteractionPanel from '../components/editor/InteractionPanel.vue';
 import RuntimeDiagnostics from '../components/editor/RuntimeDiagnostics.vue';
 import SceneSettingsInspector from '../components/editor/SceneSettingsInspector.vue';
 import SceneTree from '../components/editor/SceneTree.vue';
 import SocketTaskPanel from '../components/editor/SocketTaskPanel.vue';
-import ViewportGizmo from '../components/editor/ViewportGizmo.vue';
 import ViewportStats from '../components/editor/ViewportStats.vue';
 import ViewportToolbar from '../components/editor/ViewportToolbar.vue';
 import {
@@ -67,9 +67,6 @@ const publication = ref<PublicationDetail>();
 const publishing = ref(false);
 const settingsUploading = ref(false);
 const transformMode = ref<'translate' | 'rotate' | 'scale'>('translate');
-const cameraOrientation = ref<CameraOrientation>({
-  quaternion: [0, 0, 0, 1],
-});
 const renderStats = ref<RenderStats>({ fps: 0, drawCalls: 0 });
 const isPointerLock = ref(false);
 const isMeasuring = ref(false);
@@ -79,6 +76,12 @@ const modelAssetFormats = ref<Partial<Record<string, ModelAssetFormat>>>({});
 const selectedModelPart = ref<{ nodeId: string; objectId: string } | null>(
   null,
 );
+const cameraSelected = ref(false);
+const cameraRoamingState = ref<CameraRoamingState>({
+  mode: 'idle',
+  pointCount: 0,
+  activePathId: null,
+});
 let assetFormatGeneration = 0;
 let previewWindow: Window | null = null;
 const runtimeOrigin = (
@@ -170,6 +173,12 @@ watch(
     modelStructures.value = {};
     modelAssetFormats.value = {};
     selectedModelPart.value = null;
+    cameraSelected.value = false;
+    cameraRoamingState.value = {
+      mode: 'idle',
+      pointCount: 0,
+      activePathId: null,
+    };
     void Promise.resolve(store.loadScene(sceneId))
       .then(() => loadReferencedModelAssetFormats())
       .catch(() => {
@@ -298,9 +307,23 @@ async function uploadSceneSettingAsset(
   }
 }
 
-function changeSelection(selection: SelectionState): void {
+function changeCanvasSelection(selection: SelectionState): void {
+  cameraSelected.value = false;
+  selectedModelPart.value = null;
+  commands.selectFromCanvas(selection);
+}
+
+function changeTreeSelection(selection: SelectionState): void {
+  cameraSelected.value = false;
   selectedModelPart.value = null;
   commands.select(selection);
+}
+
+function selectCamera(): void {
+  cameraSelected.value = true;
+  selectedModelPart.value = null;
+  // Camera 不是 SceneNode，先清空业务选择和 TransformControls。
+  commands.select({ ids: [], primaryId: null });
 }
 
 function changeModelPartSelection(selection: {
@@ -308,6 +331,7 @@ function changeModelPartSelection(selection: {
   objectId: string;
   targetObjectId: string;
 }): void {
+  cameraSelected.value = false;
   const selected =
     canvas.value?.selectModelPart?.(
       selection.nodeId,
@@ -318,12 +342,60 @@ function changeModelPartSelection(selection: {
     : null;
 }
 
-function changeStats(value: SceneStats): void {
-  stats.value = value;
+function changeCameraState(camera: SceneCamera): void {
+  if (JSON.stringify(camera) === JSON.stringify(document.value.camera)) return;
+  runCommand(commands.syncCameraFromCanvas(camera));
 }
 
-function changeCameraOrientation(value: CameraOrientation): void {
-  cameraOrientation.value = value;
+function changeCameraRoamingState(state: CameraRoamingState): void {
+  cameraRoamingState.value = state;
+}
+
+function createCameraRoamingPath(
+  pathPoints: Array<[number, number, number]>,
+): void {
+  const paths = document.value.cameraRoamingList;
+  runCommand(
+    commands.replaceCameraRoamingList([
+      ...paths,
+      {
+        id: crypto.randomUUID(),
+        name: `漫游路径 ${paths.length + 1}`,
+        pathPoints,
+      },
+    ]),
+  );
+}
+
+function startCameraRoamingDrawing(): void {
+  if (!commands.startCameraRoamingDrawing()) {
+    ElMessage.warning('三维视口尚未就绪');
+  }
+}
+
+function previewCameraRoaming(pathId: string): void {
+  if (!commands.previewCameraRoaming(pathId)) {
+    ElMessage.warning('漫游路径不可用');
+  }
+}
+
+async function removeCameraRoamingPath(pathId: string): Promise<void> {
+  try {
+    await ElMessageBox.confirm('确定删除该相机漫游路径吗？', '删除确认', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+    });
+  } catch {
+    return;
+  }
+  await commands.replaceCameraRoamingList(
+    document.value.cameraRoamingList.filter((path) => path.id !== pathId),
+  );
+}
+
+function changeStats(value: SceneStats): void {
+  stats.value = value;
 }
 
 function changePointerLock(active: boolean): void {
@@ -381,10 +453,6 @@ function toggleMeasurement(active: boolean): void {
 function toggleChooseAllModel(active: boolean): void {
   isChooseAllModel.value = active;
   commands.setSelectWholeModel(active);
-}
-
-function changeCameraView(view: CameraView): void {
-  commands.setCameraView(view);
 }
 
 async function ensureRuntimeDocumentSaved(): Promise<void> {
@@ -551,21 +619,35 @@ async function copyText(value: string): Promise<void> {
       <EditorCanvas
         ref="canvas"
         :document="document"
-        @select="changeSelection"
+        @select="changeCanvasSelection"
         @transform-commit="commitTransform"
         @scene-drop="dropSceneItem"
         @stats-change="changeStats"
-        @camera-change="changeCameraOrientation"
+        @camera-state-change="changeCameraState"
+        @camera-roaming-state-change="changeCameraRoamingState"
+        @camera-roaming-path-created="createCameraRoamingPath"
         @pointer-lock-change="changePointerLock"
         @measure-change="changeMeasure"
         @render-stats-change="changeRenderStats"
         @model-structure-change="changeModelStructures"
       />
       <ViewportStats :scene="stats" :render="renderStats" />
-      <ViewportGizmo
-        :quaternion="cameraOrientation.quaternion"
-        @view="changeCameraView"
-      />
+      <div
+        v-if="cameraRoamingState.mode !== 'idle'"
+        class="camera-roaming-viewport-status"
+      >
+        <template v-if="cameraRoamingState.mode === 'previewing'">
+          <strong>漫游中..</strong>
+          <button type="button" @click="commands.stopCameraRoaming">
+            取消
+          </button>
+        </template>
+        <template v-else>
+          <span>Ctrl / ⌘ + 左键定点</span>
+          <span>→</span>
+          <span>松开 Ctrl / ⌘ 结束</span>
+        </template>
+      </div>
     </section>
 
     <aside class="inspector-panel" data-testid="inspector-panel">
@@ -607,7 +689,9 @@ async function copyText(value: string): Promise<void> {
           :model-structures="modelStructures"
           :model-asset-formats="modelAssetFormats"
           :selected-model-part="selectedModelPart"
-          @select="changeSelection"
+          :camera-selected="cameraSelected"
+          @select-camera="selectCamera"
+          @select="changeTreeSelection"
           @select-model-part="changeModelPartSelection"
           @toggle-visible="
             (id, enabled) => runCommand(commands.updateNode(id, { enabled }))
@@ -624,8 +708,21 @@ async function copyText(value: string): Promise<void> {
               runCommand(commands.reparentNode(id, parentId, index))
           "
         />
+        <CameraInspector
+          v-if="cameraSelected"
+          :camera="document.camera"
+          :paths="document.cameraRoamingList"
+          :roaming-state="cameraRoamingState"
+          :change-version="documentChangeVersion"
+          @update="(patch) => runCommand(commands.updateCamera(patch))"
+          @start-drawing="startCameraRoamingDrawing"
+          @cancel-drawing="commands.cancelCameraRoamingDrawing"
+          @preview="previewCameraRoaming"
+          @stop="commands.stopCameraRoaming"
+          @remove="removeCameraRoamingPath"
+        />
         <NodeInspector
-          v-if="selectedNode"
+          v-else-if="selectedNode"
           :node="selectedNode"
           :change-version="documentChangeVersion"
           :texture-assets="textureAssets"

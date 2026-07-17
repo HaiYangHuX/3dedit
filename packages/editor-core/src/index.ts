@@ -15,6 +15,11 @@ export {
   type EditableSceneSettingsPatch,
 } from './commands/UpdateSceneSettingsCommand';
 export {
+  UpdateCameraCommand,
+  type EditableCameraPatch,
+} from './commands/UpdateCameraCommand';
+export { UpdateCameraRoamingListCommand } from './commands/UpdateCameraRoamingListCommand';
+export {
   UpdateRuntimeConfigCommand,
   type RuntimeConfigPatch,
 } from './commands/UpdateRuntimeConfigCommand';

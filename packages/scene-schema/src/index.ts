@@ -1,5 +1,14 @@
 export { createDefaultSceneDocument } from './defaultDocument.js';
 export {
+  cameraRoamingListSchema,
+  cameraRoamingPathSchema,
+  cameraVector3Schema,
+  createDefaultSceneCamera,
+  sceneCameraSchema,
+  type CameraRoamingPath,
+  type SceneCamera,
+} from './camera.js';
+export {
   collectAssetReferences,
   type AssetReference,
 } from './assetReferences.js';

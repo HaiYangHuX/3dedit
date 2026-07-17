@@ -14,6 +14,24 @@ export function calculatePointerLockMove(deltaSeconds: number): number {
 }
 
 /**
+ * r183 的 PointerLockControls.lock() 不返回底层 Promise，权限拒绝时会形成未处理 rejection。
+ * 直接请求并消费失败结果，使预览仍可稳定回退到 Orbit 模式。
+ */
+export function requestPointerLockSafely(
+  element: HTMLElement,
+  onRejected: (error: unknown) => void,
+): void {
+  try {
+    const request = element.requestPointerLock({ unadjustedMovement: false });
+    if (request && typeof request.catch === 'function') {
+      void request.catch(onRejected);
+    }
+  } catch (error) {
+    onRejected(error);
+  }
+}
+
+/**
  * 封装 PointerLockControls 的创建、键盘移动和销毁。
  * OrbitControls 与第一人称控制器不能同时更新，调用方应以 isLocked 选择唯一控制路径。
  */
@@ -24,7 +42,7 @@ export class PointerLockSystem {
 
   constructor(
     camera: Camera,
-    domElement: HTMLElement,
+    private readonly domElement: HTMLElement,
     private readonly options: PointerLockSystemOptions = {},
   ) {
     this.controls = new PointerLockControls(camera, domElement);
@@ -50,7 +68,10 @@ export class PointerLockSystem {
       6,
     );
     this.setActive(true);
-    this.controls.lock();
+    requestPointerLockSafely(this.domElement, () => {
+      this.keys.clear();
+      this.setActive(false);
+    });
   }
 
   deactivate(): void {

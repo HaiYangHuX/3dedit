@@ -10,11 +10,6 @@ export interface SelectionHighlightTarget {
   clear(): void;
 }
 
-interface OrbitControlsEventSource {
-  addEventListener(type: 'change', listener: (event: unknown) => void): void;
-  removeEventListener(type: 'change', listener: (event: unknown) => void): void;
-}
-
 export interface SelectionSystemOptions {
   camera: Camera;
   canvas: HTMLElement;
@@ -22,7 +17,6 @@ export interface SelectionSystemOptions {
   getNodeId(object: Object3D): string | undefined;
   getObject(nodeId: string): Object3D | undefined;
   highlight: SelectionHighlightTarget;
-  orbitControls?: OrbitControlsEventSource;
   onSelectionChange?(selection: SelectionState): void;
   clickTolerance?: number;
 }
@@ -30,6 +24,11 @@ export interface SelectionSystemOptions {
 interface PointerStart {
   x: number;
   y: number;
+}
+
+interface SelectionHit {
+  nodeId: string;
+  hitObject: Object3D;
 }
 
 /**
@@ -40,9 +39,10 @@ export class SelectionSystem {
   private readonly raycaster = new Raycaster();
   private readonly pointer = new Vector2();
   private readonly selectedIds: string[] = [];
+  private readonly pickedObjects = new Map<string, Object3D>();
+  private highlightedObjects: Object3D[] = [];
   private primaryId: string | null = null;
   private pointerStart?: PointerStart;
-  private orbitChangedSincePointerDown = false;
   private suppressPointerUp = false;
   private enabled = true;
   private selectWholeModel = true;
@@ -50,7 +50,6 @@ export class SelectionSystem {
   constructor(private readonly options: SelectionSystemOptions) {
     options.canvas.addEventListener('pointerdown', this.handlePointerDown);
     options.canvas.addEventListener('pointerup', this.handlePointerUp);
-    options.orbitControls?.addEventListener('change', this.handleOrbitChange);
   }
 
   getSelection(): SelectionState {
@@ -62,13 +61,18 @@ export class SelectionSystem {
     this.enabled = enabled;
     if (!enabled) {
       this.pointerStart = undefined;
-      this.orbitChangedSincePointerDown = false;
     }
   }
 
-  /** 源站默认按整模选择；当前业务协议仍以 SceneNode 根节点作为选择单位。 */
+  /**
+   * 关闭整模模式时只改变黄色包围盒目标，业务选择仍保持 SceneNode ID，
+   * 从而确保属性、删除和撤销命令不会收到瞬时 Object3D UUID。
+   */
   setSelectWholeModel(enabled: boolean): void {
+    if (this.selectWholeModel === enabled) return;
     this.selectWholeModel = enabled;
+    if (enabled) this.pickedObjects.clear();
+    this.refreshHighlight(this.selectedIds);
   }
 
   /** 由文档 Store 或场景树反向同步选中状态。 */
@@ -80,6 +84,8 @@ export class SelectionSystem {
       primaryId && nextIds.includes(primaryId)
         ? primaryId
         : (nextIds.at(-1) ?? null);
+    // 场景树等外部入口没有 Mesh 命中信息，统一恢复业务根高亮。
+    this.pickedObjects.clear();
     this.commitSelection(nextIds, nextPrimary);
   }
 
@@ -91,13 +97,16 @@ export class SelectionSystem {
   }
 
   selectAt(clientX: number, clientY: number, additive = false): void {
-    const nodeId = this.pickNodeId(clientX, clientY);
-    if (!nodeId) {
+    const hit = this.pick(clientX, clientY);
+    if (!hit) {
       if (!additive) this.commitSelection([], null);
       return;
     }
+    const { nodeId, hitObject } = hit;
 
     if (!additive) {
+      this.pickedObjects.clear();
+      if (!this.selectWholeModel) this.pickedObjects.set(nodeId, hitObject);
       this.commitSelection([nodeId], nodeId);
       return;
     }
@@ -106,10 +115,12 @@ export class SelectionSystem {
     const index = nextIds.indexOf(nodeId);
     if (index >= 0) {
       nextIds.splice(index, 1);
+      this.pickedObjects.delete(nodeId);
       this.commitSelection(nextIds, nextIds.at(-1) ?? null);
       return;
     }
     nextIds.push(nodeId);
+    if (!this.selectWholeModel) this.pickedObjects.set(nodeId, hitObject);
     this.commitSelection(nextIds, nodeId);
   }
 
@@ -119,16 +130,14 @@ export class SelectionSystem {
       this.handlePointerDown,
     );
     this.options.canvas.removeEventListener('pointerup', this.handlePointerUp);
-    this.options.orbitControls?.removeEventListener(
-      'change',
-      this.handleOrbitChange,
-    );
     this.selectedIds.length = 0;
+    this.pickedObjects.clear();
+    this.highlightedObjects = [];
     this.options.highlight.clear();
     this.enabled = false;
   }
 
-  private pickNodeId(clientX: number, clientY: number): string | undefined {
+  private pick(clientX: number, clientY: number): SelectionHit | undefined {
     const rect = this.options.canvas.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return undefined;
     this.pointer.set(
@@ -140,7 +149,9 @@ export class SelectionSystem {
     for (const hit of this.raycaster.intersectObject(this.options.root, true)) {
       if (!this.isEffectivelyVisible(hit.object)) continue;
       const nodeId = this.options.getNodeId(hit.object);
-      if (nodeId && this.options.getObject(nodeId)) return nodeId;
+      if (nodeId && this.options.getObject(nodeId)) {
+        return { nodeId, hitObject: hit.object };
+      }
     }
     return undefined;
   }
@@ -156,16 +167,11 @@ export class SelectionSystem {
   }
 
   private commitSelection(ids: string[], primaryId: string | null): void {
-    const objects = ids.flatMap((id) => {
-      const object = this.options.getObject(id);
-      return object ? [object] : [];
-    });
-    // 即使 ID 未变，节点更新也可能替换业务 Object3D，必须刷新辅助对象引用。
-    this.options.highlight.setObjects(objects);
     const unchanged =
       this.primaryId === primaryId &&
       this.selectedIds.length === ids.length &&
       this.selectedIds.every((id, index) => id === ids[index]);
+    this.refreshHighlight(ids);
     if (unchanged) return;
 
     this.selectedIds.splice(0, this.selectedIds.length, ...ids);
@@ -176,7 +182,6 @@ export class SelectionSystem {
   private readonly handlePointerDown = (event: PointerEvent): void => {
     if (!this.enabled || event.button !== 0) return;
     this.pointerStart = { x: event.clientX, y: event.clientY };
-    this.orbitChangedSincePointerDown = false;
   };
 
   private readonly handlePointerUp = (event: PointerEvent): void => {
@@ -187,14 +192,30 @@ export class SelectionSystem {
     this.suppressPointerUp = false;
     if (!start || event.button !== 0) return;
 
-    const tolerance = this.options.clickTolerance ?? 4;
+    const tolerance = this.options.clickTolerance ?? 5;
     const moved =
       Math.hypot(event.clientX - start.x, event.clientY - start.y) > tolerance;
-    if (suppressed || moved || this.orbitChangedSincePointerDown) return;
+    // OrbitControls 会在极小手抖时派发 change；源站只以 5px 位移判定点击。
+    if (suppressed || moved) return;
     this.selectAt(event.clientX, event.clientY, event.ctrlKey || event.metaKey);
   };
 
-  private readonly handleOrbitChange = (): void => {
-    if (this.pointerStart) this.orbitChangedSincePointerDown = true;
-  };
+  private refreshHighlight(ids: readonly string[]): void {
+    const objects = ids.flatMap((id) => {
+      const object =
+        (!this.selectWholeModel && this.pickedObjects.get(id)) ||
+        this.options.getObject(id);
+      return object ? [object] : [];
+    });
+    const unchanged =
+      objects.length === this.highlightedObjects.length &&
+      objects.every(
+        (object, index) => object === this.highlightedObjects[index],
+      );
+    if (unchanged) return;
+
+    // ID 未变但模型重新加载时，Object3D 引用会变化，此时仍需重建 BoxHelper。
+    this.options.highlight.setObjects(objects);
+    this.highlightedObjects = [...objects];
+  }
 }

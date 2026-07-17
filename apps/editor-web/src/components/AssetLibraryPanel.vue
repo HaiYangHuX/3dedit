@@ -4,7 +4,6 @@ import type { ModelAssetFormat } from '@digital-twin/three-engine';
 import { ElInput } from 'element-plus';
 import { storeToRefs } from 'pinia';
 import { computed, onMounted, ref } from 'vue';
-import { RouterLink } from 'vue-router';
 import { writeScenePaletteDrag } from '../editor/scenePaletteDrag';
 import { useAssetStore } from '../stores/asset';
 
@@ -64,11 +63,11 @@ function beginDrag(event: DragEvent, asset: Asset): void {
     <div class="editor-asset-toolbar">
       <ElInput
         v-model="keyword"
+        class="editor-model-search"
         size="small"
         clearable
         placeholder="搜索模型"
       />
-      <RouterLink to="/assets" target="_blank">管理</RouterLink>
     </div>
     <p v-if="loading && models.length === 0" class="empty-panel">
       正在加载模型库…

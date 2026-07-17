@@ -25,7 +25,19 @@ export {
   type EditorEngineEventMap,
   type EditorEngineOptions,
 } from './EditorEngine';
-export { RuntimeThreeEngine } from './RuntimeThreeEngine';
+export {
+  RuntimeThreeEngine,
+  type RuntimeNavigationListener,
+  type RuntimeNavigationMode,
+  type RuntimeNavigationState,
+} from './RuntimeThreeEngine';
+export {
+  CameraRoamingSystem,
+  type CameraRoamingControls,
+  type CameraRoamingMode,
+  type CameraRoamingState,
+  type CameraRoamingSystemOptions,
+} from './camera/CameraRoamingSystem';
 export {
   SelectionSystem,
   type SelectionHighlightTarget,
@@ -56,6 +68,11 @@ export {
   type CameraView,
   type ViewportCameraSystemOptions,
 } from './interaction/ViewportCameraSystem';
+export {
+  ViewportGizmoSystem,
+  type ViewportGizmoAdapter,
+  type ViewportGizmoSystemOptions,
+} from './interaction/ViewportGizmoSystem';
 export {
   ViewportDropSystem,
   type ViewportDropOptions,

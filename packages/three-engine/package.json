@@ -14,7 +14,9 @@
   "dependencies": {
     "@digital-twin/runtime-core": "workspace:*",
     "@digital-twin/scene-schema": "workspace:*",
-    "three": "0.183.0"
+    "three": "0.183.0",
+    "three-viewport-gizmo": "2.2.0",
+    "utility-types": "3.11.0"
   },
   "devDependencies": {
     "@types/node": "24.0.0",

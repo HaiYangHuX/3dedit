@@ -1,4 +1,5 @@
 import type { SceneDocument } from './schema.js';
+import { createDefaultSceneCamera } from './camera.js';
 
 /** 创建不含业务节点的可保存场景，供新建项目和测试复用。 */
 export function createDefaultSceneDocument(
@@ -40,6 +41,8 @@ export function createDefaultSceneDocument(
       weatherArea: 100,
       weatherHeight: 50,
     },
+    camera: createDefaultSceneCamera(),
+    cameraRoamingList: [],
     interactions: [],
     dataSources: [],
     socketTasks: [],

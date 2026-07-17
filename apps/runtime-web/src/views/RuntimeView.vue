@@ -4,6 +4,7 @@ import type { AssetResolver } from '@digital-twin/three-engine';
 import { computed, ref, shallowRef, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import RuntimeCanvas from '../RuntimeCanvas.vue';
+import RuntimeLoadingOverlay from '../components/RuntimeLoadingOverlay.vue';
 import { runtimeApi } from '../api/runtime.js';
 import {
   createPreviewAssetResolver,
@@ -63,7 +64,7 @@ watch(
       :resolver="resolver"
       :mode="mode"
     />
-    <div v-else-if="loading" class="runtime-state">正在加载三维场景…</div>
+    <RuntimeLoadingOverlay v-else-if="loading" text="正在读取三维场景..." />
     <div v-else class="runtime-state runtime-state--error">
       {{ errorMessage || '场景不可用' }}
     </div>

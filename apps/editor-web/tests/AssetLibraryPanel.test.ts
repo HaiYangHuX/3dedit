@@ -54,4 +54,19 @@ describe('AssetLibraryPanel', () => {
       }),
     );
   });
+
+  it('筛选区只保留主题化搜索框，不再显示管理入口', () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const store = useAssetStore();
+    store.assets = [model];
+    vi.spyOn(store, 'loadAssets').mockResolvedValue();
+    const wrapper = mount(AssetLibraryPanel, {
+      global: { plugins: [pinia] },
+    });
+
+    expect(wrapper.find('.editor-model-search').exists()).toBe(true);
+    expect(wrapper.find('.editor-asset-toolbar a').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('管理');
+  });
 });

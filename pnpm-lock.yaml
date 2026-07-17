@@ -306,6 +306,12 @@ importers:
       three:
         specifier: 0.183.0
         version: 0.183.0
+      three-viewport-gizmo:
+        specifier: 2.2.0
+        version: 2.2.0(three@0.183.0)
+      utility-types:
+        specifier: 3.11.0
+        version: 3.11.0
     devDependencies:
       '@types/node':
         specifier: 24.0.0
@@ -4597,6 +4603,14 @@ packages:
       }
     engines: { node: '>=20' }
 
+  three-viewport-gizmo@2.2.0:
+    resolution:
+      {
+        integrity: sha512-Jo9Liur1rUmdKk75FZumLU/+hbF+RtJHi1qsKZpntjKlCYScK6tjbYoqvJ9M+IJphrlQJF5oReFW7Sambh0N4Q==,
+      }
+    peerDependencies:
+      three: '>=0.162.0 <1.0.0'
+
   three@0.183.0:
     resolution:
       {
@@ -4750,6 +4764,13 @@ packages:
       {
         integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==,
       }
+
+  utility-types@3.11.0:
+    resolution:
+      {
+        integrity: sha512-6Z7Ma2aVEWisaL6TvBCy7P8rm2LQoPv6dJ7ecIaIixHcwfbJ0x7mWdbcwlIM5IGQxPZSFYeqRCqlOOeKoJYMkw==,
+      }
+    engines: { node: '>= 4' }
 
   vite@7.3.6:
     resolution:
@@ -7407,6 +7428,10 @@ snapshots:
     dependencies:
       real-require: 1.0.0
 
+  three-viewport-gizmo@2.2.0(three@0.183.0):
+    dependencies:
+      three: 0.183.0
+
   three@0.183.0: {}
 
   through2@4.0.2:
@@ -7483,6 +7508,8 @@ snapshots:
       punycode: 2.3.1
 
   util-deprecate@1.0.2: {}
+
+  utility-types@3.11.0: {}
 
   vite@7.3.6(@types/node@24.0.0)(jiti@2.7.0)(sass@1.101.0)(tsx@4.21.0):
     dependencies:

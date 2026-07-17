@@ -18,6 +18,22 @@ describe('SceneDocument', () => {
     expect(sceneDocumentSchema.parse(document)).toEqual(document);
     expect(document.schemaVersion).toBe(1);
     expect(document.revision).toBe(0);
+    expect(document.camera).toEqual({
+      type: 'perspective',
+      name: 'Camera',
+      position: [0.607, 3.347, 7.966],
+      rotation: [-0.304, 0.048, 0.016],
+      scale: [1, 1, 1],
+      target: [0, 0.5, 0],
+      visible: true,
+      castShadow: false,
+      receiveShadow: false,
+      frustumCulled: true,
+      fov: 45,
+      near: 0.05,
+      far: 20_000,
+    });
+    expect(document.cameraRoamingList).toEqual([]);
     // 这些是源站 initRender/initScene/initPlaneGround 的真实初始值，不是面板临时占位值。
     expect(document.settings).toEqual({
       toneMapping: 'neutral',
@@ -89,6 +105,80 @@ describe('SceneDocument', () => {
       weatherArea: 100,
       weatherHeight: 50,
     });
+  });
+
+  it('为旧文档补齐 Camera，并保留漫游路径 round-trip', () => {
+    const document = createDefaultSceneDocument(
+      'project-1',
+      'scene-1',
+      '旧相机场景',
+    );
+    const legacy = structuredClone(document);
+    Reflect.deleteProperty(legacy, 'camera');
+    Reflect.deleteProperty(legacy, 'cameraRoamingList');
+    const parsedLegacy = sceneDocumentSchema.parse(legacy);
+    expect(parsedLegacy.camera.position).toEqual([0.607, 3.347, 7.966]);
+    expect(parsedLegacy.camera.target).toEqual([0, 0.5, 0]);
+    expect(parsedLegacy.cameraRoamingList).toEqual([]);
+
+    document.camera.position = [1, 2, 3];
+    document.camera.target = [4, 0.5, 6];
+    document.cameraRoamingList = [
+      {
+        id: 'roaming-1',
+        name: '漫游路径 1',
+        pathPoints: [
+          [0, 0.55, 0],
+          [5, 0.55, 8],
+        ],
+      },
+    ];
+    expect(sceneDocumentSchema.parse(document)).toEqual(document);
+  });
+
+  it('拒绝非法 Camera 投影和无效漫游路径', () => {
+    const document = createDefaultSceneDocument(
+      'project-1',
+      'scene-1',
+      '非法相机场景',
+    );
+    expect(
+      sceneDocumentSchema.safeParse({
+        ...document,
+        camera: { ...document.camera, near: 10, far: 2 },
+      }).success,
+    ).toBe(false);
+    expect(
+      sceneDocumentSchema.safeParse({
+        ...document,
+        cameraRoamingList: [
+          { id: 'short', name: '单点路径', pathPoints: [[0, 0.55, 0]] },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      sceneDocumentSchema.safeParse({
+        ...document,
+        cameraRoamingList: [
+          {
+            id: 'duplicate',
+            name: '路径一',
+            pathPoints: [
+              [0, 0.55, 0],
+              [1, 0.55, 1],
+            ],
+          },
+          {
+            id: 'duplicate',
+            name: '路径二',
+            pathPoints: [
+              [2, 0.55, 2],
+              [3, 0.55, 3],
+            ],
+          },
+        ],
+      }).success,
+    ).toBe(false);
   });
 
   it('不把内置环境预设当成模型库资源引用', () => {

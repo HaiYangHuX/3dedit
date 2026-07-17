@@ -23,6 +23,12 @@ const mocks = vi.hoisted(() => {
     addNode: vi.fn().mockResolvedValue({}),
     removeNodes: vi.fn(),
     updateNode: vi.fn(),
+    applyCamera: vi.fn(),
+    applyCameraRoamingList: vi.fn(),
+    startCameraRoamingDrawing: vi.fn().mockReturnValue(true),
+    cancelCameraRoamingDrawing: vi.fn(),
+    previewCameraRoaming: vi.fn().mockReturnValue(true),
+    stopCameraRoaming: vi.fn(),
     setSelection: vi.fn(),
     selectModelPart: vi.fn().mockReturnValue(true),
     setTransformMode: vi.fn(),
@@ -121,6 +127,23 @@ describe('EditorCanvas bridge', () => {
       type: 'camerachange',
       quaternion: [0, 0, 0, 1],
     });
+    mocks.listeners.get('camerastatechange')?.({
+      type: 'camerastatechange',
+      camera: document.camera,
+    });
+    mocks.listeners.get('cameraroamingstatechange')?.({
+      type: 'cameraroamingstatechange',
+      mode: 'drawing',
+      pointCount: 1,
+      activePathId: null,
+    });
+    mocks.listeners.get('cameraroamingpathcreated')?.({
+      type: 'cameraroamingpathcreated',
+      pathPoints: [
+        [0, 0.55, 0],
+        [4, 0.55, 4],
+      ],
+    });
     mocks.listeners.get('renderstatschange')?.({
       type: 'renderstatschange',
       fps: 60,
@@ -138,6 +161,18 @@ describe('EditorCanvas bridge', () => {
     ]);
     expect(wrapper.emitted('camera-change')?.at(-1)).toEqual([
       { quaternion: [0, 0, 0, 1] },
+    ]);
+    expect(wrapper.emitted('camera-state-change')?.at(-1)).toEqual([
+      document.camera,
+    ]);
+    expect(wrapper.emitted('camera-roaming-state-change')?.at(-1)).toEqual([
+      { mode: 'drawing', pointCount: 1, activePathId: null },
+    ]);
+    expect(wrapper.emitted('camera-roaming-path-created')?.at(-1)).toEqual([
+      [
+        [0, 0.55, 0],
+        [4, 0.55, 4],
+      ],
     ]);
     expect(wrapper.emitted('render-stats-change')?.at(-1)).toEqual([
       { fps: 60, drawCalls: 3 },
@@ -234,6 +269,12 @@ describe('EditorCanvas bridge', () => {
     await flushPromises();
     const bridge = wrapper.vm as unknown as {
       setSelection(ids: string[], primaryId: string): void;
+      applyCamera(camera: typeof document.camera): void;
+      applyCameraRoamingList(paths: typeof document.cameraRoamingList): void;
+      startCameraRoamingDrawing(): boolean;
+      cancelCameraRoamingDrawing(): void;
+      previewCameraRoaming(pathId: string): boolean;
+      stopCameraRoaming(): void;
       selectModelPart(nodeId: string, objectId: string): boolean;
       setTransformMode(mode: 'translate' | 'rotate' | 'scale'): void;
       setTransformSpace(space: 'local' | 'world'): void;
@@ -249,6 +290,12 @@ describe('EditorCanvas bridge', () => {
     };
 
     bridge.setSelection(['node-1'], 'node-1');
+    bridge.applyCamera(document.camera);
+    bridge.applyCameraRoamingList(document.cameraRoamingList);
+    expect(bridge.startCameraRoamingDrawing()).toBe(true);
+    bridge.cancelCameraRoamingDrawing();
+    expect(bridge.previewCameraRoaming('path-1')).toBe(true);
+    bridge.stopCameraRoaming();
     expect(bridge.selectModelPart('node-1', 'object-1')).toBe(true);
     bridge.setTransformMode('rotate');
     bridge.setTransformSpace('local');
@@ -266,6 +313,14 @@ describe('EditorCanvas bridge', () => {
       ['node-1'],
       'node-1',
     );
+    expect(mocks.engine.applyCamera).toHaveBeenCalledWith(document.camera);
+    expect(mocks.engine.applyCameraRoamingList).toHaveBeenCalledWith(
+      document.cameraRoamingList,
+    );
+    expect(mocks.engine.startCameraRoamingDrawing).toHaveBeenCalled();
+    expect(mocks.engine.cancelCameraRoamingDrawing).toHaveBeenCalled();
+    expect(mocks.engine.previewCameraRoaming).toHaveBeenCalledWith('path-1');
+    expect(mocks.engine.stopCameraRoaming).toHaveBeenCalled();
     expect(mocks.engine.selectModelPart).toHaveBeenCalledWith(
       'node-1',
       'object-1',

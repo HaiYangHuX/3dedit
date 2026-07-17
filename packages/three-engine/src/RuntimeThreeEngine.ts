@@ -1,5 +1,10 @@
 import type { RuntimeHost } from '@digital-twin/runtime-core';
-import type { SceneDocument } from '@digital-twin/scene-schema';
+import {
+  createDefaultSceneCamera,
+  type CameraRoamingPath,
+  type SceneCamera,
+  type SceneDocument,
+} from '@digital-twin/scene-schema';
 import {
   Color,
   NeutralToneMapping,
@@ -22,8 +27,10 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { AssetInstanceSystem } from './assets/AssetInstanceSystem.js';
 import { AssetLoader } from './assets/AssetLoader.js';
 import type { AssetResolver } from './assets/types.js';
+import { CameraRoamingSystem } from './camera/CameraRoamingSystem.js';
 import { SceneDocumentSystem } from './documents/SceneDocumentSystem.js';
 import { configureOrbitControls } from './interaction/OrbitControlsProfile.js';
+import { PointerLockSystem } from './interaction/PointerLockSystem.js';
 import { MaterialSystem } from './materials/MaterialSystem.js';
 import { RuntimeHostAdapter } from './runtime/RuntimeHostAdapter.js';
 import { RuntimePointerSystem } from './runtime/RuntimePointerSystem.js';
@@ -37,13 +44,28 @@ import { loadEditorEnvironment } from './settings/loadEditorEnvironment.js';
 import { WeatherSystem } from './settings/WeatherSystem.js';
 import type { LoadReport, SceneStats } from './types.js';
 
+export type RuntimeNavigationMode = 'orbit' | 'first-person' | 'roaming';
+
+export interface RuntimeNavigationState {
+  mode: RuntimeNavigationMode;
+  paths: CameraRoamingPath[];
+  activePathId: string | null;
+}
+
+export type RuntimeNavigationListener = (state: RuntimeNavigationState) => void;
+
 /** 发布与预览专用引擎，只拥有运行期渲染、交互和资源生命周期。 */
 export class RuntimeThreeEngine {
   readonly scene = new Scene();
-  readonly camera = new PerspectiveCamera(50, 1, 0.01, 10_000);
+  readonly camera = new PerspectiveCamera(45, 1, 0.05, 20_000);
   private readonly timer = new Timer();
   private renderer?: WebGLRenderer;
   private controls?: OrbitControls;
+  private pointerLockSystem?: PointerLockSystem;
+  private cameraRoamingSystem?: CameraRoamingSystem;
+  private cameraRoamingList: CameraRoamingPath[] = [];
+  private initialCamera: SceneCamera = createDefaultSceneCamera();
+  private readonly navigationListeners = new Set<RuntimeNavigationListener>();
   private composer?: EffectComposer;
   private outline?: OutlinePass;
   private output?: OutputPass;
@@ -63,7 +85,8 @@ export class RuntimeThreeEngine {
     if (this.renderer) throw new Error('RuntimeThreeEngine 已初始化');
     if (this.disposed) throw new Error('已销毁的运行时引擎不能重新初始化');
     this.scene.background = new Color('#3b3b3b');
-    this.camera.position.set(5, 3, 8);
+    this.camera.position.fromArray(this.initialCamera.position);
+    this.camera.rotation.fromArray(this.initialCamera.rotation);
 
     const renderer = new WebGLRenderer({
       antialias: true,
@@ -128,6 +151,33 @@ export class RuntimeThreeEngine {
     // 预览与发布端沿用编辑器按键映射，避免同一场景在两端手感相反。
     configureOrbitControls(controls, { enablePan: true });
     this.controls = controls;
+    controls.target.fromArray(this.initialCamera.target);
+    this.pointerLockSystem = new PointerLockSystem(
+      this.camera,
+      renderer.domElement,
+      {
+        onStateChange: (active) => {
+          controls.enabled =
+            !active &&
+            this.cameraRoamingSystem?.getState().mode !== 'previewing';
+          this.pointerSystem?.setEnabled(!active);
+          this.emitNavigationState();
+        },
+      },
+    );
+    this.cameraRoamingSystem = new CameraRoamingSystem({
+      scene: this.scene,
+      camera: this.camera,
+      canvas: renderer.domElement,
+      controls,
+      invalidate: () => undefined,
+      onStateChange: (state) => {
+        this.pointerSystem?.setEnabled(
+          state.mode === 'idle' && !this.pointerLockSystem?.isActive,
+        );
+        this.emitNavigationState();
+      },
+    });
 
     const composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(this.scene, this.camera));
@@ -163,6 +213,10 @@ export class RuntimeThreeEngine {
     if (!this.renderer || !this.outline) {
       throw new Error('RuntimeThreeEngine 尚未初始化');
     }
+    this.exitFirstPerson();
+    this.stopCameraRoaming();
+    this.applyCameraRoamingList(document.cameraRoamingList);
+    this.applyCamera(document.camera);
     this.settings?.apply(document.settings);
     // 先停止旧文档动画和补间，模型异步加载期间不能继续修改已移除的 Object3D。
     this.hostAdapter?.dispose();
@@ -208,6 +262,94 @@ export class RuntimeThreeEngine {
     );
   }
 
+  /** Runtime reset 回到当前文档定义的初始 Camera，而不是硬编码另一个发布端视角。 */
+  applyCamera(camera: SceneCamera): void {
+    this.initialCamera = structuredClone(camera);
+    this.camera.name = camera.name;
+    this.camera.position.fromArray(camera.position);
+    this.camera.rotation.fromArray(camera.rotation);
+    this.camera.scale.fromArray(camera.scale);
+    this.camera.visible = camera.visible;
+    this.camera.frustumCulled = camera.frustumCulled;
+    const shadowCamera = this.camera as PerspectiveCamera & {
+      castShadow: boolean;
+      receiveShadow: boolean;
+    };
+    shadowCamera.castShadow = camera.castShadow;
+    shadowCamera.receiveShadow = camera.receiveShadow;
+    this.camera.fov = camera.fov;
+    this.camera.near = camera.near;
+    this.camera.far = camera.far;
+    this.camera.updateProjectionMatrix();
+    this.controls?.target.fromArray(camera.target);
+  }
+
+  applyCameraRoamingList(paths: readonly CameraRoamingPath[]): void {
+    this.stopCameraRoaming();
+    this.cameraRoamingList = paths.map((path) => structuredClone(path));
+    this.emitNavigationState();
+  }
+
+  resetCamera(): void {
+    this.exitFirstPerson();
+    this.stopCameraRoaming();
+    this.applyCamera(this.initialCamera);
+    this.controls?.update();
+  }
+
+  requestFirstPerson(): boolean {
+    if (!this.pointerLockSystem) return false;
+    this.stopCameraRoaming();
+    this.pointerLockSystem.activate();
+    this.pointerSystem?.setEnabled(false);
+    this.emitNavigationState();
+    return this.pointerLockSystem.isActive;
+  }
+
+  exitFirstPerson(): void {
+    this.pointerLockSystem?.deactivate();
+    this.pointerSystem?.setEnabled(
+      this.cameraRoamingSystem?.getState().mode !== 'previewing',
+    );
+    this.emitNavigationState();
+  }
+
+  playCameraRoaming(pathId: string): boolean {
+    const path = this.cameraRoamingList.find((item) => item.id === pathId);
+    if (!path || !this.cameraRoamingSystem) return false;
+    this.exitFirstPerson();
+    const started = this.cameraRoamingSystem.preview(path);
+    this.pointerSystem?.setEnabled(!started);
+    this.emitNavigationState();
+    return started;
+  }
+
+  stopCameraRoaming(): void {
+    this.cameraRoamingSystem?.stopPreview();
+    this.pointerSystem?.setEnabled(!this.pointerLockSystem?.isActive);
+    this.emitNavigationState();
+  }
+
+  getNavigationState(): RuntimeNavigationState {
+    const roaming = this.cameraRoamingSystem?.getState();
+    return {
+      mode:
+        roaming?.mode === 'previewing'
+          ? 'roaming'
+          : this.pointerLockSystem?.isActive
+            ? 'first-person'
+            : 'orbit',
+      paths: structuredClone(this.cameraRoamingList),
+      activePathId: roaming?.activePathId ?? null,
+    };
+  }
+
+  subscribeNavigation(listener: RuntimeNavigationListener): () => void {
+    this.navigationListeners.add(listener);
+    listener(this.getNavigationState());
+    return () => this.navigationListeners.delete(listener);
+  }
+
   resize(width: number, height: number, dpr: number): void {
     if (!this.renderer || !this.composer || width <= 0 || height <= 0) return;
     const pixelRatio = Math.min(dpr, 2);
@@ -228,6 +370,8 @@ export class RuntimeThreeEngine {
     this.resizeObserver?.disconnect();
     this.hostAdapter?.dispose();
     this.pointerSystem?.dispose();
+    this.cameraRoamingSystem?.dispose();
+    this.pointerLockSystem?.dispose();
     this.controls?.dispose();
     this.documentSystem?.dispose();
     this.weatherSystem?.dispose();
@@ -241,6 +385,7 @@ export class RuntimeThreeEngine {
     const canvas = this.renderer?.domElement;
     this.renderer?.dispose();
     canvas?.remove();
+    this.navigationListeners.clear();
   }
 
   private readonly loop = (timestamp?: number): void => {
@@ -249,7 +394,16 @@ export class RuntimeThreeEngine {
     this.timer.update(timestamp);
     const delta = this.timer.getDelta();
     const elapsed = this.timer.getElapsed();
-    this.controls?.update(delta);
+    const roamingChanged = this.cameraRoamingSystem?.update(delta) ?? false;
+    const roamingActive =
+      this.cameraRoamingSystem?.getState().mode === 'previewing';
+    if (!roamingActive && !roamingChanged) {
+      if (this.pointerLockSystem?.isLocked) {
+        this.pointerLockSystem.update(delta);
+      } else {
+        this.controls?.update(delta);
+      }
+    }
     this.hostAdapter?.update(delta);
     this.groundSystem?.update(elapsed);
     this.weatherSystem?.update(delta, elapsed);
@@ -275,14 +429,29 @@ export class RuntimeThreeEngine {
         orbitControls: this.controls,
       });
     }
+    this.pointerSystem.setEnabled(
+      !this.pointerLockSystem?.isActive &&
+        this.cameraRoamingSystem?.getState().mode !== 'previewing',
+    );
     this.hostAdapter?.dispose();
     this.hostAdapter = new RuntimeHostAdapter({
       getObject: (nodeId) => this.documentSystem?.getObject(nodeId),
       camera: this.camera,
       controls: this.controls,
       outline: this.outline,
+      beforeCameraChange: () => {
+        // CameraMove/focus-node 与漫游、第一人称都写同一个 Camera，动作开始前必须先完成模式仲裁。
+        this.exitFirstPerson();
+        this.stopCameraRoaming();
+        this.controls!.enabled = true;
+      },
       subscribeNodeEvent: (nodeId, event, listener) =>
         this.pointerSystem!.subscribe(nodeId, event, listener),
     });
+  }
+
+  private emitNavigationState(): void {
+    const state = this.getNavigationState();
+    for (const listener of this.navigationListeners) listener(state);
   }
 }

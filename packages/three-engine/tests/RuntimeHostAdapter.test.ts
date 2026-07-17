@@ -83,4 +83,28 @@ describe('RuntimeHostAdapter', () => {
     });
     adapter.dispose();
   });
+
+  it('聚焦节点写入 Camera 前先通知宿主释放其他导航模式', async () => {
+    const object = new Group();
+    object.add(new Mesh(new BoxGeometry(), new MeshStandardMaterial()));
+    const camera = new PerspectiveCamera(50, 1, 0.1, 100);
+    camera.position.set(0, 0, 5);
+    const navigationOrder: string[] = [];
+    const adapter = new RuntimeHostAdapter({
+      getObject: () => object,
+      camera,
+      controls: {
+        target: new Vector3(),
+        update: () => navigationOrder.push('camera-change'),
+      },
+      outline: { selectedObjects: [] },
+      subscribeNodeEvent: () => () => undefined,
+      beforeCameraChange: () => navigationOrder.push('release-navigation'),
+    });
+
+    await adapter.focusNode('node');
+
+    expect(navigationOrder).toEqual(['release-navigation', 'camera-change']);
+    adapter.dispose();
+  });
 });

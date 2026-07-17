@@ -306,15 +306,27 @@ button {
   text-align: center;
 }
 
-.scene-content-panel,
 .scene-settings-inspector {
   min-height: 0;
   overflow: auto;
 }
 
+/* 场景树和下方检查器拥有独立滚动容器，避免滚动属性时把树一起带走。 */
+.scene-content-panel {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
 /* Element Plus 内层选择器需要作用域覆盖，其顺序不遵循普通组件特异性升序。 */
 /* stylelint-disable no-duplicate-selectors, no-descending-specificity */
 .scene-tree {
+  display: flex;
+  flex: 0 0 370px;
+  flex-direction: column;
+  min-height: 0;
   padding: 0;
   color: #a3b8cc;
   border-bottom: 1px solid #263047;
@@ -384,9 +396,12 @@ button {
   gap: 6px;
   align-items: center;
   padding: 6px 16px;
+  width: 100%;
   color: #e2e8f0;
-  cursor: default;
+  text-align: left;
+  cursor: pointer;
   background: rgb(15 23 42 / 50%);
+  border: 0;
   border-left: 2px solid transparent;
   transition: all 0.25s ease;
 }
@@ -394,6 +409,12 @@ button {
 .scene-camera:hover {
   background: rgb(56 189 248 / 4%);
   border-left-color: rgb(56 189 248 / 30%);
+}
+
+.scene-camera.is-selected {
+  color: #fff;
+  background: rgb(56 189 248 / 8%);
+  border-left-color: #38bdf8;
 }
 
 .scene-camera strong {
@@ -408,7 +429,8 @@ button {
 }
 
 .scene-tree-scroll {
-  height: 370px;
+  flex: 1 1 auto;
+  min-height: 0;
   background: rgb(15 23 42 / 50%);
   border-bottom: 1px solid rgb(56 189 248 / 10%);
 }
@@ -1290,14 +1312,38 @@ button {
 
 .editor-asset-toolbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   gap: 4px;
 }
 
-.editor-asset-toolbar a {
-  display: grid;
-  place-items: center;
-  font-size: 10px;
+.editor-model-search .el-input__wrapper {
+  height: 26px;
+  min-height: 26px;
+  padding: 0 8px;
+  background: rgb(15 23 42 / 80%);
+  border: 1px solid rgb(56 189 248 / 20%);
+  border-radius: 4px;
+  box-shadow: none;
+  transition: border-color 0.2s ease;
+}
+
+.editor-model-search .el-input__wrapper:hover {
+  border-color: rgb(56 189 248 / 40%);
+}
+
+.editor-model-search .el-input__wrapper.is-focus {
+  border-color: #38bdf8;
+}
+
+.editor-model-search .el-input__inner {
+  height: 24px;
+  color: #fff;
+  font-size: 11px;
+}
+
+.editor-model-search .el-input__inner::placeholder {
+  color: #7aa2f7;
+  opacity: 0.6;
 }
 
 .editor-asset-grid,
@@ -1373,10 +1419,228 @@ button {
   padding: 8px 10px 18px;
 }
 
+.scene-content-panel
+  > :where(.node-inspector, .camera-inspector, .empty-panel) {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* 原生滚动区域与 Element Plus 树统一为源站的 3px 半透明青色轨道。 */
+:where(
+  .asset-palette-scroll,
+  .node-inspector,
+  .camera-inspector .el-tabs__content,
+  .scene-settings-inspector,
+  .runtime-tab-panel
+) {
+  scrollbar-color: rgb(56 189 248 / 20%) transparent;
+  scrollbar-width: thin;
+}
+
+:where(
+  .asset-palette-scroll,
+  .node-inspector,
+  .camera-inspector .el-tabs__content,
+  .scene-settings-inspector,
+  .runtime-tab-panel
+)::-webkit-scrollbar {
+  width: 3px;
+  height: 3px;
+}
+
+:where(
+  .asset-palette-scroll,
+  .node-inspector,
+  .camera-inspector .el-tabs__content,
+  .scene-settings-inspector,
+  .runtime-tab-panel
+)::-webkit-scrollbar-thumb {
+  background: rgb(56 189 248 / 20%);
+  border-radius: 999px;
+}
+
+:where(
+    .asset-palette-scroll,
+    .node-inspector,
+    .camera-inspector .el-tabs__content,
+    .scene-settings-inspector,
+    .runtime-tab-panel
+  )::-webkit-scrollbar-thumb:hover {
+  background: rgb(56 189 248 / 40%);
+}
+
 .inspector-field {
   grid-template-columns: 78px minmax(0, 1fr);
   gap: 6px;
   margin-bottom: 6px;
+}
+
+.camera-inspector {
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+.camera-inspector-tabs {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.camera-inspector-tabs > .el-tabs__header {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0 10px;
+  background: rgb(7 10 19 / 86%);
+}
+
+.camera-inspector-tabs > .el-tabs__content {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 8px 10px 18px;
+  overflow: auto;
+}
+
+.camera-inspector-tabs .el-tabs__item {
+  height: 32px;
+  color: #75859b;
+  font-size: 11px;
+}
+
+.camera-inspector-tabs .el-tabs__item.is-active,
+.camera-inspector-tabs .el-tabs__item:hover {
+  color: #38bdf8;
+}
+
+.camera-vector-group {
+  margin-top: 8px;
+}
+
+.camera-checks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.camera-projection-fields {
+  padding-top: 8px;
+  border-top: 1px solid #1d2738;
+}
+
+.camera-roaming-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.camera-roaming-list {
+  display: grid;
+  gap: 6px;
+}
+
+.camera-roaming-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 8px;
+  background: rgb(15 23 42 / 70%);
+  border: 1px solid rgb(56 189 248 / 15%);
+  border-radius: 4px;
+}
+
+.camera-roaming-item > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.camera-roaming-item strong {
+  overflow: hidden;
+  color: #dbeafe;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.camera-roaming-item span,
+.camera-roaming-empty,
+.camera-roaming-hint span {
+  color: #64748b;
+  font-size: 10px;
+}
+
+.camera-roaming-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.camera-roaming-actions button,
+.camera-roaming-add,
+.camera-roaming-hint button {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  justify-content: center;
+  min-height: 26px;
+  padding: 4px 7px;
+  color: #7dd3fc;
+  background: rgb(56 189 248 / 8%);
+  border: 1px solid rgb(56 189 248 / 24%);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.camera-roaming-actions button {
+  width: 26px;
+  padding: 4px;
+}
+
+.camera-roaming-actions svg,
+.camera-roaming-add svg {
+  width: 13px;
+  height: 13px;
+}
+
+.camera-roaming-add:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.camera-roaming-hint {
+  display: grid;
+  gap: 5px;
+  padding: 8px;
+  color: #fbbf24;
+  background: rgb(245 158 11 / 8%);
+  border: 1px solid rgb(245 158 11 / 28%);
+  border-radius: 4px;
+}
+
+.camera-roaming-viewport-status {
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  z-index: 5;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 10px;
+  color: #f8fafc;
+  font-size: 11px;
+  background: rgb(11 15 25 / 86%);
+  border: 1px solid rgb(56 189 248 / 25%);
+  border-radius: 5px;
+  transform: translateX(-50%);
+  backdrop-filter: blur(8px);
+}
+
+.camera-roaming-viewport-status button {
+  padding: 2px 6px;
+  color: #fca5a5;
+  background: transparent;
+  border: 1px solid rgb(248 113 113 / 35%);
+  border-radius: 3px;
+  cursor: pointer;
 }
 
 .viewport-shell {
@@ -1544,101 +1808,9 @@ button {
   color: #d5e2f1;
 }
 
-.viewport-gizmo {
-  position: absolute;
-  right: 10px;
-  bottom: 10px;
+/* three-viewport-gizmo 会在 canvas 容器内创建真实可交互的 WebGL 视角控件。 */
+.editor-viewport-gizmo {
   z-index: 4;
-  width: 92px;
-  height: 92px;
-  color: #94a3b8;
-  background: radial-gradient(circle, rgb(30 41 59 / 44%), transparent 68%);
-  user-select: none;
-}
-
-.viewport-gizmo-scene {
-  position: absolute;
-  inset: 19px;
-  perspective: 150px;
-}
-
-.viewport-gizmo-cube {
-  position: relative;
-  width: 54px;
-  height: 54px;
-  transform-style: preserve-3d;
-  transition: transform 80ms linear;
-}
-
-.viewport-gizmo-face {
-  position: absolute;
-  inset: 6px;
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  padding: 0;
-  color: #b9c8d9;
-  font-size: 10px;
-  background: rgb(20 32 50 / 88%);
-  border: 1px solid #4a5d76;
-  cursor: pointer;
-  backface-visibility: visible;
-}
-
-.viewport-gizmo-face:hover {
-  color: #fff;
-  background: #075985;
-  border-color: #38bdf8;
-}
-
-.viewport-gizmo-face--front {
-  transform: translateZ(21px);
-}
-
-.viewport-gizmo-face--back {
-  transform: rotateY(180deg) translateZ(21px);
-}
-
-.viewport-gizmo-face--left {
-  transform: rotateY(-90deg) translateZ(21px);
-}
-
-.viewport-gizmo-face--right {
-  transform: rotateY(90deg) translateZ(21px);
-}
-
-.viewport-gizmo-face--top {
-  transform: rotateX(90deg) translateZ(21px);
-}
-
-.viewport-gizmo-face--bottom {
-  transform: rotateX(-90deg) translateZ(21px);
-}
-
-.gizmo-axis {
-  position: absolute;
-  font:
-    9px ui-monospace,
-    monospace;
-}
-
-.gizmo-axis--x {
-  right: 2px;
-  bottom: 31px;
-  color: #fb7185;
-}
-
-.gizmo-axis--y {
-  top: 1px;
-  left: 42px;
-  color: #86efac;
-}
-
-.gizmo-axis--z {
-  bottom: 3px;
-  left: 10px;
-  color: #60a5fa;
 }
 
 .material-inspector {

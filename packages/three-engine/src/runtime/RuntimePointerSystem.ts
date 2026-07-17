@@ -27,6 +27,7 @@ export class RuntimePointerSystem {
   private pointerDown?: { x: number; y: number };
   private orbitChanged = false;
   private hoveredNodeId?: string;
+  private enabled = true;
 
   constructor(private readonly options: RuntimePointerSystemOptions) {
     options.canvas.addEventListener('pointerdown', this.onPointerDown);
@@ -54,7 +55,19 @@ export class RuntimePointerSystem {
     };
   }
 
+  /** 第一人称或漫游独占 Camera 时，暂停业务 hover/click，避免中心准星误触。 */
+  setEnabled(enabled: boolean): void {
+    if (this.enabled === enabled) return;
+    this.enabled = enabled;
+    this.pointerDown = undefined;
+    if (!enabled) {
+      this.dispatch('pointer-leave', this.hoveredNodeId);
+      this.hoveredNodeId = undefined;
+    }
+  }
+
   pickAt(clientX: number, clientY: number): string | undefined {
+    if (!this.enabled) return undefined;
     const rect = this.options.canvas.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return undefined;
     this.pointer.set(
@@ -92,27 +105,29 @@ export class RuntimePointerSystem {
   }
 
   private readonly onPointerDown = (event: PointerEvent): void => {
-    if (event.button !== 0) return;
+    if (!this.enabled || event.button !== 0) return;
     this.pointerDown = { x: event.clientX, y: event.clientY };
     this.orbitChanged = false;
   };
 
   private readonly onPointerUp = (event: PointerEvent): void => {
+    if (!this.enabled) return;
     const start = this.pointerDown;
     this.pointerDown = undefined;
     if (!start || event.button !== 0 || this.orbitChanged) return;
-    if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 4) {
+    if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 5) {
       return;
     }
     this.dispatch('click', this.pickAt(event.clientX, event.clientY));
   };
 
   private readonly onDoubleClick = (event: MouseEvent): void => {
+    if (!this.enabled) return;
     this.dispatch('double-click', this.pickAt(event.clientX, event.clientY));
   };
 
   private readonly onPointerMove = (event: PointerEvent): void => {
-    if (this.pointerDown) return;
+    if (!this.enabled || this.pointerDown) return;
     const next = this.pickAt(event.clientX, event.clientY);
     if (next === this.hoveredNodeId) return;
     this.dispatch('pointer-leave', this.hoveredNodeId);

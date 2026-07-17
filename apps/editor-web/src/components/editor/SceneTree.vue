@@ -57,16 +57,19 @@ const props = withDefaults(
     modelStructures?: ModelStructureMap;
     modelAssetFormats?: Partial<Record<string, ModelAssetFormat>>;
     selectedModelPart?: { nodeId: string; objectId: string } | null;
+    cameraSelected?: boolean;
     changeVersion?: number;
   }>(),
   {
     modelStructures: () => ({}),
     modelAssetFormats: () => ({}),
     selectedModelPart: null,
+    cameraSelected: false,
     changeVersion: 0,
   },
 );
 const emit = defineEmits<{
+  'select-camera': [];
   select: [selection: SelectionState];
   'select-model-part': [
     selection: {
@@ -295,13 +298,19 @@ function sceneNodeIcon(item: TreeItem): Component {
       />
     </div>
 
-    <div class="scene-camera" data-testid="scene-camera">
+    <button
+      type="button"
+      class="scene-camera"
+      :class="{ 'is-selected': cameraSelected }"
+      data-testid="scene-camera"
+      @click="emit('select-camera')"
+    >
       <CameraFilled
         class="scene-tree-element-icon scene-camera-icon"
         aria-hidden="true"
       />
       <strong>Camera</strong>
-    </div>
+    </button>
 
     <ElScrollbar class="scene-tree-scroll" height="370px">
       <ElTree
@@ -314,7 +323,7 @@ function sceneNodeIcon(item: TreeItem): Component {
         :current-node-key="
           selectedModelPart
             ? `object:${selectedModelPart.nodeId}:${selectedModelPart.objectId}`
-            : selection.primaryId
+            : !cameraSelected && selection.primaryId
               ? `node:${selection.primaryId}`
               : undefined
         "

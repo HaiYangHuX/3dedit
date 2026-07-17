@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   EditorEngine,
+  type CameraRoamingState,
   type CameraOrientation,
   type CameraView,
   type ModelStructureMap,
@@ -9,7 +10,12 @@ import {
   type SelectionState,
   type TransformCommit,
 } from '@digital-twin/three-engine';
-import type { SceneDocument, SceneNode } from '@digital-twin/scene-schema';
+import type {
+  CameraRoamingPath,
+  SceneCamera,
+  SceneDocument,
+  SceneNode,
+} from '@digital-twin/scene-schema';
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
   readScenePaletteDrag,
@@ -30,6 +36,9 @@ const emit = defineEmits<{
   'scene-drop': [payload: ScenePaletteDropPayload];
   'stats-change': [stats: SceneStats];
   'camera-change': [orientation: CameraOrientation];
+  'camera-state-change': [camera: SceneCamera];
+  'camera-roaming-state-change': [state: CameraRoamingState];
+  'camera-roaming-path-created': [pathPoints: Array<[number, number, number]>];
   'pointer-lock-change': [active: boolean];
   'measure-change': [active: boolean];
   'render-stats-change': [stats: RenderStats];
@@ -77,6 +86,30 @@ function handleCameraChange(
   emit('camera-change', { quaternion: [...event.quaternion] });
 }
 
+function handleCameraStateChange(
+  event: { camera: SceneCamera } & { type: 'camerastatechange' },
+): void {
+  emit('camera-state-change', structuredClone(event.camera));
+}
+
+function handleCameraRoamingStateChange(
+  event: CameraRoamingState & { type: 'cameraroamingstatechange' },
+): void {
+  emit('camera-roaming-state-change', {
+    mode: event.mode,
+    pointCount: event.pointCount,
+    activePathId: event.activePathId,
+  });
+}
+
+function handleCameraRoamingPathCreated(
+  event: {
+    pathPoints: Array<[number, number, number]>;
+  } & { type: 'cameraroamingpathcreated' },
+): void {
+  emit('camera-roaming-path-created', structuredClone(event.pathPoints));
+}
+
 function handlePointerLockChange(
   event: { active: boolean } & { type: 'pointerlockchange' },
 ): void {
@@ -102,6 +135,15 @@ engine.addEventListener('selectionchange', handleSelectionChange);
 engine.addEventListener('transformend', handleTransformEnd);
 engine.addEventListener('statschange', handleStatsChange);
 engine.addEventListener('camerachange', handleCameraChange);
+engine.addEventListener('camerastatechange', handleCameraStateChange);
+engine.addEventListener(
+  'cameraroamingstatechange',
+  handleCameraRoamingStateChange,
+);
+engine.addEventListener(
+  'cameraroamingpathcreated',
+  handleCameraRoamingPathCreated,
+);
 engine.addEventListener('pointerlockchange', handlePointerLockChange);
 engine.addEventListener('measurechange', handleMeasureChange);
 engine.addEventListener('renderstatschange', handleRenderStatsChange);
@@ -149,6 +191,30 @@ function applySceneSettings(settings: SceneDocument['settings']): void {
     errorMessage.value =
       error instanceof Error ? error.message : '场景环境加载失败';
   });
+}
+
+function applyCamera(camera: SceneCamera): void {
+  engine.applyCamera(camera);
+}
+
+function applyCameraRoamingList(paths: readonly CameraRoamingPath[]): void {
+  engine.applyCameraRoamingList(paths);
+}
+
+function startCameraRoamingDrawing(): boolean {
+  return engine.startCameraRoamingDrawing();
+}
+
+function cancelCameraRoamingDrawing(): void {
+  engine.cancelCameraRoamingDrawing();
+}
+
+function previewCameraRoaming(pathId: string): boolean {
+  return engine.previewCameraRoaming(pathId);
+}
+
+function stopCameraRoaming(): void {
+  engine.stopCameraRoaming();
 }
 
 function setSelection(ids: Iterable<string>, primaryId?: string | null): void {
@@ -254,6 +320,15 @@ onBeforeUnmount(() => {
   engine.removeEventListener('transformend', handleTransformEnd);
   engine.removeEventListener('statschange', handleStatsChange);
   engine.removeEventListener('camerachange', handleCameraChange);
+  engine.removeEventListener('camerastatechange', handleCameraStateChange);
+  engine.removeEventListener(
+    'cameraroamingstatechange',
+    handleCameraRoamingStateChange,
+  );
+  engine.removeEventListener(
+    'cameraroamingpathcreated',
+    handleCameraRoamingPathCreated,
+  );
   engine.removeEventListener('pointerlockchange', handlePointerLockChange);
   engine.removeEventListener('measurechange', handleMeasureChange);
   engine.removeEventListener('renderstatschange', handleRenderStatsChange);
@@ -266,6 +341,12 @@ defineExpose({
   applyNodeRemoved,
   applyNodeUpdated,
   applySceneSettings,
+  applyCamera,
+  applyCameraRoamingList,
+  startCameraRoamingDrawing,
+  cancelCameraRoamingDrawing,
+  previewCameraRoaming,
+  stopCameraRoaming,
   setSelection,
   selectModelPart,
   setTransformMode,
