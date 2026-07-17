@@ -45,8 +45,13 @@ describe('AssetLibraryPanel', () => {
     });
 
     expect(setData).toHaveBeenCalledWith(
-      'application/x-digital-twin-asset',
-      expect.stringContaining('asset-1'),
+      'application/x-digital-twin-scene-palette',
+      JSON.stringify({
+        kind: 'asset',
+        assetId: 'asset-1',
+        name: '水泵',
+        format: 'glb',
+      }),
     );
   });
 });

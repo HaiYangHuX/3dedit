@@ -1,15 +1,32 @@
 <script setup lang="ts">
 import type { Asset } from '@digital-twin/api-contracts';
+import type { ModelAssetFormat } from '@digital-twin/three-engine';
 import { ElInput } from 'element-plus';
 import { storeToRefs } from 'pinia';
 import { computed, onMounted, ref } from 'vue';
 import { RouterLink } from 'vue-router';
+import { writeScenePaletteDrag } from '../editor/scenePaletteDrag';
 import { useAssetStore } from '../stores/asset';
 
 const emit = defineEmits<{ activate: [asset: Asset] }>();
 const store = useAssetStore();
 const { assets, loading } = storeToRefs(store);
 const keyword = ref('');
+const modelFormats = new Set<Asset['format']>([
+  'glb',
+  'gltf',
+  'fbx',
+  'obj',
+  'stl',
+  'usdz',
+]);
+
+function isModelAssetFormat(
+  format: Asset['format'],
+): format is ModelAssetFormat {
+  return modelFormats.has(format);
+}
+
 const models = computed(() => {
   const normalized = keyword.value.trim().toLocaleLowerCase('zh-CN');
   return assets.value.filter(
@@ -30,18 +47,15 @@ onMounted(() => {
   }
 });
 
-/** 写入平台专用 MIME，视口 drop 处理器无需解析任意外部拖放数据。 */
+/** 模型卡与几何体、灯光共用同一判别联合拖放协议。 */
 function beginDrag(event: DragEvent, asset: Asset): void {
-  if (!event.dataTransfer) return;
-  event.dataTransfer.effectAllowed = 'copy';
-  event.dataTransfer.setData(
-    'application/x-digital-twin-asset',
-    JSON.stringify({
-      assetId: asset.id,
-      name: asset.name,
-      format: asset.format,
-    }),
-  );
+  if (!event.dataTransfer || !isModelAssetFormat(asset.format)) return;
+  writeScenePaletteDrag(event.dataTransfer, {
+    kind: 'asset',
+    assetId: asset.id,
+    name: asset.name,
+    format: asset.format,
+  });
 }
 </script>
 

@@ -3,7 +3,6 @@ import {
   EditorEngine,
   type CameraOrientation,
   type CameraView,
-  type ModelAssetFormat,
   type RenderStats,
   type SceneStats,
   type SelectionState,
@@ -11,27 +10,11 @@ import {
 } from '@digital-twin/three-engine';
 import type { SceneDocument, SceneNode } from '@digital-twin/scene-schema';
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import {
+  readScenePaletteDrag,
+  type ScenePaletteDropPayload,
+} from '../editor/scenePaletteDrag';
 import { editorAssetResolver } from '../three/editorAssetResolver';
-
-const ASSET_MIME = 'application/x-digital-twin-asset';
-const supportedFormats = new Set<ModelAssetFormat>([
-  'glb',
-  'gltf',
-  'fbx',
-  'obj',
-  'stl',
-  'usdz',
-]);
-
-interface DraggedAsset {
-  assetId: string;
-  name: string;
-  format: ModelAssetFormat;
-}
-
-interface AssetDropPayload extends DraggedAsset {
-  position: [number, number, number];
-}
 
 const props = withDefaults(
   defineProps<{
@@ -43,7 +26,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   select: [selection: SelectionState];
   'transform-commit': [commit: TransformCommit];
-  'asset-drop': [payload: AssetDropPayload];
+  'scene-drop': [payload: ScenePaletteDropPayload];
   'stats-change': [stats: SceneStats];
   'camera-change': [orientation: CameraOrientation];
   'render-stats-change': [stats: RenderStats];
@@ -170,36 +153,18 @@ function captureScreenshot(): Promise<Blob> {
   return engine.captureScreenshot();
 }
 
-function parseDraggedAsset(event: DragEvent): DraggedAsset | undefined {
-  const raw = event.dataTransfer?.getData(ASSET_MIME);
-  if (!raw) return undefined;
-  try {
-    const value = JSON.parse(raw) as Partial<DraggedAsset>;
-    if (
-      typeof value.assetId !== 'string' ||
-      typeof value.name !== 'string' ||
-      typeof value.format !== 'string' ||
-      !supportedFormats.has(value.format as ModelAssetFormat)
-    ) {
-      return undefined;
-    }
-    return value as DraggedAsset;
-  } catch {
-    return undefined;
-  }
-}
-
-function allowAssetDrop(event: DragEvent): void {
+function allowSceneDrop(event: DragEvent): void {
   event.preventDefault();
   if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
 }
 
-function dropAsset(event: DragEvent): void {
+function dropSceneItem(event: DragEvent): void {
   event.preventDefault();
-  const asset = parseDraggedAsset(event);
-  if (!asset) return;
-  emit('asset-drop', {
-    ...asset,
+  const payload = readScenePaletteDrag(event.dataTransfer);
+  if (!payload) return;
+  // Engine 使用实际 WebGL canvas 矩形计算 NDC，不能用包含左右面板的窗口尺寸。
+  emit('scene-drop', {
+    ...payload,
     position: engine.getDropPosition(
       event.clientX,
       event.clientY,
@@ -263,8 +228,8 @@ defineExpose({
     ref="container"
     class="editor-canvas"
     data-testid="editor-canvas"
-    @dragover="allowAssetDrop"
-    @drop="dropAsset"
+    @dragover="allowSceneDrop"
+    @drop="dropSceneItem"
   >
     <div v-if="errorMessage" class="canvas-error">{{ errorMessage }}</div>
   </div>

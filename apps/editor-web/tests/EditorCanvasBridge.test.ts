@@ -123,6 +123,28 @@ describe('EditorCanvas bridge', () => {
       dataTransfer: {
         getData: vi.fn().mockReturnValue(
           JSON.stringify({
+            kind: 'geometry',
+            primitive: 'box',
+          }),
+        ),
+      },
+    });
+    expect(mocks.engine.getDropPosition).toHaveBeenCalledWith(200, 100, 0.5);
+    expect(wrapper.emitted('scene-drop')?.at(-1)).toEqual([
+      {
+        kind: 'geometry',
+        primitive: 'box',
+        position: [1, 0, 2],
+      },
+    ]);
+
+    await wrapper.get('[data-testid="editor-canvas"]').trigger('drop', {
+      clientX: 240,
+      clientY: 120,
+      dataTransfer: {
+        getData: vi.fn().mockReturnValue(
+          JSON.stringify({
+            kind: 'asset',
             assetId: 'asset-1',
             name: '水泵',
             format: 'glb',
@@ -130,8 +152,9 @@ describe('EditorCanvas bridge', () => {
         ),
       },
     });
-    expect(wrapper.emitted('asset-drop')?.at(-1)).toEqual([
+    expect(wrapper.emitted('scene-drop')?.at(-1)).toEqual([
       {
+        kind: 'asset',
         assetId: 'asset-1',
         name: '水泵',
         format: 'glb',

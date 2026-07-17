@@ -29,6 +29,11 @@ import {
   useEditorCommands,
   type EditorCanvasBridge,
 } from '../editor/useEditorCommands';
+import {
+  writeScenePaletteDrag,
+  type ScenePaletteDragPayload,
+  type ScenePaletteDropPayload,
+} from '../editor/scenePaletteDrag';
 import { useDocumentStore, type SaveState } from '../stores/document';
 import { useAssetStore } from '../stores/asset';
 import { useSelectionStore } from '../stores/selection';
@@ -156,16 +161,40 @@ function activateAsset(asset: Asset): void {
     .catch((reason) => showEditorError(reason, '添加模型失败'));
 }
 
-interface AssetDropPayload {
-  assetId: string;
-  name: string;
-  position: [number, number, number];
+function beginPaletteDrag(
+  event: DragEvent,
+  payload: ScenePaletteDragPayload,
+): void {
+  if (event.dataTransfer) writeScenePaletteDrag(event.dataTransfer, payload);
 }
 
-function dropAsset(payload: AssetDropPayload): void {
-  void commands
-    .addAssetNode({ id: payload.assetId, name: payload.name }, payload.position)
-    .catch((reason) => showEditorError(reason, '添加模型失败'));
+function dropSceneItem(payload: ScenePaletteDropPayload): void {
+  if (payload.kind === 'asset') {
+    void commands
+      .addAssetNode(
+        { id: payload.assetId, name: payload.name },
+        payload.position,
+      )
+      .catch((reason) => showEditorError(reason, '添加模型失败'));
+    return;
+  }
+
+  // 原站把普通拖放落点抬到 y=0.5；模型保留现有 y=0 自动落地语义。
+  const position: [number, number, number] = [
+    payload.position[0],
+    Math.max(0.5, payload.position[1]),
+    payload.position[2],
+  ];
+  const operation =
+    payload.kind === 'geometry'
+      ? commands.addGeometry(payload.primitive, position)
+      : commands.addLight(payload.lightType, position);
+  void operation.catch((reason) =>
+    showEditorError(
+      reason,
+      payload.kind === 'geometry' ? '添加几何体失败' : '添加灯光失败',
+    ),
+  );
 }
 
 function commitTransform(commit: TransformCommit): void {
@@ -338,7 +367,15 @@ async function copyText(value: string): Promise<void> {
           ] as const"
           :key="item[0]"
           type="button"
+          draggable="true"
+          :title="`${item[1]}（点击添加，或拖入视口）`"
           :data-testid="`add-geometry-${item[0]}`"
+          @dragstart="
+            beginPaletteDrag($event, {
+              kind: 'geometry',
+              primitive: item[0],
+            })
+          "
           @click="runCommand(commands.addGeometry(item[0]))"
         >
           <span class="element-palette-icon">{{ item[1].slice(0, 1) }}</span>
@@ -356,7 +393,15 @@ async function copyText(value: string): Promise<void> {
           ] as const"
           :key="item[0]"
           type="button"
+          draggable="true"
+          :title="`${item[1]}（点击添加，或拖入视口）`"
           :data-testid="`add-light-${item[0]}`"
+          @dragstart="
+            beginPaletteDrag($event, {
+              kind: 'light',
+              lightType: item[0],
+            })
+          "
           @click="runCommand(commands.addLight(item[0]))"
         >
           <span class="element-palette-icon">✦</span>
@@ -397,7 +442,7 @@ async function copyText(value: string): Promise<void> {
         :document="document"
         @select="changeSelection"
         @transform-commit="commitTransform"
-        @asset-drop="dropAsset"
+        @scene-drop="dropSceneItem"
         @stats-change="changeStats"
         @camera-change="changeCameraOrientation"
         @render-stats-change="changeRenderStats"

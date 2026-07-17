@@ -582,7 +582,11 @@ button {
   background: #0d1527;
   border: 1px solid #263047;
   border-radius: 5px;
-  cursor: pointer;
+  cursor: grab;
+}
+
+:where(.element-palette button:active) {
+  cursor: grabbing;
 }
 
 :where(.element-palette button:hover) {
