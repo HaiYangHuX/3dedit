@@ -9,17 +9,15 @@ import {
   Sphere,
   SRGBColorSpace,
   Timer,
-  Vector2,
   Vector3,
   WebGLRenderer,
   type Object3D,
-  type WebGLRenderTarget,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import type { TransformControlsMode } from 'three/addons/controls/TransformControls.js';
+import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { OutlinePass } from 'three/addons/postprocessing/OutlinePass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import type {
@@ -35,6 +33,7 @@ import {
   SelectionSystem,
   type SelectionState,
 } from './interaction/SelectionSystem.js';
+import { SelectionBoxSystem } from './interaction/SelectionBoxSystem.js';
 import {
   TransformSystem,
   type TransformCommit,
@@ -47,8 +46,19 @@ import {
 import { ViewportDropSystem } from './interaction/ViewportDropSystem.js';
 import { MaterialSystem } from './materials/MaterialSystem.js';
 import { ResourceTracker } from './ResourceTracker';
-import { SceneSettingsSystem } from './settings/SceneSettingsSystem.js';
+import {
+  SceneSettingsSystem,
+  type EnvironmentMapTarget,
+} from './settings/SceneSettingsSystem.js';
+import { loadEditorEnvironment } from './settings/loadEditorEnvironment.js';
 import type { LoadReport, RenderStats, SceneStats } from './types.js';
+
+export const DEFAULT_EDITOR_ENVIRONMENT_URL = '/hdr/venice_sunset_1k.hdr';
+
+export interface EditorEngineOptions {
+  /** 传入 null 可跳过本地 HDR，主要用于宿主自定义或故障诊断。 */
+  defaultEnvironmentUrl?: string | null;
+}
 
 interface ScreenshotRequest {
   resolve(blob: Blob): void;
@@ -77,15 +87,15 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
   private renderer?: WebGLRenderer;
   private controls?: OrbitControls;
   private composer?: EffectComposer;
-  private outline?: OutlinePass;
   private output?: OutputPass;
   private documentSystem?: SceneDocumentSystem;
   private selectionSystem?: SelectionSystem;
+  private selectionHighlight?: SelectionBoxSystem;
   private transformSystem?: TransformSystem;
   private dropSystem?: ViewportDropSystem;
   private cameraSystem?: ViewportCameraSystem;
   private settingsSystem?: SceneSettingsSystem;
-  private fallbackEnvironmentTarget?: WebGLRenderTarget;
+  private fallbackEnvironmentTarget?: EnvironmentMapTarget;
   private assetResolver?: AssetResolver;
   private resizeObserver?: ResizeObserver;
   private frameId?: number;
@@ -95,6 +105,10 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
   private activeScreenshot?: ScreenshotRequest[];
   private invalidated = true;
   private disposed = false;
+
+  constructor(private readonly options: EditorEngineOptions = {}) {
+    super();
+  }
 
   async initialize(container: HTMLElement): Promise<void> {
     if (this.renderer) throw new Error('EditorEngine 已初始化');
@@ -114,18 +128,53 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     container.append(renderer.domElement);
     this.renderer = renderer;
 
-    // RoomEnvironment 是 r183 官方的进程内 IBL，避免依赖或复制商业站点的 HDR 文件。
     const environmentGenerator = new PMREMGenerator(renderer);
-    const roomEnvironment = new RoomEnvironment();
-    try {
-      this.fallbackEnvironmentTarget =
-        environmentGenerator.fromScene(roomEnvironment);
-    } finally {
-      // PMREM 已生成独立纹理，源环境的几何体和材质可立即释放。
-      roomEnvironment.dispose();
+    environmentGenerator.compileEquirectangularShader();
+    const environmentUrl =
+      this.options.defaultEnvironmentUrl === undefined
+        ? DEFAULT_EDITOR_ENVIRONMENT_URL
+        : this.options.defaultEnvironmentUrl;
+    let fallbackEnvironmentTarget: EnvironmentMapTarget | undefined;
+    let defaultEnvironmentError: unknown;
+    if (environmentUrl) {
+      try {
+        fallbackEnvironmentTarget = await loadEditorEnvironment(
+          environmentUrl,
+          {
+            loader: new HDRLoader(),
+            generator: environmentGenerator,
+            isStale: () => this.disposed,
+          },
+        );
+      } catch (error) {
+        defaultEnvironmentError = error;
+      }
     }
+    if (this.disposed) {
+      fallbackEnvironmentTarget?.dispose();
+      environmentGenerator.dispose();
+      return;
+    }
+    if (!fallbackEnvironmentTarget) {
+      // 本地静态资源部署异常时才使用白色房间兜底，正常主路径必须保持 Venice HDR。
+      const roomEnvironment = new RoomEnvironment();
+      try {
+        fallbackEnvironmentTarget =
+          environmentGenerator.fromScene(roomEnvironment);
+      } finally {
+        roomEnvironment.dispose();
+      }
+      if (defaultEnvironmentError) {
+        console.warn(
+          '默认 Venice HDR 加载失败，编辑器已降级使用 RoomEnvironment',
+          defaultEnvironmentError,
+        );
+      }
+    }
+    this.fallbackEnvironmentTarget = fallbackEnvironmentTarget;
+    this.scene.environmentRotation.set(0, Math.PI / 2, 0);
     this.settingsSystem = new SceneSettingsSystem(this.scene, renderer, {
-      fallbackEnvironment: this.fallbackEnvironmentTarget.texture,
+      fallbackEnvironment: fallbackEnvironmentTarget.texture,
       environmentGenerator,
     });
 
@@ -140,11 +189,10 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
 
     this.composer = new EffectComposer(renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.outline = new OutlinePass(new Vector2(1, 1), this.scene, this.camera);
-    this.composer.addPass(this.outline);
-    // 中间 RenderTarget 是线性色彩；OutputPass 必须位于末尾完成 r183 tone mapping 与 sRGB 输出。
+    // 中间 RenderTarget 是线性色彩；末尾 OutputPass 负责 r183 tone mapping 与 sRGB 输出。
     this.output = new OutputPass();
     this.composer.addPass(this.output);
+    this.selectionHighlight = new SelectionBoxSystem(this.scene);
 
     this.dropSystem = new ViewportDropSystem(this.camera, renderer.domElement);
     this.transformSystem = new TransformSystem({
@@ -197,7 +245,6 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.renderer.setSize(width, height, false);
     this.composer.setPixelRatio(pixelRatio);
     this.composer.setSize(width, height);
-    this.outline?.setSize(width, height);
     this.invalidate();
   }
 
@@ -212,6 +259,7 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.emitRenderStatsIfNeeded();
     if (!this.invalidated) return;
 
+    this.selectionHighlight?.update();
     // Composer 是启用后期处理时唯一的最终渲染路径，不能再调用 renderer.render。
     this.composer?.render(delta);
     this.invalidated = false;
@@ -276,6 +324,9 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
   async updateNode(node: SceneNode): Promise<void> {
     await this.documentSystem?.updateNode(node);
     const selection = this.selectionSystem?.getSelection();
+    if (selection?.ids.includes(node.id)) {
+      this.selectionSystem?.setSelection(selection.ids, selection.primaryId);
+    }
     if (selection?.primaryId === node.id) {
       // 锁定状态可由属性面板实时修改，手柄 attach 状态必须同步刷新。
       this.transformSystem?.setSelection(selection.primaryId);
@@ -420,6 +471,7 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.timer.dispose();
     this.resizeObserver?.disconnect();
     this.selectionSystem?.dispose();
+    this.selectionHighlight?.dispose();
     this.transformSystem?.dispose();
     this.settingsSystem?.dispose();
     this.fallbackEnvironmentTarget?.dispose();
@@ -429,7 +481,6 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.controls?.removeEventListener('start', this.cancelCameraAnimation);
     this.controls?.dispose();
     this.documentSystem?.dispose();
-    this.outline?.dispose();
     this.output?.dispose();
     this.composer?.dispose();
     this.resources.dispose();
@@ -448,7 +499,7 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
       this.selectionSystem ||
       !this.documentSystem ||
       !this.renderer ||
-      !this.outline
+      !this.selectionHighlight
     ) {
       return;
     }
@@ -458,7 +509,7 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
       root: this.documentSystem.root,
       getNodeId: (object) => this.documentSystem?.getNodeId(object),
       getObject: (nodeId) => this.documentSystem?.getObject(nodeId),
-      outline: this.outline,
+      highlight: this.selectionHighlight,
       orbitControls: this.controls,
       onSelectionChange: (selection) => {
         this.transformSystem?.setSelection(selection.primaryId);

@@ -19,14 +19,20 @@ export type {
   TextureAssetFormat,
 } from './assets/types';
 export { SceneDocumentSystem } from './documents/SceneDocumentSystem';
-export { EditorEngine, type EditorEngineEventMap } from './EditorEngine';
+export {
+  DEFAULT_EDITOR_ENVIRONMENT_URL,
+  EditorEngine,
+  type EditorEngineEventMap,
+  type EditorEngineOptions,
+} from './EditorEngine';
 export { RuntimeThreeEngine } from './RuntimeThreeEngine';
 export {
   SelectionSystem,
-  type OutlineSelectionTarget,
+  type SelectionHighlightTarget,
   type SelectionState,
   type SelectionSystemOptions,
 } from './interaction/SelectionSystem';
+export { SelectionBoxSystem } from './interaction/SelectionBoxSystem';
 export {
   TransformSystem,
   type TransformCommit,

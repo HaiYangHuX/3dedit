@@ -79,7 +79,13 @@ describe('SelectionSystem', () => {
     const node = businessNode('node-1', 0);
     sceneRoot.add(node);
     sceneRoot.updateMatrixWorld(true);
-    const outline = { selectedObjects: [] as Object3D[] };
+    const highlighted: Object3D[] = [];
+    const highlight = {
+      setObjects: vi.fn((objects: Object3D[]) => {
+        highlighted.splice(0, highlighted.length, ...objects);
+      }),
+      clear: vi.fn(() => highlighted.splice(0)),
+    };
     const selection = new SelectionSystem({
       camera,
       canvas: canvas as unknown as HTMLElement,
@@ -95,7 +101,7 @@ describe('SelectionSystem', () => {
         return undefined;
       },
       getObject: (id) => (id === 'node-1' ? node : undefined),
-      outline,
+      highlight,
     });
 
     const [x, y] = screenPoint(
@@ -109,8 +115,9 @@ describe('SelectionSystem', () => {
       ids: ['node-1'],
       primaryId: 'node-1',
     });
-    expect(outline.selectedObjects).toEqual([node]);
+    expect(highlighted).toEqual([node]);
     selection.dispose();
+    expect(highlight.clear).toHaveBeenCalledOnce();
   });
 
   it('支持 Ctrl/Cmd 多选、再次点击取消以及空白处清空', () => {
@@ -144,7 +151,7 @@ describe('SelectionSystem', () => {
         return undefined;
       },
       getObject: (id) => objects.get(id),
-      outline: { selectedObjects: [] },
+      highlight: { setObjects: vi.fn(), clear: vi.fn() },
       onSelectionChange: changes,
     });
     const rect = canvas.getBoundingClientRect();
@@ -170,6 +177,33 @@ describe('SelectionSystem', () => {
     selection.dispose();
   });
 
+  it('节点 ID 未变但运行对象被重建时刷新高亮引用且不重复派发选择事件', () => {
+    const canvas = new CanvasStub();
+    const camera = new PerspectiveCamera();
+    const sceneRoot = new Scene();
+    let currentObject: Object3D = businessNode('node-1', 0);
+    const highlight = { setObjects: vi.fn(), clear: vi.fn() };
+    const changes = vi.fn();
+    const selection = new SelectionSystem({
+      camera,
+      canvas: canvas as unknown as HTMLElement,
+      root: sceneRoot,
+      getNodeId: () => 'node-1',
+      getObject: () => currentObject,
+      highlight,
+      onSelectionChange: changes,
+    });
+
+    selection.setSelection(['node-1'], 'node-1');
+    const replacement = businessNode('node-1', 1);
+    currentObject = replacement;
+    selection.setSelection(['node-1'], 'node-1');
+
+    expect(highlight.setObjects).toHaveBeenLastCalledWith([replacement]);
+    expect(changes).toHaveBeenCalledOnce();
+    selection.dispose();
+  });
+
   it('OrbitControls 已拖动时不把 pointerup 误判为选择点击', () => {
     const canvas = new CanvasStub();
     const controls = new EventDispatcher<{ change: object }>();
@@ -187,7 +221,7 @@ describe('SelectionSystem', () => {
       root: sceneRoot,
       getNodeId: () => 'node-1',
       getObject: () => node,
-      outline: { selectedObjects: [] },
+      highlight: { setObjects: vi.fn(), clear: vi.fn() },
       orbitControls: controls,
     });
 

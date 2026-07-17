@@ -4,7 +4,7 @@
     "jsx": "preserve",
     "skipLibCheck": true,
     "tsBuildInfoFile": "./node_modules/.cache/tsconfig.tsbuildinfo",
-    "types": ["vite/client", "vitest/globals"]
+    "types": ["vite/client", "vitest/globals", "node"]
   },
   "include": ["src/**/*.ts", "src/**/*.vue", "tests/**/*.ts"]
 }

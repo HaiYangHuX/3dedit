@@ -5,8 +5,9 @@ export interface SelectionState {
   primaryId: string | null;
 }
 
-export interface OutlineSelectionTarget {
-  selectedObjects: Object3D[];
+export interface SelectionHighlightTarget {
+  setObjects(objects: Object3D[]): void;
+  clear(): void;
 }
 
 interface OrbitControlsEventSource {
@@ -20,7 +21,7 @@ export interface SelectionSystemOptions {
   root: Object3D;
   getNodeId(object: Object3D): string | undefined;
   getObject(nodeId: string): Object3D | undefined;
-  outline: OutlineSelectionTarget;
+  highlight: SelectionHighlightTarget;
   orbitControls?: OrbitControlsEventSource;
   onSelectionChange?(selection: SelectionState): void;
   clickTolerance?: number;
@@ -32,7 +33,7 @@ interface PointerStart {
 }
 
 /**
- * 统一处理视口拾取、多选语义与 OutlinePass 同步。
+ * 统一处理视口拾取、多选语义与编辑辅助高亮同步。
  * 射线只遍历文档根节点，网格、变换手柄等编辑器辅助物不会进入业务选择。
  */
 export class SelectionSystem {
@@ -107,7 +108,7 @@ export class SelectionSystem {
       this.handleOrbitChange,
     );
     this.selectedIds.length = 0;
-    this.options.outline.selectedObjects = [];
+    this.options.highlight.clear();
   }
 
   private pickNodeId(clientX: number, clientY: number): string | undefined {
@@ -138,6 +139,12 @@ export class SelectionSystem {
   }
 
   private commitSelection(ids: string[], primaryId: string | null): void {
+    const objects = ids.flatMap((id) => {
+      const object = this.options.getObject(id);
+      return object ? [object] : [];
+    });
+    // 即使 ID 未变，节点更新也可能替换业务 Object3D，必须刷新辅助对象引用。
+    this.options.highlight.setObjects(objects);
     const unchanged =
       this.primaryId === primaryId &&
       this.selectedIds.length === ids.length &&
@@ -146,11 +153,6 @@ export class SelectionSystem {
 
     this.selectedIds.splice(0, this.selectedIds.length, ...ids);
     this.primaryId = primaryId;
-    // OutlinePass 接收业务根对象，不将内部 Mesh 泄漏给上层。
-    this.options.outline.selectedObjects = ids.flatMap((id) => {
-      const object = this.options.getObject(id);
-      return object ? [object] : [];
-    });
     this.options.onSelectionChange?.(this.getSelection());
   }
 

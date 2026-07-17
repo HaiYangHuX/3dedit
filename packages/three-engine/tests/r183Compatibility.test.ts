@@ -6,7 +6,7 @@ function source(path: string): string {
 }
 
 describe('Three.js r183 兼容边界', () => {
-  it('不再实例化 r183 已弃用的 Clock、RGBELoader 和 USDZLoader', () => {
+  it('使用 r183 HDR、颜色输出与编辑选择能力，且不回退到过时 API', () => {
     const editorEngine = source('EditorEngine.ts');
     const runtimeEngine = source('RuntimeThreeEngine.ts');
     const engineSources = [editorEngine, runtimeEngine].join('\n');
@@ -19,14 +19,22 @@ describe('Three.js r183 兼容边界', () => {
     expect(settings).toContain('HDRLoader');
     expect(assets).not.toContain('USDZLoader');
     expect(assets).toContain('USDLoader');
-    // r183 官方 RoomEnvironment 在无用户 HDR 时提供稳定的编辑器 PBR 光照。
-    expect(editorEngine).toContain('RoomEnvironment');
-    expect(editorEngine).toContain('fromScene(roomEnvironment)');
-    // RenderPass/OutlinePass 使用线性中间缓冲，r183 必须由末尾 OutputPass 输出到 sRGB。
-    expect(editorEngine).toContain('OutputPass');
-    expect(editorEngine.indexOf('addPass(this.outline)')).toBeLessThan(
-      editorEngine.indexOf('addPass(this.output)'),
+    // 默认主路径必须是与源站一致的 Venice HDR；RoomEnvironment 只能留作加载失败兜底。
+    expect(editorEngine).toContain('DEFAULT_EDITOR_ENVIRONMENT_URL');
+    expect(editorEngine).toContain("'/hdr/venice_sunset_1k.hdr'");
+    expect(editorEngine).toContain('loadEditorEnvironment');
+    expect(editorEngine).toContain(
+      'environmentRotation.set(0, Math.PI / 2, 0)',
     );
+    expect(editorEngine.indexOf('loadEditorEnvironment')).toBeLessThan(
+      editorEngine.indexOf('fromScene(roomEnvironment)'),
+    );
+    // 编辑器不再用白色 Outline 覆盖模型；运行时交互高亮仍保留 OutlinePass。
+    expect(editorEngine).not.toContain('new OutlinePass');
+    expect(runtimeEngine).toContain('new OutlinePass');
+    // RenderPass 使用线性中间缓冲，r183 必须由末尾 OutputPass 输出到 sRGB。
+    expect(editorEngine).toContain('OutputPass');
+    expect(editorEngine).toContain('addPass(this.output)');
     expect(runtimeEngine).toContain('OutputPass');
     expect(runtimeEngine.indexOf('addPass(outline)')).toBeLessThan(
       runtimeEngine.indexOf('addPass(output)'),
