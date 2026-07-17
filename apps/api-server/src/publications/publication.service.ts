@@ -32,7 +32,7 @@ const runtimeBaseUrl = (
   process.env.RUNTIME_PUBLIC_BASE_URL ?? 'http://127.0.0.1:5174'
 ).replace(/\/$/, '');
 const apiBaseUrl = (
-  process.env.API_PUBLIC_BASE_URL ?? 'http://127.0.0.1:3000/api'
+  process.env.API_PUBLIC_BASE_URL ?? 'http://127.0.0.1:3100/api'
 ).replace(/\/$/, '');
 
 function mapDetail(publication: Publication): PublicationDetail {

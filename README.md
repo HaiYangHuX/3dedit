@@ -40,7 +40,7 @@ pnpm --filter @digital-twin/api-server exec prisma migrate deploy
 pnpm dev
 ```
 
-默认端口：编辑器 `5173`、运行时 `5174`、API `3000`、PostgreSQL `5432`、Redis `6379`、MinIO `9000/9001`。当本机端口被占用时，可在 `.env` 中同步调整 `*_PORT`、`DATABASE_URL` 和 `REDIS_URL`。
+默认端口：编辑器 `5173`、运行时 `5174`、API `3100`、PostgreSQL `5432`、Redis `6379`、MinIO `9000/9001`。当本机端口被占用时，可在 `.env` 中同步调整 `PORT`、`*_PORT`、`DATABASE_URL` 和 `REDIS_URL`；前端可通过 `VITE_API_BASE_URL` 覆盖 API 地址。
 
 `pnpm dev` 会同时启动 `asset-worker`。上传流程为浏览器分块计算 SHA-256 → 3 路并发直传 MinIO → API 完成 Multipart → BullMQ Worker 校验并解析 → 原子切换可用源文件。请勿只启动 Web 与 API 而遗漏 Worker。
 

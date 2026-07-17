@@ -31,7 +31,8 @@ async function bootstrap(): Promise<void> {
     SwaggerModule.createDocument(app, swaggerConfig),
   );
 
-  const port = Number(process.env.PORT ?? 3000);
+  // 3000 常被本机其他 Web 服务占用，平台 API 使用专用 3100 默认端口。
+  const port = Number(process.env.PORT ?? 3100);
   await app.listen(port, '0.0.0.0');
 }
 

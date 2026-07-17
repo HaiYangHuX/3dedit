@@ -17,9 +17,12 @@ export class ApiError extends Error {
   }
 }
 
-const apiBaseUrl = (
-  import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:3000/api'
-).replace(/\/$/, '');
+const apiBaseUrl =
+  // 3000 常被本机其他 Web 服务占用；前后端默认统一使用平台专用 3100 端口。
+  (import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:3100/api').replace(
+    /\/$/,
+    '',
+  );
 
 async function readErrorBody(response: Response): Promise<ApiErrorBody> {
   try {

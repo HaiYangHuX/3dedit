@@ -16,9 +16,12 @@ export class RuntimeApiError extends Error {
   }
 }
 
-export const apiBaseUrl = (
-  import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:3000/api'
-).replace(/\/$/, '');
+export const apiBaseUrl =
+  // 与编辑器使用同一平台专用端口，避免误请求到本机其他服务导致大量 404。
+  (import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:3100/api').replace(
+    /\/$/,
+    '',
+  );
 
 /** 运行时只需要 GET JSON；保持客户端足够小，避免带入编辑器请求封装。 */
 export async function runtimeApiRequest(path: string): Promise<unknown> {
