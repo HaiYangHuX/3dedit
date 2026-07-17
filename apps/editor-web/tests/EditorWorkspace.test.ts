@@ -63,16 +63,16 @@ describe('EditorWorkspace', () => {
     expect(wrapper.get('[data-testid="undo-scene"]')).toBeTruthy();
     expect(wrapper.get('[data-testid="redo-scene"]')).toBeTruthy();
     expect(
-      wrapper.get('[data-tool="translate"]').attributes('title'),
+      wrapper.get('[data-tool="translate"]').attributes('aria-label'),
     ).toContain('拖拽');
-    expect(wrapper.get('[data-tool="rotate"]').attributes('title')).toContain(
-      '旋转',
-    );
-    expect(wrapper.get('[data-tool="scale"]').attributes('title')).toContain(
-      '缩放',
-    );
     expect(
-      wrapper.get('[data-tool="reset-camera"]').attributes('title'),
+      wrapper.get('[data-tool="rotate"]').attributes('aria-label'),
+    ).toContain('旋转');
+    expect(
+      wrapper.get('[data-tool="scale"]').attributes('aria-label'),
+    ).toContain('缩放');
+    expect(
+      wrapper.get('[data-tool="reset-camera"]').attributes('aria-label'),
     ).toContain('重置');
     expect(
       wrapper

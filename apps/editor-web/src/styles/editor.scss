@@ -919,45 +919,6 @@ button {
 
 /* ThreeFlowX 对标阶段通过后置规则覆盖旧骨架；完成全文件拆分前保留管理页原选择器。 */
 
-@font-face {
-  font-family: iconfont;
-  src: url('/fonts/iconfont-C5QZIOO0.woff2') format('woff2');
-  font-style: normal;
-  font-weight: 400;
-  font-display: block;
-}
-
-.iconfont {
-  font-family: iconfont, sans-serif !important;
-  font-style: normal;
-  font-weight: 400;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-.icon-tuozhuai::before {
-  content: '\e636';
-}
-
-.icon-xuanzhuan::before {
-  content: '\e6e2';
-}
-
-.icon-suofang::before {
-  content: '\e660';
-}
-
-.icon-shubiaozhizhen-diyirenchengmanyou-yidong::before {
-  content: '\e72d';
-}
-
-.icon-a-disanrencheng1x::before {
-  content: '\e843';
-}
-
-.icon-24gf-camera2::before {
-  content: '\e9f3';
-}
 /* stylelint-disable no-duplicate-selectors, no-descending-specificity */
 .editor-workspace {
   grid-template-columns: 180px minmax(0, 1fr) 340px;
@@ -1334,10 +1295,11 @@ button {
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.viewport-tools
-  .transform-controls-item
-  :where(.iconfont, .el-icon, .viewport-element-icon) {
-  font-size: 13px;
+.viewport-tools .transform-controls-item .viewport-element-icon {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  pointer-events: none;
   transition: all 0.2s ease;
 }
 
@@ -1347,9 +1309,7 @@ button {
   border-color: rgb(56 189 248 / 40%);
 }
 
-.viewport-tools
-  .transform-controls-item:hover
-  :where(.iconfont, .el-icon, .viewport-element-icon) {
+.viewport-tools .transform-controls-item:hover .viewport-element-icon {
   transform: scale(1.05);
 }
 

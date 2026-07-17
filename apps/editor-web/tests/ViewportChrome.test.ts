@@ -4,6 +4,7 @@ import type {
   SceneStats,
 } from '@digital-twin/three-engine';
 import { mount } from '@vue/test-utils';
+import { ElTooltip } from 'element-plus';
 import { describe, expect, it } from 'vitest';
 import AssetPalette from '../src/components/editor/AssetPalette.vue';
 import EditorTopBar from '../src/components/editor/EditorTopBar.vue';
@@ -69,6 +70,28 @@ describe('编辑器高密度框架组件', () => {
       'active',
     );
     expect(wrapper.findAll('.transform-controls-item')).toHaveLength(8);
+    expect(wrapper.findAllComponents(ElTooltip)).toHaveLength(8);
+    expect(wrapper.findAll('.viewport-element-icon')).toHaveLength(8);
+    expect(wrapper.find('.iconfont').exists()).toBe(false);
+    expect(
+      wrapper
+        .findAll('.transform-controls-item')
+        .every((button) => button.attributes('title') === undefined),
+    ).toBe(true);
+    expect(
+      wrapper
+        .findAllComponents(ElTooltip)
+        .map((tooltip) => tooltip.props('content')),
+    ).toEqual([
+      '拖拽（快捷键：W）',
+      '旋转（快捷键：E）',
+      '缩放（快捷键：R）',
+      '对齐所有模型到地面',
+      '当前视角：第三人称',
+      '测量工具',
+      '重置场景相机位置(鼠标无法控制相机时)',
+      '鼠标单击选中整个模型:已开启',
+    ]);
     await wrapper.get('[data-tool="rotate"]').trigger('click');
     await wrapper.get('[data-tool="align-ground"]').trigger('click');
     await wrapper.get('[data-tool="pointer-lock"]').trigger('click');
