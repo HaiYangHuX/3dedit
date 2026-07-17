@@ -17,9 +17,77 @@ describe('SceneDocument', () => {
     expect(sceneDocumentSchema.parse(document)).toEqual(document);
     expect(document.schemaVersion).toBe(1);
     expect(document.revision).toBe(0);
-    // 新场景默认值对齐 ThreeFlowX r183，避免首次进入编辑器时得到近黑画面。
-    expect(document.settings.background).toBe('#3b3b3b');
-    expect(document.settings.exposure).toBe(1.2);
+    // 这些是源站 initRender/initScene/initPlaneGround 的真实初始值，不是面板临时占位值。
+    expect(document.settings).toEqual({
+      toneMapping: 'neutral',
+      shadowMapType: 'pcf',
+      exposure: 1.2,
+      backgroundType: 'color',
+      background: '#3b3b3b',
+      backgroundAssetId: null,
+      backgroundBlurriness: 0,
+      backgroundIntensity: 5,
+      environmentEnabled: true,
+      environmentAssetId: null,
+      fogType: 'exponential',
+      fogColor: '#3b3b3b',
+      fogNear: 1,
+      fogFar: 200,
+      fogDensity: 0.01,
+      groundType: 'grid',
+      gridVisible: true,
+      weatherType: 'none',
+      weatherCount: 2_000,
+      weatherSpeed: 0.4,
+      weatherOpacity: 0.6,
+      weatherSize: 0.5,
+      weatherArea: 100,
+      weatherHeight: 50,
+    });
+  });
+
+  it('为已有 schemaVersion 1 文档补齐源站项目配置', () => {
+    const document = createDefaultSceneDocument(
+      'project-1',
+      'scene-1',
+      '旧场景',
+    );
+    const parsed = sceneDocumentSchema.parse({
+      ...document,
+      settings: {
+        background: '#020617',
+        environmentAssetId: 'environment-legacy',
+        exposure: 1.6,
+        gridVisible: false,
+      },
+    });
+
+    expect(parsed.settings).toEqual({
+      toneMapping: 'neutral',
+      shadowMapType: 'pcf',
+      exposure: 1.6,
+      backgroundType: 'color',
+      background: '#020617',
+      backgroundAssetId: null,
+      backgroundBlurriness: 0,
+      backgroundIntensity: 5,
+      environmentEnabled: true,
+      environmentAssetId: 'environment-legacy',
+      fogType: 'exponential',
+      fogColor: '#3b3b3b',
+      fogNear: 1,
+      fogFar: 200,
+      fogDensity: 0.01,
+      groundType: 'grid',
+      gridVisible: false,
+      weatherType: 'none',
+      weatherCount: 2_000,
+      weatherSpeed: 0.4,
+      weatherOpacity: 0.6,
+      weatherSize: 0.5,
+      weatherArea: 100,
+      weatherHeight: 50,
+    });
   });
 
   it('拒绝父节点不存在的场景树', () => {
@@ -188,10 +256,12 @@ describe('SceneDocument', () => {
       businessData: {},
     };
     document.rootNodeIds = ['device'];
+    document.settings.backgroundAssetId = 'background-1';
     document.settings.environmentAssetId = 'environment-1';
 
     expect(sceneDocumentSchema.safeParse(document).success).toBe(true);
     expect(collectAssetReferences(document)).toEqual([
+      { assetId: 'background-1', nodeIds: [] },
       { assetId: 'environment-1', nodeIds: [] },
       { assetId: 'model-1', nodeIds: ['device'] },
       { assetId: 'texture-color', nodeIds: ['device'] },

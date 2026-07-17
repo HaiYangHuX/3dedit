@@ -35,6 +35,9 @@ export function collectAssetReferences(
       }
     }
   }
+  if (document.settings.backgroundAssetId) {
+    addReference(references, document.settings.backgroundAssetId);
+  }
   if (document.settings.environmentAssetId) {
     addReference(references, document.settings.environmentAssetId);
   }

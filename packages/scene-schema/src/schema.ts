@@ -290,6 +290,61 @@ export const socketTaskDefinitionSchema = z.object({
   taskData: z.record(z.string(), z.json()),
 });
 
+/**
+ * 项目级渲染配置与 ThreeFlowX r183 的实际初始化参数保持一致。
+ * 每个新字段都自带默认值，使旧 schemaVersion 1 文档无需升版即可解析。
+ */
+export const sceneSettingsSchema = z.object({
+  toneMapping: z
+    .enum([
+      'custom',
+      'none',
+      'linear',
+      'reinhard',
+      'cineon',
+      'aces-filmic',
+      'agx',
+      'neutral',
+    ])
+    .default('neutral'),
+  shadowMapType: z.enum(['basic', 'pcf', 'pcf-soft', 'vsm']).default('pcf'),
+  exposure: z.number().min(0).max(5).default(1.2),
+  backgroundType: z.enum(['none', 'color', 'texture']).default('color'),
+  background: z.string().default('#3b3b3b'),
+  backgroundAssetId: identifierSchema.nullable().default(null),
+  backgroundBlurriness: z.number().min(0).max(1).default(0),
+  backgroundIntensity: z.number().min(0).max(6).default(5),
+  environmentEnabled: z.boolean().default(true),
+  environmentAssetId: identifierSchema.nullable().default(null),
+  fogType: z.enum(['none', 'linear', 'exponential']).default('exponential'),
+  fogColor: z.string().default('#3b3b3b'),
+  fogNear: z.number().min(0).max(1_000).default(1),
+  fogFar: z.number().min(0).max(1_000).default(200),
+  fogDensity: z.number().min(0).max(5).default(0.01),
+  groundType: z
+    .enum([
+      'none',
+      'grid',
+      'lawn',
+      'rock',
+      'stone',
+      'floor',
+      'tile-1',
+      'tile-2',
+      'brick',
+    ])
+    .default('grid'),
+  // 保留旧字段作为视口工具栏兼容镜像，真实地面类型由 groundType 决定。
+  gridVisible: z.boolean().default(true),
+  weatherType: z.enum(['none', 'rain', 'snow']).default('none'),
+  weatherCount: z.number().int().min(0).max(100_000).default(2_000),
+  weatherSpeed: z.number().min(0.1).max(1.5).default(0.4),
+  weatherOpacity: z.number().min(0).max(1).default(0.6),
+  weatherSize: z.number().min(0.1).max(2).default(0.5),
+  weatherArea: z.number().min(0).max(500).default(100),
+  weatherHeight: z.number().min(0).max(300).default(50),
+});
+
 function addDuplicateIssues(
   values: Array<{ id: string }>,
   label: string,
@@ -334,12 +389,7 @@ export const sceneDocumentSchema = z
     revision: z.number().int().nonnegative(),
     rootNodeIds: z.array(identifierSchema),
     nodes: z.record(z.string(), sceneNodeSchema),
-    settings: z.object({
-      background: z.string(),
-      environmentAssetId: identifierSchema.nullable(),
-      exposure: z.number().positive(),
-      gridVisible: z.boolean(),
-    }),
+    settings: sceneSettingsSchema,
     interactions: z.array(interactionDefinitionSchema),
     dataSources: z.array(dataSourceDefinitionSchema),
     socketTasks: z.array(socketTaskDefinitionSchema),
@@ -452,6 +502,7 @@ export type InteractionDefinition = z.infer<typeof interactionDefinitionSchema>;
 export type DataSourceDefinition = z.infer<typeof dataSourceDefinitionSchema>;
 export type SocketTaskDefinition = z.infer<typeof socketTaskDefinitionSchema>;
 export type SocketTaskType = z.infer<typeof socketTaskTypeSchema>;
+export type SceneSettings = z.infer<typeof sceneSettingsSchema>;
 export type SceneDocument = z.infer<typeof sceneDocumentSchema>;
 export type SceneNode = z.infer<typeof sceneNodeSchema>;
 export type Transform = z.infer<typeof transformSchema>;
