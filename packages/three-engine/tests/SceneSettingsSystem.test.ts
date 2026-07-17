@@ -5,7 +5,6 @@ import {
   AgXToneMapping,
   BasicShadowMap,
   CineonToneMapping,
-  Color,
   CustomToneMapping,
   EquirectangularReflectionMapping,
   Fog,
@@ -20,6 +19,7 @@ import {
   SRGBColorSpace,
   Texture,
   VSMShadowMap,
+  type Color,
   type WebGLRenderer,
 } from 'three';
 import { describe, expect, it, vi } from 'vitest';

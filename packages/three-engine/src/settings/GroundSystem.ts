@@ -537,7 +537,7 @@ export class GroundSystem {
     this.configureTexture(rockMap, true);
     this.configureTexture(normalMap, false);
     const groundMaterial = new MeshPhongMaterial({
-      emissive: 0x2a242c,
+      emissive: 0x2a241c,
       emissiveIntensity: 0.02,
       normalMap,
       normalScale: new Vector2(1.6, 1.6),
@@ -636,7 +636,7 @@ export class GroundSystem {
         minScale: 0.75,
         maxScale: 1.6,
         ySink: 0.22,
-        color: 0xb69f88,
+        color: 0xb6a488,
         colorVariance: 0.28,
       }),
       this.createRockInstances(boulders, boulderMaterial, {
@@ -648,7 +648,7 @@ export class GroundSystem {
         minScale: 0.9,
         maxScale: 1.7,
         ySink: 0.7,
-        color: 0x9e8b78,
+        color: 0x9e8f78,
         colorVariance: 0.22,
       }),
     );

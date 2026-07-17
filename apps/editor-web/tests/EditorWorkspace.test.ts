@@ -2,6 +2,7 @@ import { createTestingPinia } from '@pinia/testing';
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAssetStore } from '../src/stores/asset';
+import { useDocumentStore } from '../src/stores/document';
 
 const commandMocks = vi.hoisted(() => {
   const operation = () => vi.fn().mockResolvedValue(undefined);
@@ -188,6 +189,34 @@ describe('EditorWorkspace', () => {
       groundType: 'grid',
       gridVisible: true,
     });
+  });
+
+  it('稳定文档对象原地更新后刷新项目配置控件', async () => {
+    const pinia = createTestingPinia({ createSpy: vi.fn });
+    const wrapper = mount(EditorWorkspace, {
+      global: {
+        plugins: [pinia],
+        stubs: {
+          EditorCanvas: { template: '<div data-testid="editor-canvas" />' },
+          RouterLink: { template: '<a><slot /></a>' },
+        },
+      },
+    });
+    const store = useDocumentStore(pinia);
+
+    await wrapper
+      .findAll('.inspector-tabs button')
+      .find((tab) => tab.text() === '项目配置')!
+      .trigger('click');
+    expect(wrapper.get('[data-testid="ground-type"]').text()).toContain('网格');
+
+    // 命令历史必须保留文档对象身份，因此只递增变更代次通知 Vue 刷新原地修改。
+    store.document.settings.groundType = 'floor';
+    store.document.settings.gridVisible = false;
+    store.documentChangeVersion += 1;
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.get('[data-testid="ground-type"]').text()).toContain('地板');
   });
 
   it('背景与环境文件经素材库处理完成后才写入场景', async () => {

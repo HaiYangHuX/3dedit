@@ -9,6 +9,7 @@ import {
   Scene,
   Texture,
   type GridHelper,
+  type MeshPhongMaterial,
   type MeshStandardMaterial,
 } from 'three';
 import { describe, expect, it, vi } from 'vitest';
@@ -146,6 +147,11 @@ describe('GroundSystem', () => {
     expect(system.isAnimated).toBe(false);
     const rock = scene.getObjectByName('customPlane') as Group;
     expect(rock.userData.planeGeometry).toBe('rock');
+    expect(
+      (
+        rock.children[0] as Mesh<PlaneGeometry, MeshPhongMaterial>
+      ).material.emissive.getHex(),
+    ).toBe(0x2a241c);
     expect(
       rock.children.some(
         (child) =>

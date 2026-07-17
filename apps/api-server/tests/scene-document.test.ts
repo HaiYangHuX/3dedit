@@ -76,17 +76,14 @@ describe('场景文档服务端归一化', () => {
     const first = createDefaultSceneDocument('project-1', 'scene-1', '场景');
     const second = structuredClone(first);
     first.settings = {
+      ...first.settings,
       background: '#000000',
-      environmentAssetId: null,
       exposure: 1,
-      gridVisible: true,
     };
-    second.settings = {
-      gridVisible: true,
-      exposure: 1,
-      environmentAssetId: null,
-      background: '#000000',
-    } as SceneDocument['settings'];
+    // 反转完整字段的插入顺序，避免用不完整旧协议伪造类型。
+    second.settings = Object.fromEntries(
+      Object.entries(first.settings).reverse(),
+    ) as SceneDocument['settings'];
 
     expect(hashSceneDocument(first)).toBe(hashSceneDocument(second));
   });

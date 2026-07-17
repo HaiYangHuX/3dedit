@@ -248,6 +248,9 @@ button {
   padding: 0;
   overflow: hidden;
   border-left: 1px solid #263047;
+
+  /* 检查器公共尺寸与原生属性输入框保持一致。 */
+  --el-component-size: 28px;
 }
 
 .asset-panel h2 {
@@ -490,18 +493,6 @@ button {
 
 .project-settings-row--slider .el-slider {
   min-width: 0;
-}
-
-.project-settings-row--slider .el-slider__runway.show-input {
-  margin-right: 84px;
-}
-
-.project-settings-row--slider .el-slider__input {
-  width: 72px;
-}
-
-.project-settings-row--slider .el-input-number {
-  width: 72px;
 }
 
 .project-settings-inline {
@@ -1155,6 +1146,13 @@ button {
   min-width: 0;
   background: rgb(11 15 25 / 96%);
   border-color: #1d2738;
+}
+
+/* Element Plus 2.14 的 Select 仍硬编码 32px，在检查器边界统一收敛到公共尺寸。 */
+.inspector-panel :where(.el-select__wrapper, .el-input, .el-input-number) {
+  min-height: var(--el-component-size);
+  height: var(--el-component-size);
+  font-size: 12px;
 }
 
 .inspector-tabs {

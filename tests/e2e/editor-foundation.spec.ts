@@ -64,6 +64,47 @@ test('编辑器工作台创建真实 WebGL Canvas', async ({ page }) => {
     String(initialObjectCount + 2),
   );
 
+  await page.getByRole('button', { name: '项目配置', exact: true }).click();
+  await expect(page.locator('.project-settings-title')).toHaveText([
+    '渲染器',
+    '场景',
+    '地面',
+    '天气',
+  ]);
+  await expect(page.getByTestId('tone-mapping')).toContainText('Neutral');
+  await expect(page.getByTestId('shadow-map')).toContainText('PCF阴影');
+  await expect(page.getByTestId('environment-hint')).toContainText(
+    '内置 Venice HDR',
+  );
+  // 项目配置复用检查器公共控件高度，不能比节点属性输入框更大。
+  expect(
+    (
+      await page
+        .getByTestId('ground-type')
+        .locator('.el-select__wrapper')
+        .boundingBox()
+    )?.height,
+  ).toBe(28);
+  const settingsWidth = await page
+    .locator('.scene-settings-inspector')
+    .evaluate((element) => ({
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+    }));
+  expect(settingsWidth.scrollWidth).toBe(settingsWidth.clientWidth);
+
+  // 真实 WebGL 路径切换内置贴图地面和天气，可同时捕获资源路径与 shader 回归。
+  await page.getByTestId('ground-type').click();
+  await page.getByRole('option', { name: '地板', exact: true }).click();
+  await expect(page.getByTestId('ground-type')).toContainText('地板');
+  await page.getByTestId('weather-type').click();
+  await page.getByRole('option', { name: '雨', exact: true }).click();
+  await expect(page.getByTestId('weather-fields')).toBeVisible();
+  await expect(page.getByTestId('weather-count')).toHaveAttribute(
+    'aria-valuemax',
+    '100000',
+  );
+
   const downloadPromise = page.waitForEvent('download');
   await page.locator('[data-tool="screenshot"]').click();
   const download = await downloadPromise;

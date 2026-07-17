@@ -17,11 +17,14 @@ const props = withDefaults(
     assets?: Asset[];
     builtinEnvironmentPreviewUrl?: string;
     uploading?: boolean;
+    // 命令历史原地修改稳定文档对象，使用代次让所有受控组件重新读取最新字段。
+    changeVersion?: number;
   }>(),
   {
     assets: () => [],
     builtinEnvironmentPreviewUrl: '',
     uploading: false,
+    changeVersion: 0,
   },
 );
 const emit = defineEmits<{
@@ -159,7 +162,11 @@ function commitGround(value: SceneSettings['groundType']): void {
 </script>
 
 <template>
-  <section class="scene-settings-inspector" data-testid="scene-settings">
+  <section
+    class="scene-settings-inspector"
+    data-testid="scene-settings"
+    :data-change-version="changeVersion"
+  >
     <header class="inspector-title"><strong>项目配置</strong></header>
 
     <h3 class="project-settings-title">渲染器</h3>

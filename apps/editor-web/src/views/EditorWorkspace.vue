@@ -583,6 +583,7 @@ async function copyText(value: string): Promise<void> {
       <SceneSettingsInspector
         v-else
         :settings="document.settings"
+        :change-version="documentChangeVersion"
         :assets="assets"
         :uploading="settingsUploading"
         :builtin-environment-preview-url="BUILTIN_ENVIRONMENT_PREVIEW_URL"
