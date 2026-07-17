@@ -25,8 +25,8 @@ describe('UpdateSceneSettingsCommand', () => {
 
     command.undo(context);
     expect(document.settings).toMatchObject({
-      background: '#111827',
-      exposure: 1,
+      background: '#3b3b3b',
+      exposure: 1.2,
       gridVisible: true,
     });
     expect(changed).toHaveBeenCalledTimes(2);
