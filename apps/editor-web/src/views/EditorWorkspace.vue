@@ -5,6 +5,7 @@ import {
   BUILTIN_ENVIRONMENT_PREVIEW_URL,
   type CameraOrientation,
   type CameraView,
+  type ModelAssetFormat,
   type ModelStructureMap,
   type RenderStats,
   type SceneStats,
@@ -39,6 +40,7 @@ import {
 import { useDocumentStore, type SaveState } from '../stores/document';
 import { useAssetStore } from '../stores/asset';
 import { useSelectionStore } from '../stores/selection';
+import { assetApi } from '../api/assets';
 import { publicationApi } from '../api/publications';
 
 const props = withDefaults(
@@ -73,6 +75,11 @@ const isPointerLock = ref(false);
 const isMeasuring = ref(false);
 const isChooseAllModel = ref(true);
 const modelStructures = ref<ModelStructureMap>({});
+const modelAssetFormats = ref<Partial<Record<string, ModelAssetFormat>>>({});
+const selectedModelPart = ref<{ nodeId: string; objectId: string } | null>(
+  null,
+);
+let assetFormatGeneration = 0;
 let previewWindow: Window | null = null;
 const runtimeOrigin = (
   import.meta.env.VITE_RUNTIME_ORIGIN ?? 'http://127.0.0.1:5174'
@@ -105,6 +112,45 @@ const textureAssets = computed(() =>
       (asset.kind === 'image' || asset.kind === 'texture'),
   ),
 );
+const modelFormats = new Set<ModelAssetFormat>([
+  'glb',
+  'gltf',
+  'fbx',
+  'obj',
+  'stl',
+  'usdz',
+]);
+
+async function loadReferencedModelAssetFormats(): Promise<void> {
+  const generation = ++assetFormatGeneration;
+  const assetIds = new Set<string>();
+  for (const node of Object.values(document.value.nodes)) {
+    for (const component of node.components) {
+      if (component.kind === 'model') assetIds.add(component.assetId);
+    }
+  }
+  const listed = new Map(assets.value.map((asset) => [asset.id, asset]));
+  const entries = await Promise.all(
+    [...assetIds].map(async (assetId) => {
+      try {
+        const asset = listed.get(assetId) ?? (await assetApi.get(assetId));
+        return modelFormats.has(asset.format as ModelAssetFormat)
+          ? ([assetId, asset.format as ModelAssetFormat] as const)
+          : undefined;
+      } catch {
+        // 名称格式解析失败不影响 Engine 使用自己的资源解析器加载模型主体。
+        return undefined;
+      }
+    }),
+  );
+  if (generation !== assetFormatGeneration) return;
+  modelAssetFormats.value = Object.fromEntries(
+    entries.filter(
+      (entry): entry is readonly [string, ModelAssetFormat] =>
+        entry !== undefined,
+    ),
+  );
+}
 
 const saveStateLabel: Record<SaveState, string> = {
   idle: '尚未加载',
@@ -122,9 +168,13 @@ watch(
   (sceneId) => {
     // Object3D UUID 只对当前引擎加载代次有效，切场景时先清空防止短暂显示旧层级。
     modelStructures.value = {};
-    void Promise.resolve(store.loadScene(sceneId)).catch(() => {
-      // 状态栏展示详细错误，保留引擎视口以便用户重试。
-    });
+    modelAssetFormats.value = {};
+    selectedModelPart.value = null;
+    void Promise.resolve(store.loadScene(sceneId))
+      .then(() => loadReferencedModelAssetFormats())
+      .catch(() => {
+        // 状态栏展示详细错误，保留引擎视口以便用户重试。
+      });
   },
   { immediate: true },
 );
@@ -168,7 +218,11 @@ function dropSceneItem(payload: ScenePaletteDropPayload): void {
   if (payload.kind === 'asset') {
     void commands
       .addAssetNode(
-        { id: payload.assetId, name: payload.name },
+        {
+          id: payload.assetId,
+          name: payload.name,
+          format: payload.format,
+        },
         payload.position,
       )
       .catch((reason) => showEditorError(reason, '添加模型失败'));
@@ -245,7 +299,23 @@ async function uploadSceneSettingAsset(
 }
 
 function changeSelection(selection: SelectionState): void {
+  selectedModelPart.value = null;
   commands.select(selection);
+}
+
+function changeModelPartSelection(selection: {
+  nodeId: string;
+  objectId: string;
+  targetObjectId: string;
+}): void {
+  const selected =
+    canvas.value?.selectModelPart?.(
+      selection.nodeId,
+      selection.targetObjectId,
+    ) ?? false;
+  selectedModelPart.value = selected
+    ? { nodeId: selection.nodeId, objectId: selection.objectId }
+    : null;
 }
 
 function changeStats(value: SceneStats): void {
@@ -270,7 +340,24 @@ function changeRenderStats(value: RenderStats): void {
 
 function changeModelStructures(value: ModelStructureMap): void {
   modelStructures.value = value;
+  const current = selectedModelPart.value;
+  if (
+    current &&
+    !(value[current.nodeId] ?? []).some(
+      (part) => part.objectId === current.objectId,
+    )
+  ) {
+    // 模型替换会生成整批新 UUID，旧二级 current key 不能跨加载代次复用。
+    selectedModelPart.value = null;
+    canvas.value?.setSelection(selectedIds.value, primaryId.value);
+  }
 }
+
+watch(primaryId, (nodeId) => {
+  if (selectedModelPart.value?.nodeId !== nodeId) {
+    selectedModelPart.value = null;
+  }
+});
 
 function changeTransformMode(mode: 'translate' | 'rotate' | 'scale'): void {
   transformMode.value = mode;
@@ -518,7 +605,10 @@ async function copyText(value: string): Promise<void> {
           :change-version="documentChangeVersion"
           :selection="selection"
           :model-structures="modelStructures"
+          :model-asset-formats="modelAssetFormats"
+          :selected-model-part="selectedModelPart"
           @select="changeSelection"
+          @select-model-part="changeModelPartSelection"
           @toggle-visible="
             (id, enabled) => runCommand(commands.updateNode(id, { enabled }))
           "

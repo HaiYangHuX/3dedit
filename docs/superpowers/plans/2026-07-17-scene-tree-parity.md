@@ -1,145 +1,53 @@
-# 场景树模型结构与 Camera 实施计划
+# 场景内容两级模型列表与精确选择实施计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+**Goal:** 修正错误的递归 Object3D 树，实现源站固定两级的 Mesh/材质列表、实例名称格式和二级精确高亮。
 
-**Goal:** 让场景树展示 Camera 和真实 Three.js 模型层级，并把搜索、图标、Tooltip、树行和选中态按源站样式还原。
-
-**Architecture:** `SceneDocumentSystem` 从已加载的 Object3D 导出只读 `ModelStructureMap`，经 `EditorEngine` 和 `EditorCanvas` 事件传到 `SceneTree`。业务树仍由 `SceneDocument` 持久化，模型内部层级只用于展示；Camera 是顶部固定系统项。
+**Architecture:** `SceneDocumentSystem` 递归遍历但只输出平铺 `ModelPartItem[]`；`EditorEngine` 通过所属模型根校验瞬时 UUID 并让共享 `SelectionBoxSystem` 高亮目标 Mesh；Vue 层保存独立的二级 current key，业务选择仍使用 `SceneNode.id`。
 
 **Tech Stack:** Three.js 0.183.0、Vue 3.5.40、TypeScript 5.9.3、Element Plus 2.14.3、Vitest 4.1.10。
 
-## Global Constraints
+## 全局约束
 
-- Three.js 运行时与类型固定为 0.183.x，不升级依赖。
-- Object3D 结构快照不写入 `SceneDocument`、Pinia 持久化、API 或发布产物。
-- 模型内部节点只读，不伪造无法持久化的删除、替换或材质编辑功能。
-- 业务节点现有选择、更名、复制、显隐、锁定、删除和拖放意图保持不变。
-- 所有操作图标和悬浮提示使用 Element Plus，新逻辑使用简洁中文注释。
+- 不升级 Three.js；运行时和类型继续固定 0.183.x。
+- 不把 Object3D/Material UUID 写入文档、Pinia 持久化、API 或撤销栈。
+- 模型内部项固定为第二级，类型中不再提供递归 `children`。
+- 二级选择只高亮、不挂载 TransformControls。
+- 所有新增非显然逻辑使用简洁中文注释。
 
----
+### Task 1：失败测试和源站契约锁定
 
-### Task 1: Three.js 模型结构投影
+- [ ] 修改 `SceneDocumentSystem.test.ts`：断言 Group 被过滤、深层 Mesh 被平铺、业务子树被截断、名称回退和多材质目标映射。
+- [ ] 修改 `SceneTree.test.ts`：断言只有一级/二级，二级点击发出 `select-model-part`，二级可独立 current。
+- [ ] 修改 `EditorCanvasBridge.test.ts`：断言二级选择桥接透传。
+- [ ] 修改创建节点测试：断言模型实例名称格式。
+- [ ] 运行定向测试并确认因旧递归结构/API 缺失而失败。
 
-**Files:**
-- Modify: `packages/three-engine/src/types.ts`
-- Modify: `packages/three-engine/src/index.ts`
-- Modify: `packages/three-engine/src/documents/SceneDocumentSystem.ts`
-- Modify: `packages/three-engine/src/EditorEngine.ts`
-- Test: `packages/three-engine/tests/SceneDocumentSystem.test.ts`
+### Task 2：Three 两级投影和精确选择
 
-**Interfaces:**
-- Produces: `ModelStructureNode`, `ModelStructureMap`, `SceneDocumentSystem.getModelStructures()` 和 `EditorEngine.getModelStructures()`。
+- [ ] 将 `ModelStructureNode` 改为无 children 的 `ModelPartItem`。
+- [ ] `SceneDocumentSystem` 按源站 traverse + Mesh/Material 规则生成平铺列表，并提供受所属根约束的目标查找。
+- [ ] `EditorEngine.selectModelPart()` 同步业务根选择、精确包围目标 Mesh并让 `F` 优先聚焦二级对象。
+- [ ] 在加载、删除、替换和普通选择时清理瞬时二级引用。
+- [ ] 运行 Three 定向测试确认 GREEN。
 
-- [x] **Step 1: 写入 Three 失败测试**
+### Task 3：Vue 桥接和两级树
 
-  构造“模型根 → 命名 Group → Mesh”，同时在模型根下挂载具有 `sceneNodeId` 的业务子节点，期望快照保留前者并排除后者。
+- [ ] `EditorCanvas`/`EditorCanvasBridge` 暴露 `selectModelPart()`。
+- [ ] `SceneTree` 去掉递归模型项构建，增加 `selectedModelPartId` 和 `select-model-part` 事件。
+- [ ] `EditorWorkspace` 处理二级选择、普通选择清理和快照失效清理。
+- [ ] 运行前端定向测试确认 GREEN。
 
-- [x] **Step 2: 运行定向测试确认因 API 缺失而失败**
+### Task 4：实例名称格式
 
-  ```bash
-  pnpm --filter @digital-twin/three-engine exec vitest run tests/SceneDocumentSystem.test.ts
-  ```
+- [ ] `createAssetNode` 接收资源格式并生成 `${文件名}_${四位随机数}`。
+- [ ] 双击添加和拖入视口都传递资源格式。
+- [ ] 已经带扩展名或四位后缀时避免重复格式化。
+- [ ] 旧场景使用素材真实格式和稳定节点 ID 补齐同款展示名称。
+- [ ] 运行创建节点和工作区定向测试。
 
-- [x] **Step 3: 实现层级投影并导出类型**
+### Task 5：验证和真实模型验收
 
-  只从 `primaryComponentKind === 'model'` 的根对象导出内部子树；未命名对象使用 `object.type`；具有自己 `sceneNodeId` 的业务节点不进入投影。
-
-- [x] **Step 4: 运行 Three 定向测试确认通过**
-
-### Task 2: Canvas 层级快照事件
-
-**Files:**
-- Modify: `apps/editor-web/src/components/EditorCanvas.vue`
-- Modify: `apps/editor-web/src/editor/useEditorCommands.ts`
-- Test: `apps/editor-web/tests/EditorCanvasBridge.test.ts`
-
-**Interfaces:**
-- Consumes: `EditorEngine.getModelStructures(): ModelStructureMap`。
-- Produces: Vue 事件 `model-structure-change` 和增量更新后的新快照。
-
-- [x] **Step 1: 写入 Canvas 失败测试**
-
-  为 mock engine 增加 `getModelStructures`，期望初始加载后 `wrapper.emitted('model-structure-change')` 收到同一快照。
-
-- [x] **Step 2: 运行定向测试确认事件缺失**
-
-  ```bash
-  pnpm --filter @digital-twin/editor-web exec vitest run tests/EditorCanvasBridge.test.ts
-  ```
-
-- [x] **Step 3: 在加载和增量变更成功后统一发射快照**
-
-  `applyNodeUpdated` 改为可等待 Promise，只在 `engine.updateNode()` 成功后发送，避免 Object3D 替换期间发送旧 UUID。
-
-- [x] **Step 4: 运行 Canvas 定向测试确认通过**
-
-### Task 3: Camera 与可展开模型树
-
-**Files:**
-- Modify: `apps/editor-web/src/components/editor/SceneTree.vue`
-- Modify: `apps/editor-web/src/views/EditorWorkspace.vue`
-- Test: `apps/editor-web/tests/SceneTree.test.ts`
-- Test: `apps/editor-web/tests/EditorWorkspace.test.ts`
-
-**Interfaces:**
-- Consumes: `modelStructures: ModelStructureMap`。
-- Preserves: 业务节点原有 emits，内部 Object3D 单击映射到所属 SceneNode 选择。
-
-- [x] **Step 1: 写入树组件失败测试**
-
-  期望页面有 `[data-testid="scene-camera"]`、模型根 `data-node-id`、嵌套子结构 `data-object-id`、Element SVG 图标和 `ElTooltip`，并且单击内部节点会选中所属模型根。
-
-- [x] **Step 2: 运行定向测试确认 Camera 和子结构缺失**
-
-  ```bash
-  pnpm --filter @digital-twin/editor-web exec vitest run tests/SceneTree.test.ts tests/EditorWorkspace.test.ts
-  ```
-
-- [x] **Step 3: 重构 SceneTree 的树项边界**
-
-  业务项和模型内部项使用不同 kind；搜索递归保留祖先；内部项禁止拖拽且不显示业务操作。
-
-- [x] **Step 4: 为工作区接入最新快照**
-
-  `EditorWorkspace` 使用 `ref<ModelStructureMap>({})`，处理 `EditorCanvas @model-structure-change` 并把快照传给 `SceneTree`。
-
-- [x] **Step 5: 运行树和工作区测试确认通过**
-
-### Task 4: 源站树样式与 Element 操作区
-
-**Files:**
-- Modify: `apps/editor-web/src/styles/editor.scss`
-- Modify: `apps/editor-web/src/components/editor/SceneTree.vue`
-
-- [x] **Step 1: 用 Element Plus 组件替换原生搜索和 Emoji**
-
-  使用 `ElInput` + `Search`、`ElScrollbar`、`ElTooltip`，业务操作使用 `EditPen`、`CopyDocument`、`View/Hide`、`Lock/Unlock`、`Delete`。
-
-- [x] **Step 2: 应用源站场景树 CSS 参数**
-
-  搜索区 10px 内边距；Camera 行 `padding: 6px 16px`；树行 28px；树背景 `#0f172a80`；hover/current 左边框；操作按钮 18px。
-
-- [x] **Step 3: 运行前端静态验证**
-
-  ```bash
-  pnpm --filter @digital-twin/editor-web typecheck
-  pnpm lint
-  ```
-
-### Task 5: 全量与真实模型验收
-
-- [x] **Step 1: 运行全量验证**
-
-  ```bash
-  CI=1 E2E_EDITOR_BASE_URL='http://127.0.0.1:5273' E2E_RUNTIME_BASE_URL='http://127.0.0.1:5274' pnpm verify
-  ```
-
-- [x] **Step 2: 浏览器验证**
-
-  打开 `/editor/local-project/toolbar-check`，使用现有真实模型实例，确认 Camera、可展开 Object3D 子结构、深色背景、青色选中态、Element 图标和 Tooltip。
-
-- [x] **Step 3: 提交**
-
-  ```bash
-  git commit -m '💥 feat(Three交互): 还原场景树模型结构'
-  ```
+- [ ] 运行 Three、editor-web 定向测试和类型检查。
+- [ ] 运行 `pnpm verify` 全量验证。
+- [ ] 浏览器验证 Camera、固定两级、名称、二级 current 和 Mesh 精确包围盒。
+- [ ] 检查 diff 中的中文注释和过期“递归树”描述后提交。

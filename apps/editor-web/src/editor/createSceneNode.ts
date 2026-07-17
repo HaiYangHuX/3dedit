@@ -21,6 +21,34 @@ export interface CreateSceneNodeOptions {
   position?: Transform['position'];
 }
 
+const sourceInstanceSuffix = /_\d{4}$/;
+export const MODEL_INSTANCE_NAME_VERSION_KEY =
+  '__editorModelInstanceNameVersion';
+
+/** 复现源站 Re(name)：上传模型保留文件扩展名，并追加四位实例随机码。 */
+export function formatModelInstanceName(
+  name: string,
+  format: Asset['format'],
+  suffix: string,
+): string {
+  if (sourceInstanceSuffix.test(name)) return name;
+  const extension = `.${format}`;
+  const fileName = name.toLocaleLowerCase('en-US').endsWith(extension)
+    ? name
+    : `${name}${extension}`;
+  return `${fileName}_${suffix}`;
+}
+
+export function createModelInstanceName(
+  name: string,
+  format: Asset['format'],
+): string {
+  const suffix = Math.floor(Math.random() * 10_000)
+    .toString()
+    .padStart(4, '0');
+  return formatModelInstanceName(name, format, suffix);
+}
+
 const geometryNames: Record<GeometryPrimitive, string> = {
   box: '立方体',
   sphere: '球体',
@@ -60,12 +88,16 @@ export function createSceneNode(
 }
 
 export function createAssetNode(
-  asset: Pick<Asset, 'id' | 'name'>,
+  asset: Pick<Asset, 'id' | 'name' | 'format'>,
   position: Transform['position'] = [0, 0, 0],
 ): SceneNode {
-  return createSceneNode(asset.name, [{ kind: 'model', assetId: asset.id }], {
-    position,
-  });
+  const node = createSceneNode(
+    createModelInstanceName(asset.name, asset.format),
+    [{ kind: 'model', assetId: asset.id }],
+    { position },
+  );
+  node.businessData[MODEL_INSTANCE_NAME_VERSION_KEY] = 1;
+  return node;
 }
 
 export function createGeometryNode(

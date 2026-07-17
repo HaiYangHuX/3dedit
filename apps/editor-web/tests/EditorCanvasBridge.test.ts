@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => {
     removeNodes: vi.fn(),
     updateNode: vi.fn(),
     setSelection: vi.fn(),
+    selectModelPart: vi.fn().mockReturnValue(true),
     setTransformMode: vi.fn(),
     setTransformSpace: vi.fn(),
     handleShortcut: vi.fn().mockReturnValue(true),
@@ -46,9 +47,9 @@ const mocks = vi.hoisted(() => {
       'node-1': [
         {
           objectId: 'object-1',
+          targetObjectId: 'object-1',
           name: '水泵叶轮',
           objectType: 'Mesh',
-          children: [],
         },
       ],
     }),
@@ -90,9 +91,9 @@ describe('EditorCanvas bridge', () => {
         'node-1': [
           {
             objectId: 'object-1',
+            targetObjectId: 'object-1',
             name: '水泵叶轮',
             objectType: 'Mesh',
-            children: [],
           },
         ],
       },
@@ -233,6 +234,7 @@ describe('EditorCanvas bridge', () => {
     await flushPromises();
     const bridge = wrapper.vm as unknown as {
       setSelection(ids: string[], primaryId: string): void;
+      selectModelPart(nodeId: string, objectId: string): boolean;
       setTransformMode(mode: 'translate' | 'rotate' | 'scale'): void;
       setTransformSpace(space: 'local' | 'world'): void;
       handleShortcut(code: string): boolean;
@@ -247,6 +249,7 @@ describe('EditorCanvas bridge', () => {
     };
 
     bridge.setSelection(['node-1'], 'node-1');
+    expect(bridge.selectModelPart('node-1', 'object-1')).toBe(true);
     bridge.setTransformMode('rotate');
     bridge.setTransformSpace('local');
     expect(bridge.handleShortcut('Escape')).toBe(true);
@@ -262,6 +265,10 @@ describe('EditorCanvas bridge', () => {
     expect(mocks.engine.setSelection).toHaveBeenCalledWith(
       ['node-1'],
       'node-1',
+    );
+    expect(mocks.engine.selectModelPart).toHaveBeenCalledWith(
+      'node-1',
+      'object-1',
     );
     expect(mocks.engine.setTransformMode).toHaveBeenCalledWith('rotate');
     expect(mocks.engine.setTransformSpace).toHaveBeenCalledWith('local');

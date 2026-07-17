@@ -114,6 +114,11 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
   private documentSystem?: SceneDocumentSystem;
   private selectionSystem?: SelectionSystem;
   private selectionHighlight?: SelectionBoxSystem;
+  private activeModelPart?: {
+    nodeId: string;
+    objectId: string;
+    object: Object3D;
+  };
   private transformSystem?: TransformSystem;
   private pointerLockSystem?: PointerLockSystem;
   private measurementSystem?: MeasurementSystem;
@@ -348,6 +353,7 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.selectionSystem?.setEnabled(true);
     this.selectionSystem?.setSelection([]);
     this.transformSystem?.setSelection(null);
+    this.activeModelPart = undefined;
     if (!this.documentSystem || resolver !== this.assetResolver) {
       this.selectionSystem?.dispose();
       this.selectionSystem = undefined;
@@ -380,22 +386,28 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
 
   removeNodes(ids: Iterable<string>): void {
     const removing = [...ids];
+    const selectedPart = this.activeModelPart;
     this.documentSystem?.removeNodes(removing);
     const selection = this.selectionSystem?.getSelection();
     if (selection) {
       this.selectionSystem?.setSelection(selection.ids, selection.primaryId);
     }
+    if (selectedPart) this.restoreModelPartSelection(selectedPart);
     this.emitStats();
     this.invalidate();
   }
 
   async updateNode(node: SceneNode): Promise<void> {
+    const selectedPart = this.activeModelPart;
     await this.documentSystem?.updateNode(node);
     const selection = this.selectionSystem?.getSelection();
     if (selection?.ids.includes(node.id)) {
       this.selectionSystem?.setSelection(selection.ids, selection.primaryId);
     }
-    if (selection?.primaryId === node.id) {
+    const restoredPart = selectedPart
+      ? this.restoreModelPartSelection(selectedPart)
+      : false;
+    if (selection?.primaryId === node.id && !restoredPart) {
       // 锁定状态可由属性面板实时修改，手柄 attach 状态必须同步刷新。
       this.transformSystem?.setSelection(selection.primaryId);
     }
@@ -437,7 +449,59 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
   }
 
   setSelection(ids: Iterable<string>, primaryId?: string | null): void {
+    // 普通业务选择必须恢复整模高亮，不能继续引用上一加载代次的内部 Mesh。
+    const wasModelPartSelected = this.activeModelPart !== undefined;
+    this.activeModelPart = undefined;
     this.selectionSystem?.setSelection(ids, primaryId);
+    if (wasModelPartSelected) {
+      this.transformSystem?.setSelection(
+        this.selectionSystem?.getSelection().primaryId ?? null,
+      );
+    }
+  }
+
+  /**
+   * 精确高亮模型二级项，但业务主选择仍保持所属 SceneNode。
+   * 内部 Mesh 没有持久化变换协议，因此必须主动卸下 TransformControls。
+   */
+  selectModelPart(nodeId: string, objectId: string): boolean {
+    const object = this.documentSystem?.getModelPartObject(nodeId, objectId);
+    this.activeModelPart = undefined;
+    if (!object) {
+      const selection = this.selectionSystem?.getSelection();
+      if (selection) {
+        this.selectionSystem?.setSelection(selection.ids, selection.primaryId);
+        this.transformSystem?.setSelection(selection.primaryId);
+      }
+      return false;
+    }
+
+    // selectionchange 是同步事件；宿主回写业务选择结束后再覆盖为精确 Mesh 高亮。
+    this.selectionSystem?.setSelection([nodeId], nodeId);
+    this.selectionHighlight?.setObjects([object]);
+    this.transformSystem?.setSelection(null);
+    this.activeModelPart = { nodeId, objectId, object };
+    this.invalidate();
+    return true;
+  }
+
+  /** 节点增量操作会刷新整模高亮；若内部 UUID 仍有效则恢复精确选择。 */
+  private restoreModelPartSelection(selection: {
+    nodeId: string;
+    objectId: string;
+  }): boolean {
+    const object = this.documentSystem?.getModelPartObject(
+      selection.nodeId,
+      selection.objectId,
+    );
+    if (!object) {
+      this.activeModelPart = undefined;
+      return false;
+    }
+    this.selectionHighlight?.setObjects([object]);
+    this.transformSystem?.setSelection(null);
+    this.activeModelPart = { ...selection, object };
+    return true;
   }
 
   /** 切换源站第一/第三人称模式，并让 OrbitControls 与 PointerLockControls 互斥。 */
@@ -445,6 +509,7 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     if (!this.pointerLockSystem) return false;
     if (!this.pointerLockSystem.isActive) {
       this.measurementSystem?.end();
+      this.activeModelPart = undefined;
       this.selectionSystem?.setSelection([]);
       this.transformSystem?.setSelection(null);
       this.selectionSystem?.setEnabled(false);
@@ -457,6 +522,7 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     if (!this.measurementSystem) return false;
     if (enabled) {
       this.pointerLockSystem?.deactivate();
+      this.activeModelPart = undefined;
       this.selectionSystem?.setSelection([]);
       this.transformSystem?.setSelection(null);
       this.selectionSystem?.setEnabled(false);
@@ -523,12 +589,14 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
   }
 
   focusSelection(): boolean {
+    const activePart = this.activeModelPart?.object;
     const selection = this.selectionSystem?.getSelection();
-    if (!selection || selection.ids.length === 0) return false;
-    const objects = selection.ids.flatMap((id) => {
-      const object = this.documentSystem?.getObject(id);
-      return object ? [object] : [];
-    });
+    const objects = activePart
+      ? [activePart]
+      : (selection?.ids.flatMap((id) => {
+          const object = this.documentSystem?.getObject(id);
+          return object ? [object] : [];
+        }) ?? []);
     if (objects.length === 0) return false;
     this.cameraSystem?.cancel();
 
@@ -665,6 +733,8 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
         highlight: this.selectionHighlight,
         orbitControls: this.controls,
         onSelectionChange: (selection) => {
+          // 画布射线选中业务节点后，SelectionSystem 已经恢复了整模包围盒。
+          this.activeModelPart = undefined;
           this.transformSystem?.setSelection(selection.primaryId);
           this.dispatchEvent({ type: 'selectionchange', ...selection });
           this.invalidate();

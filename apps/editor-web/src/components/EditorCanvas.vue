@@ -155,6 +155,11 @@ function setSelection(ids: Iterable<string>, primaryId?: string | null): void {
   engine.setSelection(ids, primaryId);
 }
 
+/** 运行时 UUID 只在 Engine 内解析，Vue 层不直接持有或修改 Three 对象。 */
+function selectModelPart(nodeId: string, objectId: string): boolean {
+  return engine.selectModelPart(nodeId, objectId);
+}
+
 function setTransformMode(mode: 'translate' | 'rotate' | 'scale'): void {
   engine.setTransformMode(mode);
 }
@@ -262,6 +267,7 @@ defineExpose({
   applyNodeUpdated,
   applySceneSettings,
   setSelection,
+  selectModelPart,
   setTransformMode,
   setTransformSpace,
   handleShortcut,

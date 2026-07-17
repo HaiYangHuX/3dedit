@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import type { SceneDocument, SceneNode } from '@digital-twin/scene-schema';
 import type {
+  ModelAssetFormat,
+  ModelPartItem,
   ModelStructureMap,
-  ModelStructureNode,
   SelectionState,
 } from '@digital-twin/three-engine';
 import {
@@ -32,6 +33,10 @@ import {
   type NodeDropType,
 } from 'element-plus';
 import { computed, ref, watch, type Component } from 'vue';
+import {
+  formatModelInstanceName,
+  MODEL_INSTANCE_NAME_VERSION_KEY,
+} from '../../editor/createSceneNode';
 
 interface TreeItem {
   key: string;
@@ -40,6 +45,7 @@ interface TreeItem {
   ownerNodeId: string;
   name: string;
   objectType?: string;
+  targetObjectId?: string;
   node?: SceneNode;
   children: TreeItem[];
 }
@@ -49,15 +55,26 @@ const props = withDefaults(
     document: SceneDocument;
     selection: SelectionState;
     modelStructures?: ModelStructureMap;
+    modelAssetFormats?: Partial<Record<string, ModelAssetFormat>>;
+    selectedModelPart?: { nodeId: string; objectId: string } | null;
     changeVersion?: number;
   }>(),
   {
     modelStructures: () => ({}),
+    modelAssetFormats: () => ({}),
+    selectedModelPart: null,
     changeVersion: 0,
   },
 );
 const emit = defineEmits<{
   select: [selection: SelectionState];
+  'select-model-part': [
+    selection: {
+      nodeId: string;
+      objectId: string;
+      targetObjectId: string;
+    },
+  ];
   'toggle-visible': [id: string, enabled: boolean];
   'toggle-locked': [id: string, locked: boolean];
   rename: [id: string, name: string];
@@ -70,18 +87,18 @@ const emit = defineEmits<{
 const query = ref('');
 const treeRef = ref<InstanceType<typeof ElTree>>();
 
-function buildModelPart(
-  part: ModelStructureNode,
-  ownerNodeId: string,
-): TreeItem {
+function buildModelPart(part: ModelPartItem, ownerNodeId: string): TreeItem {
   return {
-    key: `object:${part.objectId}`,
+    // Material 会在同一资源的多个实例之间共享，key 必须包含业务根才能全局唯一。
+    key: `object:${ownerNodeId}:${part.objectId}`,
     kind: 'model-part',
     id: part.objectId,
     ownerNodeId,
     name: part.name,
     objectType: part.objectType,
-    children: part.children.map((child) => buildModelPart(child, ownerNodeId)),
+    targetObjectId: part.targetObjectId,
+    // 源站对深层 Mesh 做 traverse 后平铺；模型项永远不能再产生第三级。
+    children: [],
   };
 }
 
@@ -105,11 +122,32 @@ function buildSceneItem(
     kind: 'scene-node',
     id,
     ownerNodeId: id,
-    name: node.name,
+    name: formatSceneNodeName(node),
     node,
     // 真实模型子结构属于当前根；持久化业务子节点继续按 childIds 排序。
     children: [...modelParts, ...businessChildren],
   };
+}
+
+function formatSceneNodeName(node: SceneNode): string {
+  const model = node.components.find((component) => component.kind === 'model');
+  if (model?.kind !== 'model') return node.name;
+  if (node.businessData[MODEL_INSTANCE_NAME_VERSION_KEY] === 1) {
+    return node.name;
+  }
+  const format = props.modelAssetFormats[model.assetId];
+  if (!format) return node.name;
+
+  // 旧场景未持久化源站四位随机码，用 SceneNode ID 派生稳定后缀，避免每次渲染改名。
+  let hash = 0;
+  for (const character of node.id) {
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  }
+  return formatModelInstanceName(
+    node.name,
+    format,
+    (hash % 10_000).toString().padStart(4, '0'),
+  );
 }
 
 const treeData = computed(() => {
@@ -143,6 +181,14 @@ const filterNode: FilterNodeMethodFunction = (_value, item) =>
   matchingKeys.value.has((item as TreeItem).key);
 
 function selectItem(event: MouseEvent, item: TreeItem): void {
+  if (item.kind === 'model-part' && item.targetObjectId) {
+    emit('select-model-part', {
+      nodeId: item.ownerNodeId,
+      objectId: item.id,
+      targetObjectId: item.targetObjectId,
+    });
+    return;
+  }
   const id = item.ownerNodeId;
   const additive = event.ctrlKey || event.metaKey;
   if (!additive) {
@@ -266,7 +312,11 @@ function sceneNodeIcon(item: TreeItem): Component {
         draggable
         highlight-current
         :current-node-key="
-          selection.primaryId ? `node:${selection.primaryId}` : undefined
+          selectedModelPart
+            ? `object:${selectedModelPart.nodeId}:${selectedModelPart.objectId}`
+            : selection.primaryId
+              ? `node:${selection.primaryId}`
+              : undefined
         "
         :expand-on-click-node="false"
         :filter-node-method="filterNode"
@@ -280,12 +330,18 @@ function sceneNodeIcon(item: TreeItem): Component {
             class="scene-tree-row"
             :class="{
               'is-selected':
-                data.kind === 'scene-node' && selection.ids.includes(data.id),
+                (data.kind === 'scene-node' &&
+                  !selectedModelPart &&
+                  selection.ids.includes(data.id)) ||
+                (data.kind === 'model-part' &&
+                  selectedModelPart?.nodeId === data.ownerNodeId &&
+                  selectedModelPart.objectId === data.id),
               'is-model-part': data.kind === 'model-part',
             }"
             :data-node-id="data.kind === 'scene-node' ? data.id : undefined"
             :data-object-id="data.kind === 'model-part' ? data.id : undefined"
             :data-object-type="data.objectType"
+            :data-target-object-id="data.targetObjectId"
             :data-owner-node-id="data.ownerNodeId"
           >
             <span

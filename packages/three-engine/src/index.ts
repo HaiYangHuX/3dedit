@@ -112,8 +112,8 @@ export {
 export type {
   AssetInstanceProvider,
   LoadReport,
+  ModelPartItem,
   ModelStructureMap,
-  ModelStructureNode,
   RenderStats,
   SceneStats,
 } from './types';

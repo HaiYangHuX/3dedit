@@ -27,6 +27,7 @@ import {
   createGeometryNode,
   createLightNode,
   createSceneNode,
+  MODEL_INSTANCE_NAME_VERSION_KEY,
   type GeometryPrimitive,
   type SceneLightType,
 } from './createSceneNode';
@@ -40,6 +41,7 @@ export interface EditorCanvasBridge {
   applyNodeUpdated(node: SceneNode): Promise<void>;
   applySceneSettings?(settings: SceneDocument['settings']): void;
   setSelection(ids: Iterable<string>, primaryId?: string | null): void;
+  selectModelPart?(nodeId: string, objectId: string): boolean;
   setTransformMode(mode: 'translate' | 'rotate' | 'scale'): void;
   setTransformSpace?(space: 'local' | 'world'): void;
   handleShortcut?(code: string): boolean;
@@ -91,7 +93,7 @@ export function useEditorCommands(
   }
 
   function addAssetNode(
-    asset: Pick<Asset, 'id' | 'name'>,
+    asset: Pick<Asset, 'id' | 'name' | 'format'>,
     position: Transform['position'],
   ): Promise<SceneNode> {
     return addNode(createAssetNode(asset, position));
@@ -127,7 +129,22 @@ export function useEditorCommands(
     nodeId: string,
     patch: EditableNodePatch,
   ): Promise<void> {
-    await documentStore.execute(new UpdateNodeCommand(nodeId, patch));
+    const current = documentStore.document.nodes[nodeId];
+    const isModel = current?.components.some(
+      (component) => component.kind === 'model',
+    );
+    const nextPatch =
+      patch.name !== undefined && current && isModel
+        ? {
+            ...patch,
+            businessData: {
+              ...current.businessData,
+              ...patch.businessData,
+              [MODEL_INSTANCE_NAME_VERSION_KEY]: 1,
+            },
+          }
+        : patch;
+    await documentStore.execute(new UpdateNodeCommand(nodeId, nextPatch));
     const node = documentStore.document.nodes[nodeId];
     if (node) await canvas.value?.applyNodeUpdated(node);
   }

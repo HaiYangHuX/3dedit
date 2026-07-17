@@ -1,5 +1,5 @@
 import type { SceneDocument, SceneNode } from '@digital-twin/scene-schema';
-import { Group, Light, Mesh, type Object3D, type Scene } from 'three';
+import { Group, Light, Material, Mesh, type Object3D, type Scene } from 'three';
 import { StaleAssetLoadError } from '../assets/AssetInstanceSystem.js';
 import {
   StaleMaterialLoadError,
@@ -14,8 +14,8 @@ import {
 import type {
   AssetInstanceProvider,
   LoadReport,
+  ModelPartItem,
   ModelStructureMap,
-  ModelStructureNode,
   SceneStats,
 } from '../types.js';
 
@@ -220,29 +220,33 @@ export class SceneDocumentSystem {
   }
 
   /**
-   * 从已加载模型导出展示用子树。具有 sceneNodeId 的对象是独立业务节点，
-   * 它会由 SceneDocument 树单独渲染，这里必须截断以防止重复。
+   * 源站虽然使用 traverse 读取模型，但输出是 Mesh/材质平铺列表而非 Object3D 树。
+   * 因此这里递归只负责寻找候选项，返回类型刻意不提供 children。
    */
   getModelStructures(): ModelStructureMap {
     const structures: ModelStructureMap = {};
     for (const [nodeId, object] of this.objects) {
       if (object.userData.primaryComponentKind !== 'model') continue;
-      const children = object.children.flatMap((child) => {
-        const projected = this.projectModelObject(child);
-        return projected ? [projected] : [];
-      });
-      const onlyChild = children[0];
-      // 多数 GLTF 会在 Scene 下再包一层同名 Group；源站树直接显示其内容，避免连续两行同名根。
-      structures[nodeId] =
-        children.length === 1 &&
-        onlyChild !== undefined &&
-        ['Group', 'Object3D', 'Scene'].includes(onlyChild.objectType) &&
-        onlyChild.name === object.name &&
-        onlyChild.children.length > 0
-          ? onlyChild.children
-          : children;
+      structures[nodeId] = this.collectModelParts(object);
     }
     return structures;
+  }
+
+  /** 只允许在所属模型根内解析瞬时 UUID，避免树快照串到其他模型或业务子树。 */
+  getModelPartObject(nodeId: string, objectId: string): Object3D | undefined {
+    const owner = this.objects.get(nodeId);
+    if (!owner || owner.userData.primaryComponentKind !== 'model') {
+      return undefined;
+    }
+    const target = owner.getObjectByProperty('uuid', objectId);
+    if (!(target instanceof Mesh)) return undefined;
+
+    let current: Object3D | null = target;
+    while (current && current !== owner) {
+      if (typeof current.userData.sceneNodeId === 'string') return undefined;
+      current = current.parent;
+    }
+    return current === owner ? target : undefined;
   }
 
   getStats(): SceneStats {
@@ -277,17 +281,36 @@ export class SceneDocumentSystem {
     return false;
   }
 
-  private projectModelObject(object: Object3D): ModelStructureNode | undefined {
-    if (typeof object.userData.sceneNodeId === 'string') return undefined;
-    return {
-      objectId: object.uuid,
-      name: object.name.trim() || object.type || '未命名节点',
-      objectType: object.type || 'Object3D',
-      children: object.children.flatMap((child) => {
-        const projected = this.projectModelObject(child);
-        return projected ? [projected] : [];
-      }),
+  private collectModelParts(owner: Object3D): ModelPartItem[] {
+    const parts = new Map<string, ModelPartItem>();
+    const visit = (object: Object3D, isOwner = false): void => {
+      // attachHierarchy 会把业务子节点挂到模型根下；它们必须由 SceneDocument 树单独展示。
+      if (!isOwner && typeof object.userData.sceneNodeId === 'string') return;
+      if (object instanceof Mesh) {
+        if (object.material instanceof Material) {
+          parts.set(object.uuid, {
+            objectId: object.uuid,
+            targetObjectId: object.uuid,
+            name: object.name || '未命名材质',
+            objectType: object.type,
+          });
+        } else if (Array.isArray(object.material)) {
+          for (const material of object.material) {
+            if (!material || parts.has(material.uuid)) continue;
+            // 源站用 Material UUID 作为多材质行键；另存 Mesh UUID 才能可靠执行高亮。
+            parts.set(material.uuid, {
+              objectId: material.uuid,
+              targetObjectId: object.uuid,
+              name: material.name || '未命名材质',
+              objectType: material.type,
+            });
+          }
+        }
+      }
+      for (const child of object.children) visit(child);
     };
+    visit(owner, true);
+    return [...parts.values()];
   }
 
   dispose(): void {

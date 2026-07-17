@@ -7,6 +7,8 @@ import { projectApi } from '../src/api/projects';
 import {
   createAssetNode,
   createGeometryNode,
+  createModelInstanceName,
+  MODEL_INSTANCE_NAME_VERSION_KEY,
 } from '../src/editor/createSceneNode';
 import {
   useEditorCommands,
@@ -60,11 +62,12 @@ describe('editor commands', () => {
   });
 
   it('节点工厂为模型生成 UUID、默认变换和组件', () => {
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0.5076);
     const node = createAssetNode(asset, [1, 0, 2]);
 
     expect(node.id).toMatch(/[0-9a-f-]{36}/i);
     expect(node).toMatchObject({
-      name: '离心泵',
+      name: '离心泵.glb_5076',
       parentId: null,
       transform: {
         position: [1, 0, 2],
@@ -74,6 +77,10 @@ describe('editor commands', () => {
       components: [{ kind: 'model', assetId: 'asset-1' }],
       businessData: {},
     });
+    expect(node.businessData).toEqual({
+      [MODEL_INSTANCE_NAME_VERSION_KEY]: 1,
+    });
+    random.mockRestore();
   });
 
   it('基础几何体使用可保存的显式默认材质', () => {
@@ -87,6 +94,18 @@ describe('editor commands', () => {
         roughness: 0.72,
       }),
     ]);
+  });
+
+  it('模型实例名不会重复追加扩展名或已有四位后缀', () => {
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0.0042);
+
+    expect(createModelInstanceName('刀具库.glb', 'glb')).toBe(
+      '刀具库.glb_0042',
+    );
+    expect(createModelInstanceName('刀具库.glb_5076', 'glb')).toBe(
+      '刀具库.glb_5076',
+    );
+    random.mockRestore();
   });
 
   it('模型拖放通过命令写入文档并增量加入引擎', async () => {
@@ -209,7 +228,7 @@ describe('editor commands', () => {
     const commands = useEditorCommands(shallowRef(bridge));
     const first = await commands.addAssetNode(asset, [0, 0, 0]);
     const second = await commands.addAssetNode(
-      { id: 'asset-2', name: '罐体' },
+      { id: 'asset-2', name: '罐体', format: 'glb' },
       [2, 0, 0],
     );
 

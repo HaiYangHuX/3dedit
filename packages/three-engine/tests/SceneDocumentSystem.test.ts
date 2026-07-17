@@ -6,7 +6,6 @@ import {
   HemisphereLight,
   Mesh,
   MeshStandardMaterial,
-  Object3D,
   PointLight,
   Scene,
   SpotLight,
@@ -180,17 +179,25 @@ describe('SceneDocumentSystem', () => {
     expect(system.getStats()).toMatchObject({ objectCount: 8, meshCount: 3 });
   });
 
-  it('从真实 Object3D 投影模型内部结构并排除业务子节点', async () => {
+  it('按源站规则将深层 Mesh 平铺为固定二级并排除业务子树', async () => {
     const scene = new Scene();
     const modelObject = new Group();
-    const assembly = new Group();
-    assembly.name = '装配体';
+    const redundantGroups = new Group();
+    redundantGroups.name = '不应展示的包装层';
     const unnamedMesh = new Mesh(
       new BoxGeometry(1, 1, 1),
       new MeshStandardMaterial({ color: '#fff' }),
     );
-    assembly.add(unnamedMesh);
-    modelObject.add(assembly);
+    const nestedGroup = new Group();
+    nestedGroup.name = '不应展示的装配层';
+    const namedMesh = new Mesh(
+      new BoxGeometry(1, 1, 1),
+      new MeshStandardMaterial({ color: '#fff' }),
+    );
+    namedMesh.name = '支架';
+    nestedGroup.add(namedMesh);
+    redundantGroups.add(unnamedMesh, nestedGroup);
+    modelObject.add(redundantGroups);
     const assets: AssetInstanceProvider = {
       beginGeneration: vi.fn(() => 1),
       instantiate: vi.fn(async () => modelObject),
@@ -214,34 +221,41 @@ describe('SceneDocumentSystem', () => {
     expect(system.getModelStructures()).toEqual({
       model: [
         {
-          objectId: assembly.uuid,
-          name: '装配体',
-          objectType: 'Group',
-          children: [
-            {
-              objectId: unnamedMesh.uuid,
-              name: 'Mesh',
-              objectType: 'Mesh',
-              children: [],
-            },
-          ],
+          objectId: unnamedMesh.uuid,
+          targetObjectId: unnamedMesh.uuid,
+          name: '未命名材质',
+          objectType: 'Mesh',
+        },
+        {
+          objectId: namedMesh.uuid,
+          targetObjectId: namedMesh.uuid,
+          name: '支架',
+          objectType: 'Mesh',
         },
       ],
     });
+    expect(system.getModelPartObject('model', namedMesh.uuid)).toBe(namedMesh);
+    expect(
+      system.getModelPartObject(
+        'model',
+        system.getObject('business-child')!.uuid,
+      ),
+    ).toBeUndefined();
   });
 
-  it('展示树打平与业务根同名的单一模型包装组', async () => {
+  it('多材质 Mesh 使用材质名称去重但仍解析到所属 Mesh', async () => {
     const scene = new Scene();
     const modelObject = new Group();
-    const redundantWrapper = new Object3D();
-    redundantWrapper.name = '清洗机';
-    const mesh = new Mesh(
-      new BoxGeometry(1, 1, 1),
-      new MeshStandardMaterial({ color: '#fff' }),
-    );
-    mesh.name = '叶轮';
-    redundantWrapper.add(mesh);
-    modelObject.add(redundantWrapper);
+    const sharedMaterial = new MeshStandardMaterial({ color: '#fff' });
+    sharedMaterial.name = '刀具库框架-材质';
+    const unnamedMaterial = new MeshStandardMaterial({ color: '#999' });
+    const mesh = new Mesh(new BoxGeometry(1, 1, 1), [
+      sharedMaterial,
+      unnamedMaterial,
+      sharedMaterial,
+    ]);
+    mesh.name = '多材质外壳';
+    modelObject.add(mesh);
     const assets: AssetInstanceProvider = {
       beginGeneration: vi.fn(() => 1),
       instantiate: vi.fn(async () => modelObject),
@@ -251,7 +265,6 @@ describe('SceneDocumentSystem', () => {
     const system = new SceneDocumentSystem(scene, assets);
     const document = createDefaultSceneDocument('project-1', 'scene-1', '场景');
     const model = node('model', { kind: 'model', assetId: 'asset-1' });
-    model.name = '清洗机';
     document.nodes = { model };
     document.rootNodeIds = [model.id];
 
@@ -259,12 +272,19 @@ describe('SceneDocumentSystem', () => {
 
     expect(system.getModelStructures().model).toEqual([
       {
-        objectId: mesh.uuid,
-        name: '叶轮',
-        objectType: 'Mesh',
-        children: [],
+        objectId: sharedMaterial.uuid,
+        targetObjectId: mesh.uuid,
+        name: '刀具库框架-材质',
+        objectType: 'MeshStandardMaterial',
+      },
+      {
+        objectId: unnamedMaterial.uuid,
+        targetObjectId: mesh.uuid,
+        name: '未命名材质',
+        objectType: 'MeshStandardMaterial',
       },
     ]);
+    expect(system.getModelPartObject('model', mesh.uuid)).toBe(mesh);
   });
 
   it('属性面板切换几何体类型时替换并释放旧几何资源', async () => {

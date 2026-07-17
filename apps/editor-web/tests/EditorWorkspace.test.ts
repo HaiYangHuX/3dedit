@@ -128,9 +128,9 @@ describe('EditorWorkspace', () => {
       'runtime-model': [
         {
           objectId: 'runtime-mesh',
+          targetObjectId: 'runtime-mesh',
           name: '清洗机机体',
           objectType: 'Mesh',
-          children: [],
         },
       ],
     };
@@ -191,9 +191,47 @@ describe('EditorWorkspace', () => {
     expect(commandMocks.addGeometry).toHaveBeenCalledWith('box', [4, 0.5, 6]);
     expect(commandMocks.addLight).toHaveBeenCalledWith('point', [-2, 0.5, 3]);
     expect(commandMocks.addAssetNode).toHaveBeenCalledWith(
-      { id: 'asset-1', name: '水泵' },
+      { id: 'asset-1', name: '水泵', format: 'glb' },
       [1, 0, 2],
     );
+  });
+
+  it('把二级项选择交给 Canvas，并在模型 UUID 失效后清理 current', async () => {
+    const selectModelPart = vi.fn(() => true);
+    const setSelection = vi.fn();
+    const wrapper = mount(EditorWorkspace, {
+      global: {
+        plugins: [createTestingPinia({ createSpy: vi.fn })],
+        stubs: {
+          EditorCanvas: {
+            name: 'EditorCanvas',
+            methods: { selectModelPart, setSelection },
+            template: '<div data-testid="editor-canvas" />',
+          },
+          RouterLink: { template: '<a><slot /></a>' },
+        },
+      },
+    });
+    const tree = wrapper.findComponent({ name: 'SceneTree' });
+    tree.vm.$emit('select-model-part', {
+      nodeId: 'model-1',
+      objectId: 'material-1',
+      targetObjectId: 'mesh-1',
+    });
+    await flushPromises();
+
+    expect(selectModelPart).toHaveBeenCalledWith('model-1', 'mesh-1');
+    expect(tree.props('selectedModelPart')).toEqual({
+      nodeId: 'model-1',
+      objectId: 'material-1',
+    });
+
+    wrapper
+      .findComponent({ name: 'EditorCanvas' })
+      .vm.$emit('model-structure-change', { 'model-1': [] });
+    await flushPromises();
+    expect(tree.props('selectedModelPart')).toBeNull();
+    expect(setSelection).toHaveBeenCalled();
   });
 
   it('将源站视口工具转发到对应编辑命令', async () => {
