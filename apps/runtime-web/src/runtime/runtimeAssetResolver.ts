@@ -4,6 +4,7 @@ import type {
   ModelAssetFormat,
   TextureAssetFormat,
 } from '@digital-twin/three-engine';
+import { BUILTIN_ENVIRONMENT_ASSETS } from '@digital-twin/three-engine';
 import type { PublicationManifest } from '../api/runtime.js';
 
 const modelFormats = new Set<ModelAssetFormat>([
@@ -45,6 +46,17 @@ export function createPreviewAssetResolver(
 ): AssetResolver {
   return {
     async resolve(assetId) {
+      const builtinEnvironment = BUILTIN_ENVIRONMENT_ASSETS.find(
+        (asset) => asset.id === assetId,
+      );
+      if (builtinEnvironment) {
+        return {
+          assetId: builtinEnvironment.id,
+          name: builtinEnvironment.name,
+          format: builtinEnvironment.format,
+          url: builtinEnvironment.url,
+        };
+      }
       const asset = await client.getAsset(assetId);
       if (asset.status !== 'ready') {
         throw new Error(`资源尚未处理完成: ${asset.name}`);
@@ -84,6 +96,17 @@ export function createPublicationAssetResolver(
 ): AssetResolver {
   return {
     async resolve(assetId) {
+      const builtinEnvironment = BUILTIN_ENVIRONMENT_ASSETS.find(
+        (asset) => asset.id === assetId,
+      );
+      if (builtinEnvironment) {
+        return {
+          assetId: builtinEnvironment.id,
+          name: builtinEnvironment.name,
+          format: builtinEnvironment.format,
+          url: builtinEnvironment.url,
+        };
+      }
       const asset = assets[assetId];
       if (!asset) throw new Error(`发布包未包含资源: ${assetId}`);
       if (

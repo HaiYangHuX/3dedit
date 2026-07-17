@@ -76,6 +76,16 @@ test('编辑器工作台创建真实 WebGL Canvas', async ({ page }) => {
   await expect(page.getByTestId('environment-hint')).toContainText(
     '内置 Venice HDR',
   );
+  await expect(
+    page.getByTestId('environment-presets').locator('button'),
+  ).toHaveCount(6);
+  await page
+    .getByTestId('environment-preset-builtin-environment-cathedral')
+    .click();
+  await expect(page.getByTestId('environment-preview')).toHaveAttribute(
+    'src',
+    /cathedral\.png$/,
+  );
   // 项目配置复用检查器公共控件高度，不能比节点属性输入框更大。
   expect(
     (

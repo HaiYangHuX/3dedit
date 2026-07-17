@@ -1,4 +1,5 @@
 import { createDefaultSceneDocument } from '@digital-twin/scene-schema';
+import { BUILTIN_ENVIRONMENT_ASSETS } from '@digital-twin/three-engine';
 import { mount } from '@vue/test-utils';
 import { ElOption, ElSelect, ElSlider } from 'element-plus';
 import { describe, expect, it } from 'vitest';
@@ -110,5 +111,34 @@ describe('SceneSettingsInspector', () => {
     await input.trigger('change');
     expect(wrapper.emitted('upload-environment')?.at(-1)).toEqual([file]);
     expect(input.attributes('accept')).toBe('.jpg,.png,.hdr');
+  });
+
+  it('展示六张内置环境图并以环境资源 ID 提交选择', async () => {
+    const wrapper = mount(SceneSettingsInspector, {
+      props: { settings: defaultSettings(), assets: [] },
+    });
+    const presets = wrapper.findAll('[data-testid^="environment-preset-"]');
+    expect(presets).toHaveLength(BUILTIN_ENVIRONMENT_ASSETS.length);
+
+    await presets[0]!.trigger('click');
+    expect(wrapper.emitted('update')?.at(-1)).toEqual([
+      {
+        environmentEnabled: true,
+        environmentAssetId: BUILTIN_ENVIRONMENT_ASSETS[0]!.id,
+      },
+    ]);
+  });
+
+  it('文档对象原地更新时按变更代次刷新环境预览', async () => {
+    const settings = defaultSettings();
+    const wrapper = mount(SceneSettingsInspector, {
+      props: { settings, assets: [], changeVersion: 0 },
+    });
+    settings.environmentAssetId = BUILTIN_ENVIRONMENT_ASSETS[0]!.id;
+    await wrapper.setProps({ changeVersion: 1 });
+
+    expect(
+      wrapper.get('[data-testid="environment-preview"]').attributes('src'),
+    ).toMatch(/cathedral\.png$/);
   });
 });

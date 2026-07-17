@@ -2,6 +2,7 @@
 import type { Asset } from '@digital-twin/api-contracts';
 import type { EditableSceneSettingsPatch } from '@digital-twin/editor-core';
 import type { SceneDocument, SceneSettings } from '@digital-twin/scene-schema';
+import { BUILTIN_ENVIRONMENT_ASSETS } from '@digital-twin/three-engine';
 import {
   ElColorPicker,
   ElInputNumber,
@@ -102,17 +103,33 @@ const weatherOptions: Array<{
   { value: 'snow', label: '雪' },
 ];
 
-const backgroundAsset = computed(() =>
-  props.assets.find(({ id }) => id === props.settings.backgroundAssetId),
-);
-const environmentAsset = computed(() =>
-  props.assets.find(({ id }) => id === props.settings.environmentAssetId),
-);
-const environmentPreview = computed(() =>
-  props.settings.environmentAssetId
-    ? environmentAsset.value?.thumbnailUrl
-    : props.builtinEnvironmentPreviewUrl,
-);
+const backgroundAsset = computed(() => {
+  // 文档 Store 采用 shallowRef，命令会原地更新 settings；代次是这里的响应式刷新信号。
+  void props.changeVersion;
+  return props.assets.find(({ id }) => id === props.settings.backgroundAssetId);
+});
+const environmentAsset = computed(() => {
+  // 同一份资源对象可能被上传状态原地更新，不能只依赖 assets 数组引用。
+  void props.changeVersion;
+  return props.assets.find(
+    ({ id }) => id === props.settings.environmentAssetId,
+  );
+});
+const builtinEnvironmentAsset = computed(() => {
+  // 内置环境 ID 随场景设置变化，使用代次让缓存 computed 重新求值。
+  void props.changeVersion;
+  return BUILTIN_ENVIRONMENT_ASSETS.find(
+    ({ id }) => id === props.settings.environmentAssetId,
+  );
+});
+const environmentPreview = computed(() => {
+  // settings 是稳定对象，必须显式读取 changeVersion 才能感知原地 patch。
+  void props.changeVersion;
+  return props.settings.environmentAssetId
+    ? (environmentAsset.value?.thumbnailUrl ??
+        builtinEnvironmentAsset.value?.previewUrl)
+    : props.builtinEnvironmentPreviewUrl;
+});
 
 function commit<K extends keyof SceneSettings>(
   key: K,
@@ -158,6 +175,13 @@ function commitGround(value: SceneSettings['groundType']): void {
     groundType: value,
     gridVisible: value === 'grid',
   });
+}
+
+function selectBuiltinEnvironment(
+  id: SceneSettings['environmentAssetId'],
+): void {
+  if (!id) return;
+  emit('update', { environmentEnabled: true, environmentAssetId: id });
 }
 </script>
 
@@ -342,6 +366,26 @@ function commitGround(value: SceneSettings['groundType']): void {
           />
         </template>
       </div>
+    </div>
+    <div
+      v-if="settings.environmentEnabled"
+      class="environment-preset-grid"
+      data-testid="environment-presets"
+    >
+      <!-- 内置图与上传资源走同一个 environmentAssetId，发布时不依赖数据库素材。 -->
+      <button
+        v-for="preset in BUILTIN_ENVIRONMENT_ASSETS"
+        :key="preset.id"
+        type="button"
+        class="environment-preset"
+        :class="{ active: settings.environmentAssetId === preset.id }"
+        :data-testid="`environment-preset-${preset.id}`"
+        :title="`${preset.name}（设为环境贴图）`"
+        @click="selectBuiltinEnvironment(preset.id)"
+      >
+        <img :src="preset.previewUrl" :alt="preset.name" />
+        <span>{{ preset.name }}</span>
+      </button>
     </div>
     <p
       v-if="settings.environmentEnabled && !settings.environmentAssetId"

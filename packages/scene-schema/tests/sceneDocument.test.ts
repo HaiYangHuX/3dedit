@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BUILTIN_ENVIRONMENT_ASSET_IDS,
   collectAssetReferences,
   createDefaultMaterialComponent,
   createDefaultSceneDocument,
@@ -88,6 +89,17 @@ describe('SceneDocument', () => {
       weatherArea: 100,
       weatherHeight: 50,
     });
+  });
+
+  it('不把内置环境预设当成模型库资源引用', () => {
+    const document = createDefaultSceneDocument(
+      'project-1',
+      'scene-1',
+      '内置环境',
+    );
+    document.settings.environmentAssetId = BUILTIN_ENVIRONMENT_ASSET_IDS[0];
+
+    expect(collectAssetReferences(document)).toEqual([]);
   });
 
   it('拒绝父节点不存在的场景树', () => {

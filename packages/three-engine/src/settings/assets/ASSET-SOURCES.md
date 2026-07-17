@@ -27,6 +27,19 @@
 | `flower_blue.glb`                | `http://threeflowx.cn/edit/threeFile/glb/flower_blue.glb`         |  154308 | `1174f9130672bef1b5aa7e30a6d8b7ba8128ce59fa5c9d462ff04c21831851a8` |
 | `flower_yellow.glb`              | `http://threeflowx.cn/edit/threeFile/glb/flower_yellow.glb`       |  158712 | `778351964bf00f586a86280c9324376e9be845703d65566e24c74374cdd04f81` |
 
+## 内置环境结果图
+
+以下六张图由用户提供，作为内置环境预设随编辑器和发布运行时打包。它们使用 `builtin-environment-*` 协议 ID，不进入数据库素材引用和发布包复制流程。
+
+| 本地文件                     | 协议 ID                         | SHA-256                                                            |
+| ---------------------------- | ------------------------------- | ------------------------------------------------------------------ |
+| `environments/cathedral.png` | `builtin-environment-cathedral` | `f7061f72310a5c5442fcce0a9a3a7a0cfbf8bd62976895e76c9a3211db218ed3` |
+| `environments/bridge.png`    | `builtin-environment-bridge`    | `25c100f5fe63e55afc5c325d783a966d26493fa030b7ecc29072fcd31c2e8c54` |
+| `environments/glacier.png`   | `builtin-environment-glacier`   | `e3aa70e0570ca178eebe7ce1b2aef3ce77f0e3847b5d4b3c97d8a87dc429bf45` |
+| `environments/mountain.png`  | `builtin-environment-mountain`  | `0dc3607f5ab281abf68d9862ae0a5f62560a83222d3d3a45d56a961c8ace71cd` |
+| `environments/snowfield.png` | `builtin-environment-snowfield` | `a2ba45e3e1d18658958e575f20968c7d2921ee6d0afb4a044594093a16f1bed7` |
+| `environments/snow-town.png` | `builtin-environment-snow-town` | `b7ef434df9656b74bf5fc4db92aa3a2c89fc53f5ebf17ee0c7f4bcc84a252f4d` |
+
 ## 派生预览图
 
 `venice-sunset-preview.jpg` 由上表未修改的 `view-hdr-1.hdr` 解码、Reinhard 压缩和 sRGB gamma 转换后缩放为 640×320，只用于配置面板缩略图。Three.js 环境照明始终读取原始 HDR。

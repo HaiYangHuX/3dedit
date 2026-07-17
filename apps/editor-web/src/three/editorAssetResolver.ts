@@ -3,6 +3,7 @@ import type {
   ModelAssetFormat,
   TextureAssetFormat,
 } from '@digital-twin/three-engine';
+import { BUILTIN_ENVIRONMENT_ASSETS } from '@digital-twin/three-engine';
 import { assetApi } from '../api/assets';
 
 const modelFormats = new Set<ModelAssetFormat>([
@@ -34,6 +35,17 @@ function isTextureFormat(value: string): value is TextureAssetFormat {
  */
 export const editorAssetResolver: AssetResolver = {
   async resolve(assetId) {
+    const builtinEnvironment = BUILTIN_ENVIRONMENT_ASSETS.find(
+      (asset) => asset.id === assetId,
+    );
+    if (builtinEnvironment) {
+      return {
+        assetId: builtinEnvironment.id,
+        name: builtinEnvironment.name,
+        format: builtinEnvironment.format,
+        url: builtinEnvironment.url,
+      };
+    }
     const asset = await assetApi.get(assetId);
     if (asset.status !== 'ready') {
       throw new Error(`资源尚未处理完成: ${asset.name}`);

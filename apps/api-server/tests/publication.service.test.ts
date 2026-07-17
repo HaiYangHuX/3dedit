@@ -1,4 +1,5 @@
 import {
+  BUILTIN_ENVIRONMENT_ASSET_IDS,
   createDefaultMaterialComponent,
   createDefaultSceneDocument,
   type SceneNode,
@@ -174,6 +175,43 @@ describe('PublicationService', () => {
       sceneId: 'scene-1',
       status: 'active',
     });
+  });
+
+  it('发布内置环境时不要求数据库素材或复制对象存储文件', async () => {
+    const row = sceneRow();
+    row.document.nodes = {};
+    row.document.rootNodeIds = [];
+    row.document.settings.environmentAssetId = BUILTIN_ENVIRONMENT_ASSET_IDS[0];
+    const findMany = vi.fn().mockResolvedValue([]);
+    const transaction = {
+      publication: {
+        upsert: vi.fn(async ({ create }) => ({
+          ...create,
+          publishedAt: now,
+          updatedAt: now,
+        })),
+      },
+    };
+    const prisma = {
+      scene: { findUnique: vi.fn().mockResolvedValue(row) },
+      asset: { findMany },
+      publication: { findUnique: vi.fn().mockResolvedValue(null) },
+      $transaction: vi.fn(async (callback) => callback(transaction)),
+    } as unknown as PrismaService;
+    const minio = {
+      copyObject: vi.fn(),
+      putJson: vi.fn().mockResolvedValue(undefined),
+      removePrefix: vi.fn().mockResolvedValue(undefined),
+    } as unknown as MinioService;
+
+    await new PublicationService(prisma, minio).publish('project-1', {
+      sceneId: 'scene-1',
+    });
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: { in: [] } } }),
+    );
+    expect(minio.copyObject).not.toHaveBeenCalled();
   });
 
   it('资源未就绪时拒绝发布且不写 MinIO', async () => {

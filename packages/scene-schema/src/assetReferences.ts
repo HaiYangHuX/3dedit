@@ -1,4 +1,5 @@
 import type { SceneDocument } from './schema.js';
+import { isBuiltinEnvironmentAssetId } from './builtinEnvironmentAssets.js';
 
 export interface AssetReference {
   assetId: string;
@@ -10,6 +11,7 @@ function addReference(
   assetId: string,
   nodeId?: string,
 ): void {
+  if (isBuiltinEnvironmentAssetId(assetId)) return;
   const nodeIds = references.get(assetId) ?? new Set<string>();
   if (nodeId) nodeIds.add(nodeId);
   references.set(assetId, nodeIds);

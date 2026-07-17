@@ -4,6 +4,11 @@ export {
   type AssetReference,
 } from './assetReferences.js';
 export {
+  BUILTIN_ENVIRONMENT_ASSET_IDS,
+  isBuiltinEnvironmentAssetId,
+  type BuiltinEnvironmentAssetId,
+} from './builtinEnvironmentAssets.js';
+export {
   createDefaultMaterialComponent,
   materialComponentSchema,
   materialSideSchema,

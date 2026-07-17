@@ -567,6 +567,47 @@ button {
   line-height: 1.4;
 }
 
+.environment-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  margin: -2px 0 8px 82px;
+}
+
+.environment-preset {
+  min-width: 0;
+  padding: 2px;
+  color: #9eacc0;
+  font-size: 10px;
+  text-align: left;
+  background: #0b1220;
+  border: 1px solid #2a3850;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.environment-preset:hover,
+.environment-preset.active {
+  color: #dbeafe;
+  border-color: #21d4e8;
+}
+
+.environment-preset img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1.8;
+  object-fit: cover;
+  border-radius: 2px;
+}
+
+.environment-preset span {
+  display: block;
+  padding: 2px 1px 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .scene-settings-inspector .el-select__wrapper,
 .scene-settings-inspector .el-input__wrapper,
 .scene-settings-inspector .el-input-number__decrease,

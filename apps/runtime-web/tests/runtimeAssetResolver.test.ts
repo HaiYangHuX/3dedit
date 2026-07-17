@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { BUILTIN_ENVIRONMENT_ASSETS } from '@digital-twin/three-engine';
 import {
   createPreviewAssetResolver,
   createPublicationAssetResolver,
@@ -91,6 +92,28 @@ describe('运行时资源解析器', () => {
     });
     await expect(publication.resolve('texture-1')).resolves.toMatchObject({
       format: 'png',
+    });
+  });
+
+  it('preview 与 publication 都能直接解析内置环境预设', async () => {
+    // 预设清单为空属于引擎包契约错误，首项非空断言让测试聚焦解析协议。
+    const preset = BUILTIN_ENVIRONMENT_ASSETS[0]!;
+    const preview = createPreviewAssetResolver({
+      getAsset: vi.fn(),
+    });
+    const publication = createPublicationAssetResolver({});
+
+    await expect(preview.resolve(preset.id)).resolves.toEqual({
+      assetId: preset.id,
+      name: preset.name,
+      format: preset.format,
+      url: preset.url,
+    });
+    await expect(publication.resolve(preset.id)).resolves.toEqual({
+      assetId: preset.id,
+      name: preset.name,
+      format: preset.format,
+      url: preset.url,
     });
   });
 });

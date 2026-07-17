@@ -1,4 +1,8 @@
-import type { SceneSettings } from '@digital-twin/scene-schema';
+import {
+  BUILTIN_ENVIRONMENT_ASSET_IDS,
+  type BuiltinEnvironmentAssetId,
+  type SceneSettings,
+} from '@digital-twin/scene-schema';
 
 // URL 必须保持字面量，Vite 才能在 editor/runtime 两个入口中稳定收集这些资源。
 const environmentUrl = new URL('./assets/view-hdr-1.hdr', import.meta.url).href;
@@ -77,6 +81,30 @@ const snowSpriteUrl = new URL(
   './assets/snowflake-BEmTO7u1.png',
   import.meta.url,
 ).href;
+const environmentCathedralUrl = new URL(
+  './assets/environments/cathedral.png',
+  import.meta.url,
+).href;
+const environmentBridgeUrl = new URL(
+  './assets/environments/bridge.png',
+  import.meta.url,
+).href;
+const environmentGlacierUrl = new URL(
+  './assets/environments/glacier.png',
+  import.meta.url,
+).href;
+const environmentMountainUrl = new URL(
+  './assets/environments/mountain.png',
+  import.meta.url,
+).href;
+const environmentSnowfieldUrl = new URL(
+  './assets/environments/snowfield.png',
+  import.meta.url,
+).href;
+const environmentSnowTownUrl = new URL(
+  './assets/environments/snow-town.png',
+  import.meta.url,
+).href;
 
 /** 供哈希回归测试遍历的源站原始文件；预览图是本地派生资源，不列入源文件哈希。 */
 export const BUILTIN_ASSET_URLS = {
@@ -111,6 +139,60 @@ export const BUILTIN_ENVIRONMENT_PREVIEW_URL = new URL(
   './assets/venice-sunset-preview.jpg',
   import.meta.url,
 ).href;
+
+export interface BuiltinEnvironmentAsset {
+  id: BuiltinEnvironmentAssetId;
+  name: string;
+  format: 'png';
+  url: string;
+  previewUrl: string;
+}
+
+/** 用户提供的结果图作为内置环境预设打包，编辑器与发布运行时共用同一 URL。 */
+export const BUILTIN_ENVIRONMENT_ASSETS: readonly BuiltinEnvironmentAsset[] = [
+  {
+    id: BUILTIN_ENVIRONMENT_ASSET_IDS[0],
+    name: '教堂',
+    format: 'png',
+    url: environmentCathedralUrl,
+    previewUrl: environmentCathedralUrl,
+  },
+  {
+    id: BUILTIN_ENVIRONMENT_ASSET_IDS[1],
+    name: '桥梁',
+    format: 'png',
+    url: environmentBridgeUrl,
+    previewUrl: environmentBridgeUrl,
+  },
+  {
+    id: BUILTIN_ENVIRONMENT_ASSET_IDS[2],
+    name: '冰川',
+    format: 'png',
+    url: environmentGlacierUrl,
+    previewUrl: environmentGlacierUrl,
+  },
+  {
+    id: BUILTIN_ENVIRONMENT_ASSET_IDS[3],
+    name: '山地',
+    format: 'png',
+    url: environmentMountainUrl,
+    previewUrl: environmentMountainUrl,
+  },
+  {
+    id: BUILTIN_ENVIRONMENT_ASSET_IDS[4],
+    name: '雪原',
+    format: 'png',
+    url: environmentSnowfieldUrl,
+    previewUrl: environmentSnowfieldUrl,
+  },
+  {
+    id: BUILTIN_ENVIRONMENT_ASSET_IDS[5],
+    name: '雪夜小镇',
+    format: 'png',
+    url: environmentSnowTownUrl,
+    previewUrl: environmentSnowTownUrl,
+  },
+] as const;
 
 type GroundAssetKey = Exclude<SceneSettings['groundType'], 'none' | 'grid'>;
 

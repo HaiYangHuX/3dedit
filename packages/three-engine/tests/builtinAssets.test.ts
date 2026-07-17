@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   BUILTIN_ASSET_URLS,
   BUILTIN_ENVIRONMENT_PREVIEW_URL,
+  BUILTIN_ENVIRONMENT_ASSETS,
   BUILTIN_ENVIRONMENT_URL,
   GROUND_ASSETS,
   WEATHER_ASSETS,
@@ -79,5 +80,15 @@ describe('ThreeFlowX 内置项目资源', () => {
     });
     expect(BUILTIN_ENVIRONMENT_URL).toBe(BUILTIN_ASSET_URLS.environment);
     expect(BUILTIN_ENVIRONMENT_PREVIEW_URL).toMatch(/\.jpg$/);
+  });
+
+  it('内置六张环境结果图通过稳定 ID 和本地 URL 暴露', async () => {
+    expect(BUILTIN_ENVIRONMENT_ASSETS).toHaveLength(6);
+    for (const asset of BUILTIN_ENVIRONMENT_ASSETS) {
+      const content = await readFile(fileURLToPath(asset.url));
+      expect(content.byteLength).toBeGreaterThan(0);
+      expect(asset.url).not.toContain('threeflowx.cn');
+      expect(asset.previewUrl).toBe(asset.url);
+    }
   });
 });
