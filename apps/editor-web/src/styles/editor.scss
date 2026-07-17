@@ -918,6 +918,46 @@ button {
 }
 
 /* ThreeFlowX 对标阶段通过后置规则覆盖旧骨架；完成全文件拆分前保留管理页原选择器。 */
+
+@font-face {
+  font-family: iconfont;
+  src: url('/fonts/iconfont-C5QZIOO0.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+}
+
+.iconfont {
+  font-family: iconfont, sans-serif !important;
+  font-style: normal;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.icon-tuozhuai::before {
+  content: '\e636';
+}
+
+.icon-xuanzhuan::before {
+  content: '\e6e2';
+}
+
+.icon-suofang::before {
+  content: '\e660';
+}
+
+.icon-shubiaozhizhen-diyirenchengmanyou-yidong::before {
+  content: '\e72d';
+}
+
+.icon-a-disanrencheng1x::before {
+  content: '\e843';
+}
+
+.icon-24gf-camera2::before {
+  content: '\e9f3';
+}
 /* stylelint-disable no-duplicate-selectors, no-descending-specificity */
 .editor-workspace {
   grid-template-columns: 180px minmax(0, 1fr) 340px;
@@ -1253,54 +1293,102 @@ button {
 }
 
 .viewport-tools {
-  top: 10px;
-  gap: 1px;
+  top: 12px;
+  gap: 6px;
   align-items: center;
   max-width: calc(100% - 24px);
-  height: 36px;
-  padding: 4px 5px;
-  overflow-x: auto;
-  color: #9daec3;
-  background: rgb(7 10 19 / 90%);
-  border: 1px solid #26344a;
-  border-radius: 4px;
+  min-height: 34px;
+  padding: 4px 8px;
+  overflow: visible;
+  color: #7aa2f7;
+  background: rgb(11 15 25 / 85%);
+  border: 1px solid rgb(56 189 248 / 25%);
+  border-radius: 6px;
   box-shadow: 0 8px 24px rgb(0 0 0 / 24%);
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(10px);
+  pointer-events: none;
 }
 
-.viewport-tools button {
+.viewport-tool-group {
   display: inline-flex;
-  flex: 0 0 30px;
-  gap: 4px;
+  align-items: center;
+  gap: 6px;
+}
+
+.viewport-tools .transform-controls-item {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 26px;
   align-items: center;
   justify-content: center;
-  width: 30px;
+  width: 26px;
   height: 26px;
-  padding: 0 4px;
+  padding: 0;
+  color: #7aa2f7;
+  font: inherit;
+  background: rgb(56 189 248 / 3%);
+  border: 1px solid rgb(56 189 248 / 10%);
+  border-radius: 4px;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.viewport-tools
+  .transform-controls-item
+  :where(.iconfont, .el-icon, .viewport-element-icon) {
+  font-size: 13px;
+  transition: all 0.2s ease;
+}
+
+.viewport-tools .transform-controls-item:hover {
+  color: #38bdf8;
+  background: rgb(56 189 248 / 12%);
+  border-color: rgb(56 189 248 / 40%);
+}
+
+.viewport-tools
+  .transform-controls-item:hover
+  :where(.iconfont, .el-icon, .viewport-element-icon) {
+  transform: scale(1.05);
+}
+
+.viewport-tools .transform-controls-item:active {
+  transform: scale(0.95);
+}
+
+.viewport-tools .transform-controls-item.active {
+  color: #fff;
+  background: linear-gradient(180deg, #38bdf8, #2563eb);
+  border-color: #38bdf8;
+}
+
+.viewport-tools .transform-controls-item.active:hover {
+  background: linear-gradient(180deg, #56c8ff, #3b82f6);
+}
+
+.viewport-tool-divider {
+  display: inline-flex;
+  width: 1px;
+  height: 16px;
+  margin: 0 2px;
+  background: rgb(56 189 248 / 20%);
+}
+
+.measurement-status {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  padding: 3px 10px;
+  color: #ffa000;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
   white-space: nowrap;
-}
-
-.viewport-tools button :where(span, kbd) {
-  display: none;
-}
-
-.viewport-tools button b {
-  color: #7dd3fc;
-  font-size: 14px;
-  font-weight: 400;
-}
-
-.viewport-tools button kbd {
-  color: #506076;
-  font:
-    9px ui-monospace,
-    monospace;
-}
-
-.viewport-tools button.active {
-  color: #e0f2fe;
-  background: rgb(14 165 233 / 18%);
-  box-shadow: inset 0 0 0 1px rgb(56 189 248 / 28%);
+  background: rgb(255 160 0 / 15%);
+  border: 1px solid rgb(255 160 0 / 40%);
+  border-radius: 4px;
+  transform: translateX(-50%);
 }
 
 .viewport-tools button:focus-visible,
@@ -1594,11 +1682,6 @@ button {
 @media (width <= 1100px) {
   .editor-workspace {
     grid-template-columns: 168px minmax(0, 1fr) 320px;
-  }
-
-  .viewport-tools button span,
-  .viewport-tools button kbd {
-    display: none;
   }
 
   .three-version {

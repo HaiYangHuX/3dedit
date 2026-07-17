@@ -29,6 +29,8 @@ const emit = defineEmits<{
   'scene-drop': [payload: ScenePaletteDropPayload];
   'stats-change': [stats: SceneStats];
   'camera-change': [orientation: CameraOrientation];
+  'pointer-lock-change': [active: boolean];
+  'measure-change': [active: boolean];
   'render-stats-change': [stats: RenderStats];
 }>();
 
@@ -73,6 +75,18 @@ function handleCameraChange(
   emit('camera-change', { quaternion: [...event.quaternion] });
 }
 
+function handlePointerLockChange(
+  event: { active: boolean } & { type: 'pointerlockchange' },
+): void {
+  emit('pointer-lock-change', event.active);
+}
+
+function handleMeasureChange(
+  event: { active: boolean } & { type: 'measurechange' },
+): void {
+  emit('measure-change', event.active);
+}
+
 function handleRenderStatsChange(
   event: RenderStats & { type: 'renderstatschange' },
 ): void {
@@ -86,6 +100,8 @@ engine.addEventListener('selectionchange', handleSelectionChange);
 engine.addEventListener('transformend', handleTransformEnd);
 engine.addEventListener('statschange', handleStatsChange);
 engine.addEventListener('camerachange', handleCameraChange);
+engine.addEventListener('pointerlockchange', handlePointerLockChange);
+engine.addEventListener('measurechange', handleMeasureChange);
 engine.addEventListener('renderstatschange', handleRenderStatsChange);
 
 async function loadDocument(document = props.document): Promise<void> {
@@ -137,6 +153,10 @@ function setTransformSpace(space: 'local' | 'world'): void {
   engine.setTransformSpace(space);
 }
 
+function handleShortcut(code: string): boolean {
+  return engine.handleShortcut(code);
+}
+
 function focusSelection(): boolean {
   return engine.focusSelection();
 }
@@ -147,6 +167,22 @@ function setCameraView(view: CameraView): void {
 
 function resetCamera(): void {
   engine.resetCamera();
+}
+
+function togglePointerLock(): boolean {
+  return engine.togglePointerLock();
+}
+
+function setMeasurementEnabled(enabled: boolean): boolean {
+  return engine.setMeasurementEnabled(enabled);
+}
+
+function setSelectWholeModel(enabled: boolean): void {
+  engine.setSelectWholeModel(enabled);
+}
+
+function alignModelsToGround(): TransformCommit[] {
+  return engine.alignModelsToGround();
 }
 
 function captureScreenshot(): Promise<Blob> {
@@ -203,6 +239,8 @@ onBeforeUnmount(() => {
   engine.removeEventListener('transformend', handleTransformEnd);
   engine.removeEventListener('statschange', handleStatsChange);
   engine.removeEventListener('camerachange', handleCameraChange);
+  engine.removeEventListener('pointerlockchange', handlePointerLockChange);
+  engine.removeEventListener('measurechange', handleMeasureChange);
   engine.removeEventListener('renderstatschange', handleRenderStatsChange);
   engine.dispose();
 });
@@ -216,9 +254,14 @@ defineExpose({
   setSelection,
   setTransformMode,
   setTransformSpace,
+  handleShortcut,
   focusSelection,
   setCameraView,
   resetCamera,
+  togglePointerLock,
+  setMeasurementEnabled,
+  setSelectWholeModel,
+  alignModelsToGround,
   captureScreenshot,
 });
 </script>

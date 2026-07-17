@@ -33,6 +33,17 @@ export {
   type SelectionSystemOptions,
 } from './interaction/SelectionSystem';
 export { SelectionBoxSystem } from './interaction/SelectionBoxSystem';
+export { alignObjectToGround } from './interaction/SceneAlignmentSystem';
+export {
+  MeasurementSystem,
+  formatMeasurementDistance,
+  type MeasurementSystemOptions,
+} from './interaction/MeasurementSystem';
+export {
+  PointerLockSystem,
+  calculatePointerLockMove,
+  type PointerLockSystemOptions,
+} from './interaction/PointerLockSystem';
 export {
   TransformSystem,
   type TransformCommit,

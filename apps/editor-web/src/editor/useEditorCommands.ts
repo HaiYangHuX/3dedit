@@ -42,6 +42,11 @@ export interface EditorCanvasBridge {
   setSelection(ids: Iterable<string>, primaryId?: string | null): void;
   setTransformMode(mode: 'translate' | 'rotate' | 'scale'): void;
   setTransformSpace?(space: 'local' | 'world'): void;
+  handleShortcut?(code: string): boolean;
+  togglePointerLock?(): boolean;
+  setMeasurementEnabled?(enabled: boolean): boolean;
+  setSelectWholeModel?(enabled: boolean): void;
+  alignModelsToGround?(): TransformCommit[];
   focusSelection(): boolean;
   setCameraView?(view: CameraView): void;
   resetCamera?(): void;
@@ -223,6 +228,36 @@ export function useEditorCommands(
     canvas.value?.setTransformMode(mode);
   }
 
+  async function alignModelsToGround(): Promise<void> {
+    const changes = canvas.value?.alignModelsToGround?.() ?? [];
+    if (changes.length === 0) return;
+    await documentStore.execute(
+      new TransformNodesCommand(
+        changes.map(({ nodeId, before, after }) => ({
+          id: nodeId,
+          before,
+          after,
+        })),
+      ),
+    );
+    for (const change of changes) {
+      const node = documentStore.document.nodes[change.nodeId];
+      if (node) canvas.value?.applyNodeUpdated(node);
+    }
+  }
+
+  function togglePointerLock(): boolean {
+    return canvas.value?.togglePointerLock?.() ?? false;
+  }
+
+  function setMeasurementEnabled(enabled: boolean): boolean {
+    return canvas.value?.setMeasurementEnabled?.(enabled) ?? false;
+  }
+
+  function setSelectWholeModel(enabled: boolean): void {
+    canvas.value?.setSelectWholeModel?.(enabled);
+  }
+
   function focusSelection(): void {
     canvas.value?.focusSelection();
   }
@@ -242,6 +277,10 @@ export function useEditorCommands(
 
   function handleKeydown(event: KeyboardEvent): void {
     if (isEditableTarget(event.target)) return;
+    if (event.code === 'Escape' && canvas.value?.handleShortcut?.('Escape')) {
+      event.preventDefault();
+      return;
+    }
     const commandModifier = event.metaKey || event.ctrlKey;
     if (commandModifier && event.code === 'KeyZ') {
       event.preventDefault();
@@ -288,6 +327,10 @@ export function useEditorCommands(
     undo,
     redo,
     setTransformMode,
+    alignModelsToGround,
+    togglePointerLock,
+    setMeasurementEnabled,
+    setSelectWholeModel,
     focusSelection,
     setCameraView,
     resetCamera,

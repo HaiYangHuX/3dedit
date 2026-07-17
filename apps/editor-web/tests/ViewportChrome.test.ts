@@ -55,32 +55,33 @@ describe('编辑器高密度框架组件', () => {
     );
   });
 
-  it('视口工具显示模式状态并转发空间、相机和显示操作', async () => {
+  it('视口工具按源站顺序显示八个能力并转发操作', async () => {
     const wrapper = mount(ViewportToolbar, {
       props: {
         mode: 'translate',
-        space: 'world',
-        gridVisible: true,
-        isFullscreen: false,
+        isPointerLock: false,
+        isMeasuring: false,
+        isChooseAllModel: true,
       },
     });
 
     expect(wrapper.get('[data-tool="translate"]').classes()).toContain(
       'active',
     );
+    expect(wrapper.findAll('.transform-controls-item')).toHaveLength(8);
     await wrapper.get('[data-tool="rotate"]').trigger('click');
-    await wrapper.get('[data-tool="space"]').trigger('click');
-    await wrapper.get('[data-tool="focus"]').trigger('click');
+    await wrapper.get('[data-tool="align-ground"]').trigger('click');
+    await wrapper.get('[data-tool="pointer-lock"]').trigger('click');
+    await wrapper.get('[data-tool="measure"]').trigger('click');
     await wrapper.get('[data-tool="reset-camera"]').trigger('click');
-    await wrapper.get('[data-tool="screenshot"]').trigger('click');
-    await wrapper.get('[data-tool="fullscreen"]').trigger('click');
+    await wrapper.get('[data-tool="choose-all"]').trigger('click');
 
     expect(wrapper.emitted('mode')?.at(-1)).toEqual(['rotate']);
-    expect(wrapper.emitted('space')?.at(-1)).toEqual(['local']);
-    expect(wrapper.emitted('focus')).toHaveLength(1);
+    expect(wrapper.emitted('align-ground')).toHaveLength(1);
+    expect(wrapper.emitted('pointer-lock')).toHaveLength(1);
+    expect(wrapper.emitted('measure')).toHaveLength(1);
     expect(wrapper.emitted('reset')).toHaveLength(1);
-    expect(wrapper.emitted('screenshot')).toHaveLength(1);
-    expect(wrapper.emitted('fullscreen')).toHaveLength(1);
+    expect(wrapper.emitted('choose-all')?.at(-1)).toEqual([false]);
   });
 
   it('纯 DOM 方向方块随四元数旋转并提供六个视图按钮', async () => {

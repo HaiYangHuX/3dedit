@@ -30,6 +30,9 @@ test('编辑器工作台创建真实 WebGL Canvas', async ({ page }) => {
   await expect(page.getByTestId('viewport-gizmo')).toBeVisible();
   await page.locator('[data-view="front"]').click({ force: true });
   await page.locator('[data-tool="reset-camera"]').click();
+  await expect(
+    page.locator('.viewport-tools .transform-controls-item'),
+  ).toHaveCount(8);
 
   await page.locator('[data-asset-category="geometry"]').click();
   const box = page.getByTestId('add-geometry-box');
@@ -40,6 +43,8 @@ test('编辑器工作台创建真实 WebGL Canvas', async ({ page }) => {
     String(initialObjectCount + 1),
   );
   expect(Number(await page.getByLabel('位置 Y').inputValue())).toBe(0.5);
+  await page.locator('[data-tool="align-ground"]').click();
+  await expect(page.getByLabel('位置 Y')).toHaveValue('0.51');
 
   await page.locator('[data-asset-category="light"]').click();
   const pointLight = page.getByTestId('add-light-point');
@@ -115,10 +120,16 @@ test('编辑器工作台创建真实 WebGL Canvas', async ({ page }) => {
     '100000',
   );
 
-  const downloadPromise = page.waitForEvent('download');
-  await page.locator('[data-tool="screenshot"]').click();
-  const download = await downloadPromise;
-  expect(download.suggestedFilename()).toMatch(/\.png$/);
+  await page.locator('[data-tool="choose-all"]').click();
+  await expect(page.locator('[data-tool="choose-all"]')).not.toHaveClass(
+    /active/,
+  );
+  await page.locator('[data-tool="choose-all"]').click();
+  await expect(page.locator('[data-tool="choose-all"]')).toHaveClass(/active/);
+  await page.locator('[data-tool="measure"]').click();
+  await expect(page.locator('.measurement-status')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.measurement-status')).toHaveCount(0);
   expect(pageErrors).toEqual([]);
 });
 

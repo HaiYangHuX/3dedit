@@ -23,7 +23,12 @@ const mocks = vi.hoisted(() => {
     setSelection: vi.fn(),
     setTransformMode: vi.fn(),
     setTransformSpace: vi.fn(),
+    handleShortcut: vi.fn().mockReturnValue(true),
     focusSelection: vi.fn().mockReturnValue(true),
+    togglePointerLock: vi.fn().mockReturnValue(true),
+    setMeasurementEnabled: vi.fn().mockReturnValue(true),
+    setSelectWholeModel: vi.fn(),
+    alignModelsToGround: vi.fn().mockReturnValue([]),
     setCameraView: vi.fn(),
     resetCamera: vi.fn(),
     captureScreenshot: vi.fn().mockResolvedValue(new Blob(['png'])),
@@ -179,17 +184,27 @@ describe('EditorCanvas bridge', () => {
       setSelection(ids: string[], primaryId: string): void;
       setTransformMode(mode: 'translate' | 'rotate' | 'scale'): void;
       setTransformSpace(space: 'local' | 'world'): void;
+      handleShortcut(code: string): boolean;
       focusSelection(): boolean;
       setCameraView(view: 'front'): void;
       resetCamera(): void;
+      togglePointerLock(): boolean;
+      setMeasurementEnabled(enabled: boolean): boolean;
+      setSelectWholeModel(enabled: boolean): void;
+      alignModelsToGround(): unknown[];
       captureScreenshot(): Promise<Blob>;
     };
 
     bridge.setSelection(['node-1'], 'node-1');
     bridge.setTransformMode('rotate');
     bridge.setTransformSpace('local');
+    expect(bridge.handleShortcut('Escape')).toBe(true);
     bridge.setCameraView('front');
     bridge.resetCamera();
+    expect(bridge.togglePointerLock()).toBe(true);
+    expect(bridge.setMeasurementEnabled(true)).toBe(true);
+    bridge.setSelectWholeModel(false);
+    expect(bridge.alignModelsToGround()).toEqual([]);
     await bridge.captureScreenshot();
     expect(bridge.focusSelection()).toBe(true);
 
@@ -199,9 +214,14 @@ describe('EditorCanvas bridge', () => {
     );
     expect(mocks.engine.setTransformMode).toHaveBeenCalledWith('rotate');
     expect(mocks.engine.setTransformSpace).toHaveBeenCalledWith('local');
+    expect(mocks.engine.handleShortcut).toHaveBeenCalledWith('Escape');
     expect(mocks.engine.focusSelection).toHaveBeenCalled();
     expect(mocks.engine.setCameraView).toHaveBeenCalledWith('front');
     expect(mocks.engine.resetCamera).toHaveBeenCalled();
+    expect(mocks.engine.togglePointerLock).toHaveBeenCalled();
+    expect(mocks.engine.setMeasurementEnabled).toHaveBeenCalledWith(true);
+    expect(mocks.engine.setSelectWholeModel).toHaveBeenCalledWith(false);
+    expect(mocks.engine.alignModelsToGround).toHaveBeenCalled();
     expect(mocks.engine.captureScreenshot).toHaveBeenCalled();
     wrapper.unmount();
   });

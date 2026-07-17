@@ -44,6 +44,8 @@ export class SelectionSystem {
   private pointerStart?: PointerStart;
   private orbitChangedSincePointerDown = false;
   private suppressPointerUp = false;
+  private enabled = true;
+  private selectWholeModel = true;
 
   constructor(private readonly options: SelectionSystemOptions) {
     options.canvas.addEventListener('pointerdown', this.handlePointerDown);
@@ -53,6 +55,20 @@ export class SelectionSystem {
 
   getSelection(): SelectionState {
     return { ids: [...this.selectedIds], primaryId: this.primaryId };
+  }
+
+  /** 第一人称和测量模式接管画布点击时，暂时停用普通节点拾取。 */
+  setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
+    if (!enabled) {
+      this.pointerStart = undefined;
+      this.orbitChangedSincePointerDown = false;
+    }
+  }
+
+  /** 源站默认按整模选择；当前业务协议仍以 SceneNode 根节点作为选择单位。 */
+  setSelectWholeModel(enabled: boolean): void {
+    this.selectWholeModel = enabled;
   }
 
   /** 由文档 Store 或场景树反向同步选中状态。 */
@@ -109,6 +125,7 @@ export class SelectionSystem {
     );
     this.selectedIds.length = 0;
     this.options.highlight.clear();
+    this.enabled = false;
   }
 
   private pickNodeId(clientX: number, clientY: number): string | undefined {
@@ -157,12 +174,13 @@ export class SelectionSystem {
   }
 
   private readonly handlePointerDown = (event: PointerEvent): void => {
-    if (event.button !== 0) return;
+    if (!this.enabled || event.button !== 0) return;
     this.pointerStart = { x: event.clientX, y: event.clientY };
     this.orbitChangedSincePointerDown = false;
   };
 
   private readonly handlePointerUp = (event: PointerEvent): void => {
+    if (!this.enabled) return;
     const start = this.pointerStart;
     this.pointerStart = undefined;
     const suppressed = this.suppressPointerUp;

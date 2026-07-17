@@ -162,6 +162,9 @@ importers:
       '@digital-twin/three-engine':
         specifier: workspace:*
         version: link:../../packages/three-engine
+      '@element-plus/icons-vue':
+        specifier: 2.3.2
+        version: 2.3.2(vue@3.5.40(typescript@5.9.3))
       '@vue/devtools-api':
         specifier: 8.1.5
         version: 8.1.5

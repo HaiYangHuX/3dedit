@@ -10,6 +10,7 @@ const commandMocks = vi.hoisted(() => {
     addAssetNode: operation(),
     addGeometry: operation(),
     addLight: operation(),
+    alignModelsToGround: operation(),
     captureScreenshot: vi.fn().mockResolvedValue(new Blob(['png'])),
     duplicateNode: operation(),
     focusSelection: vi.fn(),
@@ -21,7 +22,10 @@ const commandMocks = vi.hoisted(() => {
     resetCamera: vi.fn(),
     select: vi.fn(),
     setCameraView: vi.fn(),
+    setMeasurementEnabled: vi.fn(() => false),
+    setSelectWholeModel: vi.fn(),
     setTransformMode: vi.fn(),
+    togglePointerLock: vi.fn(() => false),
     undo: operation(),
     updateNode: operation(),
     updateRuntimeConfig: operation(),
@@ -58,10 +62,15 @@ describe('EditorWorkspace', () => {
     expect(wrapper.get('[data-testid="top-toolbar"]').text()).toContain('保存');
     expect(wrapper.get('[data-testid="undo-scene"]')).toBeTruthy();
     expect(wrapper.get('[data-testid="redo-scene"]')).toBeTruthy();
-    expect(wrapper.get('[data-tool="translate"]').text()).toContain('移动');
-    expect(wrapper.get('[data-tool="rotate"]').text()).toContain('旋转');
-    expect(wrapper.get('[data-tool="scale"]').text()).toContain('缩放');
-    expect(wrapper.get('[data-tool="focus"]').text()).toContain('聚焦');
+    expect(
+      wrapper.get('[data-tool="translate"]').attributes('title'),
+    ).toContain('拖拽');
+    expect(wrapper.get('[data-tool="rotate"]').attributes('title')).toContain(
+      '旋转',
+    );
+    expect(wrapper.get('[data-tool="scale"]').attributes('title')).toContain(
+      '缩放',
+    );
     expect(
       wrapper.get('[data-tool="reset-camera"]').attributes('title'),
     ).toContain('重置');
@@ -165,7 +174,7 @@ describe('EditorWorkspace', () => {
     );
   });
 
-  it('将视口网格开关映射为真实地面类型', async () => {
+  it('将源站视口工具转发到对应编辑命令', async () => {
     const wrapper = mount(EditorWorkspace, {
       global: {
         plugins: [createTestingPinia({ createSpy: vi.fn })],
@@ -177,18 +186,16 @@ describe('EditorWorkspace', () => {
     });
     const toolbar = wrapper.findComponent({ name: 'ViewportToolbar' });
 
-    toolbar.vm.$emit('grid', false);
-    toolbar.vm.$emit('grid', true);
+    toolbar.vm.$emit('align-ground');
+    toolbar.vm.$emit('pointer-lock', true);
+    toolbar.vm.$emit('measure', true);
+    toolbar.vm.$emit('choose-all', false);
     await flushPromises();
 
-    expect(commandMocks.updateSceneSettings).toHaveBeenNthCalledWith(1, {
-      groundType: 'none',
-      gridVisible: false,
-    });
-    expect(commandMocks.updateSceneSettings).toHaveBeenNthCalledWith(2, {
-      groundType: 'grid',
-      gridVisible: true,
-    });
+    expect(commandMocks.alignModelsToGround).toHaveBeenCalledOnce();
+    expect(commandMocks.togglePointerLock).toHaveBeenCalledOnce();
+    expect(commandMocks.setMeasurementEnabled).toHaveBeenCalledWith(true);
+    expect(commandMocks.setSelectWholeModel).toHaveBeenCalledWith(false);
   });
 
   it('稳定文档对象原地更新后刷新项目配置控件', async () => {

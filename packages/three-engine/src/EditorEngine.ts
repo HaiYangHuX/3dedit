@@ -35,7 +35,10 @@ import {
   type SelectionState,
 } from './interaction/SelectionSystem.js';
 import { SelectionBoxSystem } from './interaction/SelectionBoxSystem.js';
+import { alignObjectToGround } from './interaction/SceneAlignmentSystem.js';
+import { MeasurementSystem } from './interaction/MeasurementSystem.js';
 import { configureOrbitControls } from './interaction/OrbitControlsProfile.js';
+import { PointerLockSystem } from './interaction/PointerLockSystem.js';
 import {
   TransformSystem,
   type TransformCommit,
@@ -70,8 +73,18 @@ interface ScreenshotRequest {
   reject(reason: Error): void;
 }
 
+function snapshotTransform(object: Object3D): Transform {
+  return {
+    position: object.position.toArray() as Transform['position'],
+    rotation: object.rotation.toArray() as Transform['rotation'],
+    scale: object.scale.toArray() as Transform['scale'],
+  };
+}
+
 export interface EditorEngineEventMap {
   selectionchange: SelectionState;
+  pointerlockchange: { active: boolean };
+  measurechange: { active: boolean };
   transformstart: { nodeId: string; before: Transform };
   transformchange: { nodeId: string; transform: Transform };
   transformend: TransformCommit;
@@ -86,7 +99,7 @@ export interface EditorEngineEventMap {
  */
 export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
   readonly scene = new Scene();
-  readonly camera = new PerspectiveCamera(50, 1, 0.01, 10_000);
+  readonly camera = new PerspectiveCamera(45, 1, 0.05, 20_000);
   private readonly timer = new Timer();
   private readonly resources = new ResourceTracker();
   private renderer?: WebGLRenderer;
@@ -97,6 +110,8 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
   private selectionSystem?: SelectionSystem;
   private selectionHighlight?: SelectionBoxSystem;
   private transformSystem?: TransformSystem;
+  private pointerLockSystem?: PointerLockSystem;
+  private measurementSystem?: MeasurementSystem;
   private dropSystem?: ViewportDropSystem;
   private cameraSystem?: ViewportCameraSystem;
   private settingsSystem?: SceneSettingsSystem;
@@ -122,8 +137,9 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     if (this.disposed) throw new Error('已销毁的 EditorEngine 不能重新初始化');
 
     this.scene.background = new Color('#3b3b3b');
-    // 保留当前默认构图，观察中心由源站交互预设统一设为 Y=0.5。
-    this.camera.position.set(0, 2, 6);
+    // 相机初始位置和重置位置都与源站 initCamera 保持一致。
+    this.camera.position.set(0.607, 3.347, 7.966);
+    this.camera.rotation.set(-0.304, 0.048, 0.016);
 
     const renderer = new WebGLRenderer({
       antialias: true,
@@ -196,6 +212,21 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.controls.addEventListener('change', this.invalidate);
     this.controls.addEventListener('change', this.emitCameraOrientation);
     this.controls.addEventListener('start', this.cancelCameraAnimation);
+    this.pointerLockSystem = new PointerLockSystem(
+      this.camera,
+      renderer.domElement,
+      {
+        onStateChange: (active) => {
+          this.controls!.enabled = !active;
+          this.selectionSystem?.setEnabled(
+            !active && !this.measurementSystem?.active,
+          );
+          this.dispatchEvent({ type: 'pointerlockchange', active });
+          this.invalidate();
+        },
+        onChange: this.invalidate,
+      },
+    );
     this.cameraSystem = new ViewportCameraSystem(this.camera, this.controls);
     this.controls.update();
     this.emitCameraOrientation();
@@ -273,7 +304,13 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
       this.invalidated = true;
     }
     const cameraAnimating = this.cameraSystem?.update(delta) ?? false;
-    if (!cameraAnimating) this.controls?.update(delta);
+    if (!cameraAnimating) {
+      if (this.pointerLockSystem?.isLocked) {
+        this.pointerLockSystem.update(delta);
+      } else {
+        this.controls?.update(delta);
+      }
+    }
     if (cameraAnimating) this.invalidated = true;
     this.emitRenderStatsIfNeeded();
     if (!this.invalidated) return;
@@ -301,11 +338,16 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
       this.groundSystem?.apply(document.settings.groundType),
       this.weatherSystem?.apply(document.settings),
     ]);
+    this.pointerLockSystem?.deactivate();
+    this.measurementSystem?.end();
+    this.selectionSystem?.setEnabled(true);
     this.selectionSystem?.setSelection([]);
     this.transformSystem?.setSelection(null);
     if (!this.documentSystem || resolver !== this.assetResolver) {
       this.selectionSystem?.dispose();
       this.selectionSystem = undefined;
+      this.measurementSystem?.dispose();
+      this.measurementSystem = undefined;
       this.documentSystem?.dispose();
       const loader = new AssetLoader({ renderer: this.renderer });
       this.documentSystem = new SceneDocumentSystem(
@@ -388,7 +430,64 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.selectionSystem?.setSelection(ids, primaryId);
   }
 
+  /** 切换源站第一/第三人称模式，并让 OrbitControls 与 PointerLockControls 互斥。 */
+  togglePointerLock(): boolean {
+    if (!this.pointerLockSystem) return false;
+    if (!this.pointerLockSystem.isActive) {
+      this.measurementSystem?.end();
+      this.selectionSystem?.setSelection([]);
+      this.transformSystem?.setSelection(null);
+      this.selectionSystem?.setEnabled(false);
+    }
+    return this.pointerLockSystem.toggle();
+  }
+
+  /** 启停源站两点测量模式，进入时清理当前节点选中和变换手柄。 */
+  setMeasurementEnabled(enabled: boolean): boolean {
+    if (!this.measurementSystem) return false;
+    if (enabled) {
+      this.pointerLockSystem?.deactivate();
+      this.selectionSystem?.setSelection([]);
+      this.transformSystem?.setSelection(null);
+      this.selectionSystem?.setEnabled(false);
+      this.measurementSystem.start();
+    } else {
+      this.measurementSystem.end();
+      this.selectionSystem?.setEnabled(!this.pointerLockSystem?.isActive);
+    }
+    return this.measurementSystem.active;
+  }
+
+  setSelectWholeModel(enabled: boolean): void {
+    this.selectionSystem?.setSelectWholeModel(enabled);
+    this.invalidate();
+  }
+
+  /**
+   * 对齐文档根节点并返回可写入命令历史的变换差异。
+   * 引擎先更新可见对象，宿主随后将同一批差异提交到 SceneDocument。
+   */
+  alignModelsToGround(): TransformCommit[] {
+    if (!this.documentSystem) return [];
+    const changes: TransformCommit[] = [];
+    for (const object of this.documentSystem.root.children) {
+      const nodeId = this.documentSystem.getNodeId(object);
+      if (!nodeId || object.userData.isEditorHelper === true) continue;
+      const before = snapshotTransform(object);
+      const offset = alignObjectToGround(object);
+      if (offset === 0) continue;
+      changes.push({ nodeId, before, after: snapshotTransform(object) });
+    }
+    if (changes.length > 0) {
+      this.invalidate();
+      this.emitStats();
+    }
+    return changes;
+  }
+
   setTransformMode(mode: TransformControlsMode): void {
+    if (this.pointerLockSystem?.isActive) return;
+    if (this.measurementSystem?.active) this.setMeasurementEnabled(false);
     this.transformSystem?.setMode(mode);
     this.invalidate();
   }
@@ -455,7 +554,15 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
   }
 
   resetCamera(): void {
-    this.cameraSystem?.reset();
+    this.pointerLockSystem?.deactivate();
+    this.measurementSystem?.end();
+    this.cameraSystem?.cancel();
+    this.camera.position.set(0.607, 3.347, 7.966);
+    this.camera.rotation.set(-0.304, 0.048, 0.016);
+    this.controls?.target.set(0, 0.5, 0);
+    this.camera.updateProjectionMatrix();
+    this.controls?.update();
+    this.emitCameraOrientation();
     this.invalidate();
   }
 
@@ -480,6 +587,19 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
 
   /** W/E/R 切换变换工具，F 聚焦当前选择。 */
   handleShortcut(code: string): boolean {
+    if (code === 'Escape') {
+      if (this.measurementSystem?.active) {
+        this.setMeasurementEnabled(false);
+        return true;
+      }
+      if (this.pointerLockSystem?.isActive) {
+        this.pointerLockSystem.deactivate();
+        return true;
+      }
+    }
+    if (this.pointerLockSystem?.isActive || this.measurementSystem?.active) {
+      return false;
+    }
     if (this.transformSystem?.handleShortcut(code)) {
       this.invalidate();
       return true;
@@ -494,6 +614,8 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.timer.dispose();
     this.resizeObserver?.disconnect();
     this.selectionSystem?.dispose();
+    this.measurementSystem?.dispose();
+    this.pointerLockSystem?.dispose();
     this.selectionHighlight?.dispose();
     this.transformSystem?.dispose();
     this.weatherSystem?.dispose();
@@ -520,28 +642,41 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
   }
 
   private ensureSelectionSystem(): void {
-    if (
-      this.selectionSystem ||
-      !this.documentSystem ||
-      !this.renderer ||
-      !this.selectionHighlight
-    ) {
+    if (!this.documentSystem || !this.renderer || !this.selectionHighlight) {
       return;
     }
-    this.selectionSystem = new SelectionSystem({
-      camera: this.camera,
-      canvas: this.renderer.domElement,
-      root: this.documentSystem.root,
-      getNodeId: (object) => this.documentSystem?.getNodeId(object),
-      getObject: (nodeId) => this.documentSystem?.getObject(nodeId),
-      highlight: this.selectionHighlight,
-      orbitControls: this.controls,
-      onSelectionChange: (selection) => {
-        this.transformSystem?.setSelection(selection.primaryId);
-        this.dispatchEvent({ type: 'selectionchange', ...selection });
-        this.invalidate();
-      },
-    });
+    if (!this.selectionSystem) {
+      this.selectionSystem = new SelectionSystem({
+        camera: this.camera,
+        canvas: this.renderer.domElement,
+        root: this.documentSystem.root,
+        getNodeId: (object) => this.documentSystem?.getNodeId(object),
+        getObject: (nodeId) => this.documentSystem?.getObject(nodeId),
+        highlight: this.selectionHighlight,
+        orbitControls: this.controls,
+        onSelectionChange: (selection) => {
+          this.transformSystem?.setSelection(selection.primaryId);
+          this.dispatchEvent({ type: 'selectionchange', ...selection });
+          this.invalidate();
+        },
+      });
+    }
+    if (!this.measurementSystem) {
+      this.measurementSystem = new MeasurementSystem({
+        scene: this.scene,
+        root: this.documentSystem.root,
+        camera: this.camera,
+        canvas: this.renderer.domElement,
+        onStateChange: (active) => {
+          this.selectionSystem?.setEnabled(
+            !active && !this.pointerLockSystem?.isActive,
+          );
+          this.dispatchEvent({ type: 'measurechange', active });
+          this.invalidate();
+        },
+        onChange: this.invalidate,
+      });
+    }
   }
 
   private emitStats(): void {

@@ -50,7 +50,6 @@ const { document, documentChangeVersion, saveState, error, canUndo, canRedo } =
 const selectionStore = useSelectionStore();
 const { ids: selectedIds, primaryId } = storeToRefs(selectionStore);
 const canvas = ref<EditorCanvasBridge>();
-const viewportShell = ref<HTMLElement>();
 const assetStore = useAssetStore();
 const { assets } = storeToRefs(assetStore);
 const inspectorTab = ref<'scene' | 'interaction' | 'socket' | 'settings'>(
@@ -65,12 +64,13 @@ const publication = ref<PublicationDetail>();
 const publishing = ref(false);
 const settingsUploading = ref(false);
 const transformMode = ref<'translate' | 'rotate' | 'scale'>('translate');
-const transformSpace = ref<'local' | 'world'>('world');
 const cameraOrientation = ref<CameraOrientation>({
   quaternion: [0, 0, 0, 1],
 });
 const renderStats = ref<RenderStats>({ fps: 0, drawCalls: 0 });
-const isFullscreen = ref(false);
+const isPointerLock = ref(false);
+const isMeasuring = ref(false);
+const isChooseAllModel = ref(true);
 let previewWindow: Window | null = null;
 const runtimeOrigin = (
   import.meta.env.VITE_RUNTIME_ORIGIN ?? 'http://127.0.0.1:5174'
@@ -125,22 +125,12 @@ watch(
   { immediate: true },
 );
 
-function syncFullscreenState(): void {
-  isFullscreen.value =
-    globalThis.document.fullscreenElement === viewportShell.value;
-}
-
 onMounted(() => {
   window.addEventListener('keydown', commands.handleKeydown);
-  globalThis.document.addEventListener('fullscreenchange', syncFullscreenState);
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', commands.handleKeydown);
-  globalThis.document.removeEventListener(
-    'fullscreenchange',
-    syncFullscreenState,
-  );
   store.disposeAutoSave();
 });
 
@@ -217,15 +207,6 @@ function runCommand(operation: Promise<unknown>): void {
   void operation.catch(showEditorError);
 }
 
-function toggleGrid(gridVisible: boolean): void {
-  runCommand(
-    commands.updateSceneSettings({
-      groundType: gridVisible ? 'grid' : 'none',
-      gridVisible,
-    }),
-  );
-}
-
 async function uploadSceneSettingAsset(
   file: File,
   target: 'background' | 'environment',
@@ -271,6 +252,14 @@ function changeCameraOrientation(value: CameraOrientation): void {
   cameraOrientation.value = value;
 }
 
+function changePointerLock(active: boolean): void {
+  isPointerLock.value = active;
+}
+
+function changeMeasure(active: boolean): void {
+  isMeasuring.value = active;
+}
+
 function changeRenderStats(value: RenderStats): void {
   renderStats.value = value;
 }
@@ -280,40 +269,27 @@ function changeTransformMode(mode: 'translate' | 'rotate' | 'scale'): void {
   commands.setTransformMode(mode);
 }
 
-function changeTransformSpace(space: 'local' | 'world'): void {
-  transformSpace.value = space;
-  canvas.value?.setTransformSpace?.(space);
+function alignModelsToGround(): void {
+  runCommand(commands.alignModelsToGround());
+}
+
+function togglePointerLock(): void {
+  // 引擎返回值用于同步 PointerLock API 的实际状态。
+  isPointerLock.value = commands.togglePointerLock();
+}
+
+function toggleMeasurement(active: boolean): void {
+  const next = commands.setMeasurementEnabled(active);
+  isMeasuring.value = next;
+}
+
+function toggleChooseAllModel(active: boolean): void {
+  isChooseAllModel.value = active;
+  commands.setSelectWholeModel(active);
 }
 
 function changeCameraView(view: CameraView): void {
   commands.setCameraView(view);
-}
-
-async function downloadScreenshot(): Promise<void> {
-  try {
-    const blob = await commands.captureScreenshot();
-    const url = URL.createObjectURL(blob);
-    const link = globalThis.document.createElement('a');
-    link.href = url;
-    link.download = `${document.value.name || 'scene'}-${Date.now()}.png`;
-    link.click();
-    URL.revokeObjectURL(url);
-    ElMessage.success('视口截图已下载');
-  } catch (reason) {
-    showEditorError(reason, '视口截图失败');
-  }
-}
-
-async function toggleViewportFullscreen(): Promise<void> {
-  try {
-    if (globalThis.document.fullscreenElement === viewportShell.value) {
-      await globalThis.document.exitFullscreen();
-    } else if (viewportShell.value) {
-      await viewportShell.value.requestFullscreen();
-    }
-  } catch (reason) {
-    showEditorError(reason, '无法切换视口全屏');
-  }
 }
 
 async function ensureRuntimeDocumentSaved(): Promise<void> {
@@ -464,22 +440,18 @@ async function copyText(value: string): Promise<void> {
       </div>
     </AssetPalette>
 
-    <section ref="viewportShell" class="viewport-shell">
+    <section class="viewport-shell">
       <ViewportToolbar
         :mode="transformMode"
-        :space="transformSpace"
-        :grid-visible="
-          document.settings.groundType === 'grid' &&
-          document.settings.gridVisible
-        "
-        :is-fullscreen="isFullscreen"
+        :is-pointer-lock="isPointerLock"
+        :is-measuring="isMeasuring"
+        :is-choose-all-model="isChooseAllModel"
         @mode="changeTransformMode"
-        @space="changeTransformSpace"
-        @grid="toggleGrid"
-        @focus="commands.focusSelection"
+        @align-ground="alignModelsToGround"
+        @pointer-lock="togglePointerLock"
+        @measure="toggleMeasurement"
         @reset="commands.resetCamera"
-        @screenshot="downloadScreenshot"
-        @fullscreen="toggleViewportFullscreen"
+        @choose-all="toggleChooseAllModel"
       />
       <EditorCanvas
         ref="canvas"
@@ -489,6 +461,8 @@ async function copyText(value: string): Promise<void> {
         @scene-drop="dropSceneItem"
         @stats-change="changeStats"
         @camera-change="changeCameraOrientation"
+        @pointer-lock-change="changePointerLock"
+        @measure-change="changeMeasure"
         @render-stats-change="changeRenderStats"
       />
       <ViewportStats :scene="stats" :render="renderStats" />
