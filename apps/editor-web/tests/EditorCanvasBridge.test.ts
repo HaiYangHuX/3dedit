@@ -1,4 +1,7 @@
-import { createDefaultSceneDocument } from '@digital-twin/scene-schema';
+import {
+  createDefaultSceneDocument,
+  type SceneNode,
+} from '@digital-twin/scene-schema';
 import { flushPromises, mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -39,6 +42,16 @@ const mocks = vi.hoisted(() => {
       vertexCount: 0,
       faceCount: 0,
     }),
+    getModelStructures: vi.fn().mockReturnValue({
+      'node-1': [
+        {
+          objectId: 'object-1',
+          name: '水泵叶轮',
+          objectType: 'Mesh',
+          children: [],
+        },
+      ],
+    }),
     dispose: vi.fn(),
   };
   return { listeners, engine };
@@ -72,6 +85,18 @@ describe('EditorCanvas bridge', () => {
         .get('[data-testid="editor-canvas"]')
         .attributes('data-engine-ready'),
     ).toBe('true');
+    expect(wrapper.emitted('model-structure-change')?.at(-1)).toEqual([
+      {
+        'node-1': [
+          {
+            objectId: 'object-1',
+            name: '水泵叶轮',
+            objectType: 'Mesh',
+            children: [],
+          },
+        ],
+      },
+    ]);
 
     mocks.listeners.get('selectionchange')?.({
       type: 'selectionchange',
@@ -121,6 +146,32 @@ describe('EditorCanvas bridge', () => {
         .get('[data-testid="editor-canvas"]')
         .attributes('data-scene-object-count'),
     ).toBe('1');
+
+    const bridge = wrapper.vm as unknown as {
+      applyNodeAdded(node: SceneNode): Promise<void>;
+      applyNodeRemoved(ids: string[]): void;
+      applyNodeUpdated(node: SceneNode): Promise<void>;
+    };
+    const changedNode: SceneNode = {
+      id: 'node-1',
+      parentId: null,
+      childIds: [],
+      name: '水泵',
+      enabled: true,
+      locked: false,
+      transform: {
+        position: [0, 0, 0],
+        rotation: [0, 0, 0],
+        scale: [1, 1, 1],
+      },
+      components: [{ kind: 'model', assetId: 'asset-1' }],
+      businessData: {},
+    };
+    await bridge.applyNodeAdded(changedNode);
+    bridge.applyNodeRemoved([changedNode.id]);
+    await bridge.applyNodeUpdated(changedNode);
+    expect(mocks.engine.getModelStructures).toHaveBeenCalledTimes(4);
+    expect(wrapper.emitted('model-structure-change')).toHaveLength(4);
 
     await wrapper.get('[data-testid="editor-canvas"]').trigger('drop', {
       clientX: 200,

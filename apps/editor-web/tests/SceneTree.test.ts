@@ -3,6 +3,7 @@ import {
   type SceneNode,
 } from '@digital-twin/scene-schema';
 import { mount } from '@vue/test-utils';
+import { ElTooltip } from 'element-plus';
 import { describe, expect, it, vi } from 'vitest';
 import SceneTree from '../src/components/editor/SceneTree.vue';
 
@@ -30,6 +31,59 @@ function node(
 }
 
 describe('SceneTree', () => {
+  it('显示 Camera 并将真实模型 Object3D 子树展开在业务根下', async () => {
+    const document = createDefaultSceneDocument('project-1', 'scene-1', '场景');
+    const model = node('model', '酸洗清洗机.glb', null);
+    model.components = [{ kind: 'model', assetId: 'asset-1' }];
+    document.nodes = { model };
+    document.rootNodeIds = [model.id];
+    const wrapper = mount(SceneTree, {
+      props: {
+        document,
+        selection: { ids: [], primaryId: null },
+        modelStructures: {
+          model: [
+            {
+              objectId: 'assembly',
+              name: '装配体',
+              objectType: 'Group',
+              children: [
+                {
+                  objectId: 'mesh',
+                  name: '清洗机机体',
+                  objectType: 'Mesh',
+                  children: [],
+                },
+              ],
+            },
+          ],
+        },
+      },
+      global: { stubs: { Teleport: true } },
+    });
+
+    expect(wrapper.get('[data-testid="scene-camera"]').text()).toContain(
+      'Camera',
+    );
+    expect(
+      wrapper
+        .findAll('[data-object-id]')
+        .map((item) => item.attributes('data-object-id')),
+    ).toEqual(['assembly', 'mesh']);
+    expect(wrapper.findAll('.scene-tree-element-icon').length).toBeGreaterThan(
+      2,
+    );
+    expect(wrapper.findAllComponents(ElTooltip)).toHaveLength(5);
+    expect(wrapper.find('.scene-tree-toolbar').exists()).toBe(false);
+
+    await wrapper
+      .get('[data-object-id="mesh"] .scene-tree-label')
+      .trigger('click');
+    expect(wrapper.emitted('select')?.at(-1)).toEqual([
+      { ids: ['model'], primaryId: 'model' },
+    ]);
+  });
+
   it('原地修改文档后通过变更代次重建根节点', async () => {
     const document = createDefaultSceneDocument('project-1', 'scene-1', '场景');
     const wrapper = mount(SceneTree, {
@@ -125,9 +179,7 @@ describe('SceneTree', () => {
     expect(wrapper.emitted('toggle-visible')?.at(-1)).toEqual(['first', false]);
     expect(wrapper.emitted('toggle-locked')?.at(-1)).toEqual(['first', true]);
     await wrapper.get('[aria-label="复制水泵 A"]').trigger('click');
-    await wrapper.get('[aria-label="组合选中节点"]').trigger('click');
     expect(wrapper.emitted('duplicate')?.at(-1)).toEqual(['first']);
-    expect(wrapper.emitted('group')?.at(-1)).toEqual([['first']]);
     expect(document.nodes.first?.enabled).toBe(true);
     expect(document.nodes.first?.locked).toBe(false);
   });

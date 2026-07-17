@@ -3,6 +3,7 @@ import {
   EditorEngine,
   type CameraOrientation,
   type CameraView,
+  type ModelStructureMap,
   type RenderStats,
   type SceneStats,
   type SelectionState,
@@ -32,6 +33,7 @@ const emit = defineEmits<{
   'pointer-lock-change': [active: boolean];
   'measure-change': [active: boolean];
   'render-stats-change': [stats: RenderStats];
+  'model-structure-change': [structures: ModelStructureMap];
 }>();
 
 const container = ref<HTMLDivElement>();
@@ -111,6 +113,7 @@ async function loadDocument(document = props.document): Promise<void> {
   try {
     await engine.loadDocument(document, editorAssetResolver);
     if (disposed || generation !== loadGeneration) return;
+    emit('model-structure-change', engine.getModelStructures());
     if (container.value) container.value.dataset.engineReady = 'true';
   } catch (error) {
     if (disposed || generation !== loadGeneration) return;
@@ -121,17 +124,24 @@ async function loadDocument(document = props.document): Promise<void> {
 
 async function applyNodeAdded(node: SceneNode): Promise<void> {
   await engine.addNode(node);
+  emit('model-structure-change', engine.getModelStructures());
 }
 
 function applyNodeRemoved(ids: Iterable<string>): void {
   engine.removeNodes(ids);
+  emit('model-structure-change', engine.getModelStructures());
 }
 
-function applyNodeUpdated(node: SceneNode): void {
-  void engine.updateNode(node).catch((error: unknown) => {
+async function applyNodeUpdated(node: SceneNode): Promise<void> {
+  try {
+    await engine.updateNode(node);
+    // 模型 assetId 替换会换新整棵 Object3D，必须等待替换完成再发送 UUID 快照。
+    emit('model-structure-change', engine.getModelStructures());
+  } catch (error: unknown) {
     errorMessage.value =
       error instanceof Error ? error.message : '节点运行对象重建失败';
-  });
+    throw error;
+  }
 }
 
 function applySceneSettings(settings: SceneDocument['settings']): void {

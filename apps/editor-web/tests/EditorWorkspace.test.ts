@@ -50,6 +50,7 @@ describe('EditorWorkspace', () => {
         plugins: [createTestingPinia({ createSpy: vi.fn })],
         stubs: {
           EditorCanvas: {
+            name: 'EditorCanvas',
             props: ['document'],
             template:
               '<div data-testid="editor-canvas" :data-document-id="document.id" />',
@@ -119,6 +120,27 @@ describe('EditorWorkspace', () => {
     expect(wrapper.get('[data-testid="viewport-gizmo"]')).toBeTruthy();
     expect(wrapper.get('[data-testid="preview-scene"]')).toBeTruthy();
     expect(wrapper.get('[data-testid="publish-scene"]')).toBeTruthy();
+    expect(wrapper.get('[data-testid="scene-camera"]').text()).toContain(
+      'Camera',
+    );
+
+    const modelStructures = {
+      'runtime-model': [
+        {
+          objectId: 'runtime-mesh',
+          name: '清洗机机体',
+          objectType: 'Mesh',
+          children: [],
+        },
+      ],
+    };
+    wrapper
+      .findComponent({ name: 'EditorCanvas' })
+      .vm.$emit('model-structure-change', modelStructures);
+    await flushPromises();
+    expect(
+      wrapper.findComponent({ name: 'SceneTree' }).props('modelStructures'),
+    ).toEqual(modelStructures);
 
     const tabs = wrapper.findAll('.inspector-tabs button');
     await tabs.find((tab) => tab.text() === '交互事件')!.trigger('click');

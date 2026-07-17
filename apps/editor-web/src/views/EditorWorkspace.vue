@@ -5,6 +5,7 @@ import {
   BUILTIN_ENVIRONMENT_PREVIEW_URL,
   type CameraOrientation,
   type CameraView,
+  type ModelStructureMap,
   type RenderStats,
   type SceneStats,
   type SelectionState,
@@ -71,6 +72,7 @@ const renderStats = ref<RenderStats>({ fps: 0, drawCalls: 0 });
 const isPointerLock = ref(false);
 const isMeasuring = ref(false);
 const isChooseAllModel = ref(true);
+const modelStructures = ref<ModelStructureMap>({});
 let previewWindow: Window | null = null;
 const runtimeOrigin = (
   import.meta.env.VITE_RUNTIME_ORIGIN ?? 'http://127.0.0.1:5174'
@@ -118,6 +120,8 @@ const stateLabel = computed(() => saveStateLabel[saveState.value]);
 watch(
   () => props.sceneId,
   (sceneId) => {
+    // Object3D UUID 只对当前引擎加载代次有效，切场景时先清空防止短暂显示旧层级。
+    modelStructures.value = {};
     void Promise.resolve(store.loadScene(sceneId)).catch(() => {
       // 状态栏展示详细错误，保留引擎视口以便用户重试。
     });
@@ -262,6 +266,10 @@ function changeMeasure(active: boolean): void {
 
 function changeRenderStats(value: RenderStats): void {
   renderStats.value = value;
+}
+
+function changeModelStructures(value: ModelStructureMap): void {
+  modelStructures.value = value;
 }
 
 function changeTransformMode(mode: 'translate' | 'rotate' | 'scale'): void {
@@ -464,6 +472,7 @@ async function copyText(value: string): Promise<void> {
         @pointer-lock-change="changePointerLock"
         @measure-change="changeMeasure"
         @render-stats-change="changeRenderStats"
+        @model-structure-change="changeModelStructures"
       />
       <ViewportStats :scene="stats" :render="renderStats" />
       <ViewportGizmo
@@ -508,6 +517,7 @@ async function copyText(value: string): Promise<void> {
           :document="document"
           :change-version="documentChangeVersion"
           :selection="selection"
+          :model-structures="modelStructures"
           @select="changeSelection"
           @toggle-visible="
             (id, enabled) => runCommand(commands.updateNode(id, { enabled }))

@@ -37,7 +37,7 @@ export interface EditorCanvasBridge {
   loadDocument(document?: SceneDocument): Promise<void>;
   applyNodeAdded(node: SceneNode): Promise<void>;
   applyNodeRemoved(ids: Iterable<string>): void;
-  applyNodeUpdated(node: SceneNode): void;
+  applyNodeUpdated(node: SceneNode): Promise<void>;
   applySceneSettings?(settings: SceneDocument['settings']): void;
   setSelection(ids: Iterable<string>, primaryId?: string | null): void;
   setTransformMode(mode: 'translate' | 'rotate' | 'scale'): void;
@@ -129,7 +129,7 @@ export function useEditorCommands(
   ): Promise<void> {
     await documentStore.execute(new UpdateNodeCommand(nodeId, patch));
     const node = documentStore.document.nodes[nodeId];
-    if (node) canvas.value?.applyNodeUpdated(node);
+    if (node) await canvas.value?.applyNodeUpdated(node);
   }
 
   async function updateSelection(patch: EditableNodePatch): Promise<void> {
@@ -204,7 +204,7 @@ export function useEditorCommands(
       ]),
     );
     const node = documentStore.document.nodes[commit.nodeId];
-    if (node) canvas.value?.applyNodeUpdated(node);
+    if (node) await canvas.value?.applyNodeUpdated(node);
   }
 
   async function reloadCanvasAfterHistoryChange(): Promise<void> {
@@ -240,10 +240,12 @@ export function useEditorCommands(
         })),
       ),
     );
-    for (const change of changes) {
-      const node = documentStore.document.nodes[change.nodeId];
-      if (node) canvas.value?.applyNodeUpdated(node);
-    }
+    await Promise.all(
+      changes.map(async (change) => {
+        const node = documentStore.document.nodes[change.nodeId];
+        if (node) await canvas.value?.applyNodeUpdated(node);
+      }),
+    );
   }
 
   function togglePointerLock(): boolean {

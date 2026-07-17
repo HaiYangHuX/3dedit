@@ -14,6 +14,8 @@ import {
 import type {
   AssetInstanceProvider,
   LoadReport,
+  ModelStructureMap,
+  ModelStructureNode,
   SceneStats,
 } from '../types.js';
 
@@ -217,6 +219,32 @@ export class SceneDocumentSystem {
     return undefined;
   }
 
+  /**
+   * 从已加载模型导出展示用子树。具有 sceneNodeId 的对象是独立业务节点，
+   * 它会由 SceneDocument 树单独渲染，这里必须截断以防止重复。
+   */
+  getModelStructures(): ModelStructureMap {
+    const structures: ModelStructureMap = {};
+    for (const [nodeId, object] of this.objects) {
+      if (object.userData.primaryComponentKind !== 'model') continue;
+      const children = object.children.flatMap((child) => {
+        const projected = this.projectModelObject(child);
+        return projected ? [projected] : [];
+      });
+      const onlyChild = children[0];
+      // 多数 GLTF 会在 Scene 下再包一层同名 Group；源站树直接显示其内容，避免连续两行同名根。
+      structures[nodeId] =
+        children.length === 1 &&
+        onlyChild !== undefined &&
+        ['Group', 'Object3D', 'Scene'].includes(onlyChild.objectType) &&
+        onlyChild.name === object.name &&
+        onlyChild.children.length > 0
+          ? onlyChild.children
+          : children;
+    }
+    return structures;
+  }
+
   getStats(): SceneStats {
     let meshCount = 0;
     let vertexCount = 0;
@@ -247,6 +275,19 @@ export class SceneDocumentSystem {
       current = current.parent;
     }
     return false;
+  }
+
+  private projectModelObject(object: Object3D): ModelStructureNode | undefined {
+    if (typeof object.userData.sceneNodeId === 'string') return undefined;
+    return {
+      objectId: object.uuid,
+      name: object.name.trim() || object.type || '未命名节点',
+      objectType: object.type || 'Object3D',
+      children: object.children.flatMap((child) => {
+        const projected = this.projectModelObject(child);
+        return projected ? [projected] : [];
+      }),
+    };
   }
 
   dispose(): void {

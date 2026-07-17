@@ -1,17 +1,46 @@
 <script setup lang="ts">
 import type { SceneDocument, SceneNode } from '@digital-twin/scene-schema';
-import type { SelectionState } from '@digital-twin/three-engine';
+import type {
+  ModelStructureMap,
+  ModelStructureNode,
+  SelectionState,
+} from '@digital-twin/three-engine';
 import {
+  Box,
+  CameraFilled,
+  Collection,
+  CopyDocument,
+  Delete,
+  EditPen,
+  Grid,
+  Hide,
+  Lock,
+  Operation,
+  Search,
+  Sunny,
+  Unlock,
+  View,
+} from '@element-plus/icons-vue';
+import {
+  ElInput,
+  ElScrollbar,
+  ElTooltip,
   ElTree,
+  type AllowDragFunction,
   type AllowDropFunction,
   type FilterNodeMethodFunction,
   type NodeDropType,
 } from 'element-plus';
-import { computed, ref, watch } from 'vue';
+import { computed, ref, watch, type Component } from 'vue';
 
 interface TreeItem {
+  key: string;
+  kind: 'scene-node' | 'model-part';
   id: string;
-  node: SceneNode;
+  ownerNodeId: string;
+  name: string;
+  objectType?: string;
+  node?: SceneNode;
   children: TreeItem[];
 }
 
@@ -19,9 +48,13 @@ const props = withDefaults(
   defineProps<{
     document: SceneDocument;
     selection: SelectionState;
+    modelStructures?: ModelStructureMap;
     changeVersion?: number;
   }>(),
-  { changeVersion: 0 },
+  {
+    modelStructures: () => ({}),
+    changeVersion: 0,
+  },
 );
 const emit = defineEmits<{
   select: [selection: SelectionState];
@@ -37,45 +70,68 @@ const emit = defineEmits<{
 const query = ref('');
 const treeRef = ref<InstanceType<typeof ElTree>>();
 
-function buildItem(id: string, visited: Set<string>): TreeItem | undefined {
+function buildModelPart(
+  part: ModelStructureNode,
+  ownerNodeId: string,
+): TreeItem {
+  return {
+    key: `object:${part.objectId}`,
+    kind: 'model-part',
+    id: part.objectId,
+    ownerNodeId,
+    name: part.name,
+    objectType: part.objectType,
+    children: part.children.map((child) => buildModelPart(child, ownerNodeId)),
+  };
+}
+
+function buildSceneItem(
+  id: string,
+  visited: Set<string>,
+): TreeItem | undefined {
   if (visited.has(id)) return undefined;
   const node = props.document.nodes[id];
   if (!node) return undefined;
   const nextVisited = new Set(visited).add(id);
+  const modelParts = (props.modelStructures[id] ?? []).map((part) =>
+    buildModelPart(part, id),
+  );
+  const businessChildren = node.childIds.flatMap((childId) => {
+    const child = buildSceneItem(childId, nextVisited);
+    return child ? [child] : [];
+  });
   return {
+    key: `node:${id}`,
+    kind: 'scene-node',
     id,
+    ownerNodeId: id,
+    name: node.name,
     node,
-    children: node.childIds.flatMap((childId) => {
-      const child = buildItem(childId, nextVisited);
-      return child ? [child] : [];
-    }),
+    // 真实模型子结构属于当前根；持久化业务子节点继续按 childIds 排序。
+    children: [...modelParts, ...businessChildren],
   };
 }
 
 const treeData = computed(() => {
-  // document 是 shallowRef 中的稳定原始对象；代次是这个计算属性的显式失效信号。
+  // document 来自 shallowRef，变更代次是原地命令更新后的显式失效信号。
   void props.changeVersion;
   return props.document.rootNodeIds.flatMap((id) => {
-    const item = buildItem(id, new Set());
+    const item = buildSceneItem(id, new Set());
     return item ? [item] : [];
   });
 });
 
-const matchingIds = computed(() => {
-  void props.changeVersion;
+const matchingKeys = computed(() => {
   const normalized = query.value.trim().toLocaleLowerCase('zh-CN');
-  if (!normalized) return new Set(Object.keys(props.document.nodes));
   const matches = new Set<string>();
-  for (const node of Object.values(props.document.nodes)) {
-    if (!node.name.toLocaleLowerCase('zh-CN').includes(normalized)) continue;
-    let current: SceneNode | undefined = node;
-    while (current) {
-      matches.add(current.id);
-      current = current.parentId
-        ? props.document.nodes[current.parentId]
-        : undefined;
-    }
-  }
+  const visit = (item: TreeItem): boolean => {
+    const childMatches = item.children.map(visit).some(Boolean);
+    const selfMatches =
+      !normalized || item.name.toLocaleLowerCase('zh-CN').includes(normalized);
+    if (selfMatches || childMatches) matches.add(item.key);
+    return selfMatches || childMatches;
+  };
+  treeData.value.forEach(visit);
   return matches;
 });
 
@@ -84,9 +140,10 @@ watch([query, treeData], () => treeRef.value?.filter(query.value), {
 });
 
 const filterNode: FilterNodeMethodFunction = (_value, item) =>
-  matchingIds.value.has((item as TreeItem).id);
+  matchingKeys.value.has((item as TreeItem).key);
 
-function selectNode(event: MouseEvent, id: string): void {
+function selectItem(event: MouseEvent, item: TreeItem): void {
+  const id = item.ownerNodeId;
   const additive = event.ctrlKey || event.metaKey;
   if (!additive) {
     emit('select', { ids: [id], primaryId: id });
@@ -118,8 +175,18 @@ function createsCycle(draggingId: string, droppingId: string): boolean {
   return false;
 }
 
-const allowDrop: AllowDropFunction = (dragging, dropping) =>
-  !createsCycle((dragging.data as TreeItem).id, (dropping.data as TreeItem).id);
+const allowDrag: AllowDragFunction = (dragging) =>
+  (dragging.data as TreeItem).kind === 'scene-node';
+
+const allowDrop: AllowDropFunction = (dragging, dropping) => {
+  const draggingItem = dragging.data as TreeItem;
+  const droppingItem = dropping.data as TreeItem;
+  return (
+    draggingItem.kind === 'scene-node' &&
+    droppingItem.kind === 'scene-node' &&
+    !createsCycle(draggingItem.id, droppingItem.id)
+  );
+};
 
 function dropNode(
   dragging: Parameters<AllowDropFunction>[0],
@@ -128,6 +195,13 @@ function dropNode(
 ): void {
   const draggingItem = dragging.data as TreeItem;
   const droppingItem = dropping.data as TreeItem;
+  if (
+    draggingItem.kind !== 'scene-node' ||
+    droppingItem.kind !== 'scene-node' ||
+    !droppingItem.node
+  ) {
+    return;
+  }
   const droppingNode = droppingItem.node;
   if (type === 'inner') {
     emit(
@@ -150,93 +224,178 @@ function dropNode(
     Math.max(0, droppingIndex + (type === 'after' ? 1 : 0)),
   );
 }
+
+function sceneNodeIcon(item: TreeItem): Component {
+  if (item.kind === 'model-part') return Box;
+  const kinds = new Set(item.node?.components.map(({ kind }) => kind));
+  if (kinds.has('model')) return Box;
+  if (kinds.has('geometry')) return Grid;
+  if (kinds.has('light')) return Sunny;
+  if ((item.node?.components.length ?? 0) === 0) return Collection;
+  return Operation;
+}
 </script>
 
 <template>
   <section class="scene-tree">
-    <input
-      v-model="query"
-      class="scene-tree-search"
-      type="search"
-      aria-label="搜索场景节点"
-      placeholder="搜索场景节点"
-    />
-    <div class="scene-tree-toolbar">
-      <span>{{ selection.ids.length }} 个已选</span>
-      <button
-        type="button"
-        aria-label="组合选中节点"
-        :disabled="selection.ids.length === 0"
-        @click="emit('group', [...selection.ids])"
-      >
-        组合
-      </button>
+    <div class="scene-tree-search-wrap">
+      <ElInput
+        v-model="query"
+        class="scene-tree-search"
+        aria-label="搜索场景节点"
+        placeholder="请输入内容名称"
+        :prefix-icon="Search"
+        clearable
+      />
     </div>
-    <ElTree
-      ref="treeRef"
-      :data="treeData"
-      node-key="id"
-      default-expand-all
-      draggable
-      :expand-on-click-node="false"
-      :filter-node-method="filterNode"
-      :allow-drop="allowDrop"
-      @node-drop="dropNode"
-    >
-      <template #default="{ data }: { data: TreeItem }">
-        <div
-          class="scene-tree-row"
-          :class="{ 'is-selected': selection.ids.includes(data.id) }"
-          :data-node-id="data.id"
-        >
-          <span
-            class="scene-tree-label"
-            :title="data.node.name"
-            @click.stop="selectNode($event, data.id)"
-            @dblclick.stop="renameNode(data.node)"
+
+    <div class="scene-camera" data-testid="scene-camera">
+      <CameraFilled
+        class="scene-tree-element-icon scene-camera-icon"
+        aria-hidden="true"
+      />
+      <strong>Camera</strong>
+    </div>
+
+    <ElScrollbar class="scene-tree-scroll" height="370px">
+      <ElTree
+        ref="treeRef"
+        :data="treeData"
+        node-key="key"
+        default-expand-all
+        draggable
+        highlight-current
+        :current-node-key="
+          selection.primaryId ? `node:${selection.primaryId}` : undefined
+        "
+        :expand-on-click-node="false"
+        :filter-node-method="filterNode"
+        :allow-drag="allowDrag"
+        :allow-drop="allowDrop"
+        empty-text="暂无数据"
+        @node-drop="dropNode"
+      >
+        <template #default="{ data }: { data: TreeItem }">
+          <div
+            class="scene-tree-row"
+            :class="{
+              'is-selected':
+                data.kind === 'scene-node' && selection.ids.includes(data.id),
+              'is-model-part': data.kind === 'model-part',
+            }"
+            :data-node-id="data.kind === 'scene-node' ? data.id : undefined"
+            :data-object-id="data.kind === 'model-part' ? data.id : undefined"
+            :data-object-type="data.objectType"
+            :data-owner-node-id="data.ownerNodeId"
           >
-            {{ data.node.name }}
-          </span>
-          <span class="scene-tree-actions">
-            <button
-              type="button"
-              :aria-label="`重命名${data.node.name}`"
-              @click.stop="renameNode(data.node)"
+            <span
+              class="scene-tree-label"
+              @click.stop="selectItem($event, data)"
+              @dblclick.stop="
+                data.kind === 'scene-node' && data.node
+                  ? renameNode(data.node)
+                  : undefined
+              "
             >
-              ✎
-            </button>
-            <button
-              type="button"
-              :aria-label="`复制${data.node.name}`"
-              @click.stop="emit('duplicate', data.id)"
+              <component
+                :is="sceneNodeIcon(data)"
+                class="scene-tree-element-icon scene-tree-node-icon"
+                aria-hidden="true"
+              />
+              <span class="scene-tree-name" :title="data.name">
+                {{ data.name }}
+              </span>
+            </span>
+
+            <span
+              v-if="data.kind === 'scene-node' && data.node"
+              class="scene-tree-actions"
             >
-              ⧉
-            </button>
-            <button
-              type="button"
-              :aria-label="`${data.node.enabled ? '隐藏' : '显示'}${data.node.name}`"
-              @click.stop="emit('toggle-visible', data.id, !data.node.enabled)"
-            >
-              {{ data.node.enabled ? '◉' : '○' }}
-            </button>
-            <button
-              type="button"
-              :aria-label="`${data.node.locked ? '解锁' : '锁定'}${data.node.name}`"
-              @click.stop="emit('toggle-locked', data.id, !data.node.locked)"
-            >
-              {{ data.node.locked ? '🔒' : '🔓' }}
-            </button>
-            <button
-              type="button"
-              :aria-label="`删除${data.node.name}`"
-              @click.stop="emit('remove', data.id)"
-            >
-              ×
-            </button>
-          </span>
-        </div>
-      </template>
-    </ElTree>
-    <p v-if="treeData.length === 0" class="empty-panel">当前场景暂无节点</p>
+              <ElTooltip :content="`重命名${data.node.name}`" placement="top">
+                <button
+                  type="button"
+                  class="scene-tree-action-button"
+                  :aria-label="`重命名${data.node.name}`"
+                  @click.stop="renameNode(data.node)"
+                >
+                  <EditPen class="scene-tree-element-icon" aria-hidden="true" />
+                </button>
+              </ElTooltip>
+              <ElTooltip :content="`复制${data.node.name}`" placement="top">
+                <button
+                  type="button"
+                  class="scene-tree-action-button"
+                  :aria-label="`复制${data.node.name}`"
+                  @click.stop="emit('duplicate', data.id)"
+                >
+                  <CopyDocument
+                    class="scene-tree-element-icon"
+                    aria-hidden="true"
+                  />
+                </button>
+              </ElTooltip>
+              <ElTooltip
+                :content="`${data.node.enabled ? '隐藏' : '显示'}${data.node.name}`"
+                placement="top"
+              >
+                <button
+                  type="button"
+                  class="scene-tree-action-button"
+                  :aria-label="`${data.node.enabled ? '隐藏' : '显示'}${data.node.name}`"
+                  @click.stop="
+                    emit('toggle-visible', data.id, !data.node.enabled)
+                  "
+                >
+                  <View
+                    v-if="data.node.enabled"
+                    class="scene-tree-element-icon"
+                    aria-hidden="true"
+                  />
+                  <Hide
+                    v-else
+                    class="scene-tree-element-icon"
+                    aria-hidden="true"
+                  />
+                </button>
+              </ElTooltip>
+              <ElTooltip
+                :content="`${data.node.locked ? '解锁' : '锁定'}${data.node.name}`"
+                placement="top"
+              >
+                <button
+                  type="button"
+                  class="scene-tree-action-button"
+                  :aria-label="`${data.node.locked ? '解锁' : '锁定'}${data.node.name}`"
+                  @click.stop="
+                    emit('toggle-locked', data.id, !data.node.locked)
+                  "
+                >
+                  <Lock
+                    v-if="data.node.locked"
+                    class="scene-tree-element-icon"
+                    aria-hidden="true"
+                  />
+                  <Unlock
+                    v-else
+                    class="scene-tree-element-icon"
+                    aria-hidden="true"
+                  />
+                </button>
+              </ElTooltip>
+              <ElTooltip :content="`删除${data.node.name}`" placement="top">
+                <button
+                  type="button"
+                  class="scene-tree-action-button is-danger"
+                  :aria-label="`删除${data.node.name}`"
+                  @click.stop="emit('remove', data.id)"
+                >
+                  <Delete class="scene-tree-element-icon" aria-hidden="true" />
+                </button>
+              </ElTooltip>
+            </span>
+          </div>
+        </template>
+      </ElTree>
+    </ElScrollbar>
   </section>
 </template>

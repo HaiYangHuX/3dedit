@@ -59,7 +59,12 @@ import {
 } from './settings/SceneSettingsSystem.js';
 import { loadEditorEnvironment } from './settings/loadEditorEnvironment.js';
 import { WeatherSystem } from './settings/WeatherSystem.js';
-import type { LoadReport, RenderStats, SceneStats } from './types.js';
+import type {
+  LoadReport,
+  ModelStructureMap,
+  RenderStats,
+  SceneStats,
+} from './types.js';
 
 export const DEFAULT_EDITOR_ENVIRONMENT_URL = BUILTIN_ENVIRONMENT_URL;
 
@@ -413,6 +418,11 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
 
   getObject(nodeId: string): Object3D | undefined {
     return this.documentSystem?.getObject(nodeId);
+  }
+
+  /** 为宿主场景树提供当前真实 Object3D 层级，不泄漏可写 Three 实例。 */
+  getModelStructures(): ModelStructureMap {
+    return this.documentSystem?.getModelStructures() ?? {};
   }
 
   getStats(): SceneStats {

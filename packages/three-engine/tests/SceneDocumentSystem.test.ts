@@ -6,6 +6,7 @@ import {
   HemisphereLight,
   Mesh,
   MeshStandardMaterial,
+  Object3D,
   PointLight,
   Scene,
   SpotLight,
@@ -177,6 +178,93 @@ describe('SceneDocumentSystem', () => {
     expect(system.getObject('spot')).toBeInstanceOf(SpotLight);
     expect(system.getNodeId(system.getObject('box')!)).toBe('box');
     expect(system.getStats()).toMatchObject({ objectCount: 8, meshCount: 3 });
+  });
+
+  it('从真实 Object3D 投影模型内部结构并排除业务子节点', async () => {
+    const scene = new Scene();
+    const modelObject = new Group();
+    const assembly = new Group();
+    assembly.name = '装配体';
+    const unnamedMesh = new Mesh(
+      new BoxGeometry(1, 1, 1),
+      new MeshStandardMaterial({ color: '#fff' }),
+    );
+    assembly.add(unnamedMesh);
+    modelObject.add(assembly);
+    const assets: AssetInstanceProvider = {
+      beginGeneration: vi.fn(() => 1),
+      instantiate: vi.fn(async () => modelObject),
+      release: vi.fn(() => true),
+      dispose: vi.fn(),
+    };
+    const system = new SceneDocumentSystem(scene, assets);
+    const document = createDefaultSceneDocument('project-1', 'scene-1', '场景');
+    const model = node('model', { kind: 'model', assetId: 'asset-1' });
+    const businessChild = node(
+      'business-child',
+      { kind: 'geometry', primitive: 'box' },
+      model.id,
+    );
+    model.childIds = [businessChild.id];
+    document.nodes = { model, 'business-child': businessChild };
+    document.rootNodeIds = [model.id];
+
+    await system.loadDocument(document);
+
+    expect(system.getModelStructures()).toEqual({
+      model: [
+        {
+          objectId: assembly.uuid,
+          name: '装配体',
+          objectType: 'Group',
+          children: [
+            {
+              objectId: unnamedMesh.uuid,
+              name: 'Mesh',
+              objectType: 'Mesh',
+              children: [],
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  it('展示树打平与业务根同名的单一模型包装组', async () => {
+    const scene = new Scene();
+    const modelObject = new Group();
+    const redundantWrapper = new Object3D();
+    redundantWrapper.name = '清洗机';
+    const mesh = new Mesh(
+      new BoxGeometry(1, 1, 1),
+      new MeshStandardMaterial({ color: '#fff' }),
+    );
+    mesh.name = '叶轮';
+    redundantWrapper.add(mesh);
+    modelObject.add(redundantWrapper);
+    const assets: AssetInstanceProvider = {
+      beginGeneration: vi.fn(() => 1),
+      instantiate: vi.fn(async () => modelObject),
+      release: vi.fn(() => true),
+      dispose: vi.fn(),
+    };
+    const system = new SceneDocumentSystem(scene, assets);
+    const document = createDefaultSceneDocument('project-1', 'scene-1', '场景');
+    const model = node('model', { kind: 'model', assetId: 'asset-1' });
+    model.name = '清洗机';
+    document.nodes = { model };
+    document.rootNodeIds = [model.id];
+
+    await system.loadDocument(document);
+
+    expect(system.getModelStructures().model).toEqual([
+      {
+        objectId: mesh.uuid,
+        name: '叶轮',
+        objectType: 'Mesh',
+        children: [],
+      },
+    ]);
   });
 
   it('属性面板切换几何体类型时替换并释放旧几何资源', async () => {

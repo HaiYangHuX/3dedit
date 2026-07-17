@@ -30,21 +30,21 @@
 **Interfaces:**
 - Produces: `ModelStructureNode`, `ModelStructureMap`, `SceneDocumentSystem.getModelStructures()` 和 `EditorEngine.getModelStructures()`。
 
-- [ ] **Step 1: 写入 Three 失败测试**
+- [x] **Step 1: 写入 Three 失败测试**
 
   构造“模型根 → 命名 Group → Mesh”，同时在模型根下挂载具有 `sceneNodeId` 的业务子节点，期望快照保留前者并排除后者。
 
-- [ ] **Step 2: 运行定向测试确认因 API 缺失而失败**
+- [x] **Step 2: 运行定向测试确认因 API 缺失而失败**
 
   ```bash
   pnpm --filter @digital-twin/three-engine exec vitest run tests/SceneDocumentSystem.test.ts
   ```
 
-- [ ] **Step 3: 实现层级投影并导出类型**
+- [x] **Step 3: 实现层级投影并导出类型**
 
   只从 `primaryComponentKind === 'model'` 的根对象导出内部子树；未命名对象使用 `object.type`；具有自己 `sceneNodeId` 的业务节点不进入投影。
 
-- [ ] **Step 4: 运行 Three 定向测试确认通过**
+- [x] **Step 4: 运行 Three 定向测试确认通过**
 
 ### Task 2: Canvas 层级快照事件
 
@@ -57,21 +57,21 @@
 - Consumes: `EditorEngine.getModelStructures(): ModelStructureMap`。
 - Produces: Vue 事件 `model-structure-change` 和增量更新后的新快照。
 
-- [ ] **Step 1: 写入 Canvas 失败测试**
+- [x] **Step 1: 写入 Canvas 失败测试**
 
   为 mock engine 增加 `getModelStructures`，期望初始加载后 `wrapper.emitted('model-structure-change')` 收到同一快照。
 
-- [ ] **Step 2: 运行定向测试确认事件缺失**
+- [x] **Step 2: 运行定向测试确认事件缺失**
 
   ```bash
   pnpm --filter @digital-twin/editor-web exec vitest run tests/EditorCanvasBridge.test.ts
   ```
 
-- [ ] **Step 3: 在加载和增量变更成功后统一发射快照**
+- [x] **Step 3: 在加载和增量变更成功后统一发射快照**
 
   `applyNodeUpdated` 改为可等待 Promise，只在 `engine.updateNode()` 成功后发送，避免 Object3D 替换期间发送旧 UUID。
 
-- [ ] **Step 4: 运行 Canvas 定向测试确认通过**
+- [x] **Step 4: 运行 Canvas 定向测试确认通过**
 
 ### Task 3: Camera 与可展开模型树
 
@@ -85,25 +85,25 @@
 - Consumes: `modelStructures: ModelStructureMap`。
 - Preserves: 业务节点原有 emits，内部 Object3D 单击映射到所属 SceneNode 选择。
 
-- [ ] **Step 1: 写入树组件失败测试**
+- [x] **Step 1: 写入树组件失败测试**
 
   期望页面有 `[data-testid="scene-camera"]`、模型根 `data-node-id`、嵌套子结构 `data-object-id`、Element SVG 图标和 `ElTooltip`，并且单击内部节点会选中所属模型根。
 
-- [ ] **Step 2: 运行定向测试确认 Camera 和子结构缺失**
+- [x] **Step 2: 运行定向测试确认 Camera 和子结构缺失**
 
   ```bash
   pnpm --filter @digital-twin/editor-web exec vitest run tests/SceneTree.test.ts tests/EditorWorkspace.test.ts
   ```
 
-- [ ] **Step 3: 重构 SceneTree 的树项边界**
+- [x] **Step 3: 重构 SceneTree 的树项边界**
 
   业务项和模型内部项使用不同 kind；搜索递归保留祖先；内部项禁止拖拽且不显示业务操作。
 
-- [ ] **Step 4: 为工作区接入最新快照**
+- [x] **Step 4: 为工作区接入最新快照**
 
   `EditorWorkspace` 使用 `ref<ModelStructureMap>({})`，处理 `EditorCanvas @model-structure-change` 并把快照传给 `SceneTree`。
 
-- [ ] **Step 5: 运行树和工作区测试确认通过**
+- [x] **Step 5: 运行树和工作区测试确认通过**
 
 ### Task 4: 源站树样式与 Element 操作区
 
@@ -111,15 +111,15 @@
 - Modify: `apps/editor-web/src/styles/editor.scss`
 - Modify: `apps/editor-web/src/components/editor/SceneTree.vue`
 
-- [ ] **Step 1: 用 Element Plus 组件替换原生搜索和 Emoji**
+- [x] **Step 1: 用 Element Plus 组件替换原生搜索和 Emoji**
 
   使用 `ElInput` + `Search`、`ElScrollbar`、`ElTooltip`，业务操作使用 `EditPen`、`CopyDocument`、`View/Hide`、`Lock/Unlock`、`Delete`。
 
-- [ ] **Step 2: 应用源站场景树 CSS 参数**
+- [x] **Step 2: 应用源站场景树 CSS 参数**
 
   搜索区 10px 内边距；Camera 行 `padding: 6px 16px`；树行 28px；树背景 `#0f172a80`；hover/current 左边框；操作按钮 18px。
 
-- [ ] **Step 3: 运行前端静态验证**
+- [x] **Step 3: 运行前端静态验证**
 
   ```bash
   pnpm --filter @digital-twin/editor-web typecheck
@@ -128,17 +128,17 @@
 
 ### Task 5: 全量与真实模型验收
 
-- [ ] **Step 1: 运行全量验证**
+- [x] **Step 1: 运行全量验证**
 
   ```bash
   CI=1 E2E_EDITOR_BASE_URL='http://127.0.0.1:5273' E2E_RUNTIME_BASE_URL='http://127.0.0.1:5274' pnpm verify
   ```
 
-- [ ] **Step 2: 浏览器验证**
+- [x] **Step 2: 浏览器验证**
 
   打开 `/editor/local-project/toolbar-check`，使用现有真实模型实例，确认 Camera、可展开 Object3D 子结构、深色背景、青色选中态、Element 图标和 Tooltip。
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
   ```bash
   git commit -m '💥 feat(Three交互): 还原场景树模型结构'
