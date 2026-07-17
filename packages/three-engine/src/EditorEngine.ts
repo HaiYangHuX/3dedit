@@ -3,6 +3,7 @@ import {
   Color,
   EventDispatcher,
   NeutralToneMapping,
+  PCFShadowMap,
   PerspectiveCamera,
   PMREMGenerator,
   Scene,
@@ -46,14 +47,17 @@ import {
 import { ViewportDropSystem } from './interaction/ViewportDropSystem.js';
 import { MaterialSystem } from './materials/MaterialSystem.js';
 import { ResourceTracker } from './ResourceTracker';
+import { BUILTIN_ENVIRONMENT_URL } from './settings/builtinAssets.js';
+import { GroundSystem } from './settings/GroundSystem.js';
 import {
   SceneSettingsSystem,
   type EnvironmentMapTarget,
 } from './settings/SceneSettingsSystem.js';
 import { loadEditorEnvironment } from './settings/loadEditorEnvironment.js';
+import { WeatherSystem } from './settings/WeatherSystem.js';
 import type { LoadReport, RenderStats, SceneStats } from './types.js';
 
-export const DEFAULT_EDITOR_ENVIRONMENT_URL = '/hdr/venice_sunset_1k.hdr';
+export const DEFAULT_EDITOR_ENVIRONMENT_URL = BUILTIN_ENVIRONMENT_URL;
 
 export interface EditorEngineOptions {
   /** 传入 null 可跳过本地 HDR，主要用于宿主自定义或故障诊断。 */
@@ -95,6 +99,8 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
   private dropSystem?: ViewportDropSystem;
   private cameraSystem?: ViewportCameraSystem;
   private settingsSystem?: SceneSettingsSystem;
+  private groundSystem?: GroundSystem;
+  private weatherSystem?: WeatherSystem;
   private fallbackEnvironmentTarget?: EnvironmentMapTarget;
   private assetResolver?: AssetResolver;
   private resizeObserver?: ResizeObserver;
@@ -125,6 +131,7 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     renderer.toneMapping = NeutralToneMapping;
     renderer.toneMappingExposure = 1.2;
     renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = PCFShadowMap;
     container.append(renderer.domElement);
     this.renderer = renderer;
 
@@ -174,9 +181,12 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.fallbackEnvironmentTarget = fallbackEnvironmentTarget;
     this.scene.environmentRotation.set(0, Math.PI / 2, 0);
     this.settingsSystem = new SceneSettingsSystem(this.scene, renderer, {
+      includeGrid: false,
       fallbackEnvironment: fallbackEnvironmentTarget.texture,
       environmentGenerator,
     });
+    this.groundSystem = new GroundSystem(this.scene);
+    this.weatherSystem = new WeatherSystem(this.scene);
 
     this.controls = new OrbitControls(this.camera, renderer.domElement);
     this.controls.target.set(0, 0.5, 0);
@@ -253,6 +263,12 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.frameId = requestAnimationFrame(this.loop);
     this.timer.update(timestamp);
     const delta = this.timer.getDelta();
+    const elapsed = this.timer.getElapsed();
+    this.groundSystem?.update(elapsed);
+    this.weatherSystem?.update(delta, elapsed);
+    if (this.groundSystem?.isAnimated || this.weatherSystem?.isActive) {
+      this.invalidated = true;
+    }
     const cameraAnimating = this.cameraSystem?.update(delta) ?? false;
     if (!cameraAnimating) this.controls?.update(delta);
     if (cameraAnimating) this.invalidated = true;
@@ -276,10 +292,12 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
   ): Promise<LoadReport> {
     if (!this.renderer) throw new Error('EditorEngine 尚未初始化');
     this.settingsSystem?.apply(document.settings);
-    await this.settingsSystem?.applyEnvironment(
-      document.settings.environmentAssetId,
-      resolver,
-    );
+    await Promise.all([
+      this.settingsSystem?.applyBackground(document.settings, resolver),
+      this.settingsSystem?.applyEnvironment(document.settings, resolver),
+      this.groundSystem?.apply(document.settings.groundType),
+      this.weatherSystem?.apply(document.settings),
+    ]);
     this.selectionSystem?.setSelection([]);
     this.transformSystem?.setSelection(null);
     if (!this.documentSystem || resolver !== this.assetResolver) {
@@ -338,10 +356,12 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
   async updateSettings(settings: SceneDocument['settings']): Promise<void> {
     this.settingsSystem?.apply(settings);
     if (this.assetResolver) {
-      await this.settingsSystem?.applyEnvironment(
-        settings.environmentAssetId,
-        this.assetResolver,
-      );
+      await Promise.all([
+        this.settingsSystem?.applyBackground(settings, this.assetResolver),
+        this.settingsSystem?.applyEnvironment(settings, this.assetResolver),
+        this.groundSystem?.apply(settings.groundType),
+        this.weatherSystem?.apply(settings),
+      ]);
     }
     this.invalidate();
   }
@@ -473,6 +493,8 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.selectionSystem?.dispose();
     this.selectionHighlight?.dispose();
     this.transformSystem?.dispose();
+    this.weatherSystem?.dispose();
+    this.groundSystem?.dispose();
     this.settingsSystem?.dispose();
     this.fallbackEnvironmentTarget?.dispose();
     this.fallbackEnvironmentTarget = undefined;

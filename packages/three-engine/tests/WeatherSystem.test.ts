@@ -48,6 +48,7 @@ describe('WeatherSystem', () => {
       }),
     );
     const points = scene.children[0] as Points;
+    expect(system.isActive).toBe(true);
     const material = points.material as PointsMaterial;
     const positions = points.geometry.getAttribute(
       'position',
@@ -123,6 +124,7 @@ describe('WeatherSystem', () => {
     await system.apply(settings({ weatherType: 'none' }));
 
     expect(scene.children).toHaveLength(0);
+    expect(system.isActive).toBe(false);
     expect(geometryDispose).toHaveBeenCalledOnce();
     expect(materialDispose).toHaveBeenCalledOnce();
     expect(textureDispose).toHaveBeenCalledOnce();

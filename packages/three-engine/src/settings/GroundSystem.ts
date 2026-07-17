@@ -163,6 +163,10 @@ export class GroundSystem {
     this.random = options.random ?? Math.random;
   }
 
+  get isAnimated(): boolean {
+    return this.currentType === 'lawn' && Boolean(this.currentRoot);
+  }
+
   async apply(type: GroundType): Promise<void> {
     if (this.disposed) return;
     const generation = ++this.generation;

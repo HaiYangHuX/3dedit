@@ -21,7 +21,7 @@ describe('Three.js r183 兼容边界', () => {
     expect(assets).toContain('USDLoader');
     // 默认主路径必须是与源站一致的 Venice HDR；RoomEnvironment 只能留作加载失败兜底。
     expect(editorEngine).toContain('DEFAULT_EDITOR_ENVIRONMENT_URL');
-    expect(editorEngine).toContain("'/hdr/venice_sunset_1k.hdr'");
+    expect(editorEngine).toContain('BUILTIN_ENVIRONMENT_URL');
     expect(editorEngine).toContain('loadEditorEnvironment');
     expect(editorEngine).toContain(
       'environmentRotation.set(0, Math.PI / 2, 0)',

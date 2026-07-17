@@ -56,6 +56,10 @@ export class WeatherSystem {
     this.random = options.random ?? Math.random;
   }
 
+  get isActive(): boolean {
+    return Boolean(this.state);
+  }
+
   async apply(settings: SceneSettings): Promise<void> {
     if (this.disposed) return;
     const generation = ++this.generation;

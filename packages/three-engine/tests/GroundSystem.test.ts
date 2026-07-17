@@ -132,6 +132,7 @@ describe('GroundSystem', () => {
     });
 
     await system.apply('lawn');
+    expect(system.isAnimated).toBe(true);
     const lawn = scene.getObjectByName('customPlane') as Group;
     expect(lawn.userData.planeGeometry).toBe('lawn');
     expect(lawn.children.some((child) => child instanceof InstancedMesh)).toBe(
@@ -142,6 +143,7 @@ describe('GroundSystem', () => {
     expect(windMaterial.userData.windTime).toBe(12.5);
 
     await system.apply('rock');
+    expect(system.isAnimated).toBe(false);
     const rock = scene.getObjectByName('customPlane') as Group;
     expect(rock.userData.planeGeometry).toBe('rock');
     expect(
