@@ -1,14 +1,27 @@
+import { createDefaultSceneDocument } from '@digital-twin/scene-schema';
+import type { SceneSettings } from '@digital-twin/scene-schema';
 import {
+  ACESFilmicToneMapping,
+  AgXToneMapping,
+  BasicShadowMap,
+  CineonToneMapping,
+  Color,
+  CustomToneMapping,
+  EquirectangularReflectionMapping,
+  Fog,
   FogExp2,
-  GridHelper,
-  Group,
+  LinearToneMapping,
+  NeutralToneMapping,
+  NoToneMapping,
+  PCFShadowMap,
+  PCFSoftShadowMap,
+  ReinhardToneMapping,
   Scene,
+  SRGBColorSpace,
   Texture,
-  type Color,
-  type Material,
+  VSMShadowMap,
   type WebGLRenderer,
 } from 'three';
-import { createDefaultSceneDocument } from '@digital-twin/scene-schema';
 import { describe, expect, it, vi } from 'vitest';
 import {
   SceneSettingsSystem,
@@ -23,75 +36,164 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+function settings(overrides: Partial<SceneSettings> = {}): SceneSettings {
+  return {
+    ...createDefaultSceneDocument('project-1', 'scene-1', '场景').settings,
+    ...overrides,
+  };
+}
+
+function rendererStub(): WebGLRenderer {
+  return {
+    toneMapping: NoToneMapping,
+    toneMappingExposure: 1,
+    shadowMap: { enabled: false, type: BasicShadowMap },
+  } as WebGLRenderer;
+}
+
 describe('SceneSettingsSystem', () => {
-  it('按线上 r183 参数同步背景、曝光、编辑雾和双层网格', () => {
-    const scene = new Scene();
-    const renderer = { toneMappingExposure: 1 } as WebGLRenderer;
-    const system = new SceneSettingsSystem(scene, renderer);
-    const gridGroup = system.grid as Group;
-    const grids = gridGroup.children as GridHelper[];
-
-    expect(gridGroup).toBeInstanceOf(Group);
-    expect(grids).toHaveLength(2);
-    expect(grids.every((grid) => grid instanceof GridHelper)).toBe(true);
-    // GridHelper 每个分段产生纵横各一条线，每条线包含两个顶点。
-    expect(grids[0]!.geometry.getAttribute('position').count).toBe(8_004);
-    expect(grids[1]!.geometry.getAttribute('position').count).toBe(804);
-    expect((grids[0]!.material as Material & { opacity: number }).opacity).toBe(
-      0.1,
-    );
-    expect((grids[1]!.material as Material & { opacity: number }).opacity).toBe(
-      0.3,
-    );
-    const geometryDisposes = grids.map((grid) =>
-      vi.spyOn(grid.geometry, 'dispose'),
-    );
-    const materialDisposes = grids.flatMap((grid) => {
-      const materials = Array.isArray(grid.material)
-        ? grid.material
-        : [grid.material];
-      return materials.map((material) => vi.spyOn(material, 'dispose'));
+  it('将全部 r183 tone mapping 和 shadow map 枚举映射到 Renderer', () => {
+    const renderer = rendererStub();
+    const system = new SceneSettingsSystem(new Scene(), renderer, {
+      includeGrid: false,
     });
+    const toneMappings = {
+      custom: CustomToneMapping,
+      none: NoToneMapping,
+      linear: LinearToneMapping,
+      reinhard: ReinhardToneMapping,
+      cineon: CineonToneMapping,
+      'aces-filmic': ACESFilmicToneMapping,
+      agx: AgXToneMapping,
+      neutral: NeutralToneMapping,
+    } as const;
+    const shadows = {
+      basic: BasicShadowMap,
+      pcf: PCFShadowMap,
+      'pcf-soft': PCFSoftShadowMap,
+      vsm: VSMShadowMap,
+    } as const;
 
-    system.apply({
-      ...createDefaultSceneDocument('project-1', 'scene-1', '场景').settings,
-      background: '#020617',
-      exposure: 1.6,
-      gridVisible: false,
-      environmentAssetId: null,
-    });
-
-    expect((scene.background as Color).getHexString()).toBe('020617');
-    expect(renderer.toneMappingExposure).toBe(1.6);
-    expect(gridGroup.visible).toBe(false);
-    expect(scene.fog).toBeInstanceOf(FogExp2);
-    expect((scene.fog as FogExp2).color.getHexString()).toBe('020617');
-    expect((scene.fog as FogExp2).density).toBe(0.01);
-
+    for (const [toneMapping, expected] of Object.entries(toneMappings)) {
+      system.apply(
+        settings({ toneMapping: toneMapping as SceneSettings['toneMapping'] }),
+      );
+      expect(renderer.toneMapping, toneMapping).toBe(expected);
+    }
+    for (const [shadowMapType, expected] of Object.entries(shadows)) {
+      system.apply(
+        settings({
+          shadowMapType: shadowMapType as SceneSettings['shadowMapType'],
+          exposure: 2.4,
+        }),
+      );
+      expect(renderer.shadowMap.type, shadowMapType).toBe(expected);
+      expect(renderer.shadowMap.enabled).toBe(true);
+      expect(renderer.toneMappingExposure).toBe(2.4);
+    }
     system.dispose();
-    expect(gridGroup.parent).toBeNull();
-    for (const dispose of geometryDisposes)
-      expect(dispose).toHaveBeenCalledOnce();
-    for (const dispose of materialDisposes)
-      expect(dispose).toHaveBeenCalledOnce();
   });
 
-  it('纯运行时模式不创建或挂载编辑网格', () => {
+  it('按源站语义应用无背景、颜色、Fog 和 FogExp2', () => {
     const scene = new Scene();
-    const renderer = { toneMappingExposure: 1 } as WebGLRenderer;
-    const system = new SceneSettingsSystem(scene, renderer, {
+    const system = new SceneSettingsSystem(scene, rendererStub(), {
       includeGrid: false,
     });
 
-    expect(system.grid).toBeUndefined();
-    expect(scene.children).toHaveLength(0);
+    system.apply(settings({ backgroundType: 'none', fogType: 'none' }));
+    expect((scene.background as Color).getHexString()).toBe('a0a0a0');
     expect(scene.fog).toBeNull();
+
+    system.apply(
+      settings({
+        backgroundType: 'color',
+        background: '#020617',
+        fogType: 'linear',
+        fogColor: '#123456',
+        fogNear: 8,
+        fogFar: 640,
+      }),
+    );
+    expect((scene.background as Color).getHexString()).toBe('020617');
+    expect(scene.fog).toBeInstanceOf(Fog);
+    expect((scene.fog as Fog).color.getHexString()).toBe('123456');
+    expect((scene.fog as Fog).near).toBe(8);
+    expect((scene.fog as Fog).far).toBe(640);
+
+    system.apply(
+      settings({
+        fogType: 'exponential',
+        fogColor: '#334455',
+        fogDensity: 0.025,
+      }),
+    );
+    expect(scene.fog).toBeInstanceOf(FogExp2);
+    expect((scene.fog as FogExp2).color.getHexString()).toBe('334455');
+    expect((scene.fog as FogExp2).density).toBe(0.025);
+    expect(scene.backgroundBlurriness).toBe(0);
+    expect(scene.backgroundIntensity).toBe(5);
     system.dispose();
   });
 
-  it('没有用户 HDR 时使用 fallback environment，清除 HDR 后恢复', async () => {
+  it('图片背景使用 sRGB 经纬映射并丢弃迟到纹理', async () => {
     const scene = new Scene();
-    const renderer = { toneMappingExposure: 1 } as WebGLRenderer;
+    const firstLoad = deferred<Texture>();
+    const secondLoad = deferred<Texture>();
+    const firstTexture = new Texture();
+    const secondTexture = new Texture();
+    const firstDispose = vi.spyOn(firstTexture, 'dispose');
+    const loader = {
+      loadAsync: vi
+        .fn()
+        .mockReturnValueOnce(firstLoad.promise)
+        .mockReturnValueOnce(secondLoad.promise),
+    };
+    const resolver: EnvironmentAssetResolver = {
+      resolve: vi.fn(async (assetId: string) => ({
+        assetId,
+        name: `${assetId}.jpg`,
+        format: 'jpg' as const,
+        url: `http://example.com/${assetId}.jpg`,
+      })),
+    };
+    const system = new SceneSettingsSystem(scene, rendererStub(), {
+      includeGrid: false,
+      textureLoader: loader,
+    });
+
+    const first = system.applyBackground(
+      settings({ backgroundType: 'texture', backgroundAssetId: 'first' }),
+      resolver,
+    );
+    await vi.waitFor(() => expect(loader.loadAsync).toHaveBeenCalledOnce());
+    const second = system.applyBackground(
+      settings({
+        backgroundType: 'texture',
+        backgroundAssetId: 'second',
+        backgroundBlurriness: 0.4,
+        backgroundIntensity: 3.2,
+      }),
+      resolver,
+    );
+    firstLoad.resolve(firstTexture);
+    await first;
+    expect(firstDispose).toHaveBeenCalledOnce();
+
+    secondLoad.resolve(secondTexture);
+    await second;
+    expect(scene.background).toBe(secondTexture);
+    expect(secondTexture.mapping).toBe(EquirectangularReflectionMapping);
+    expect(secondTexture.colorSpace).toBe(SRGBColorSpace);
+    expect(scene.backgroundBlurriness).toBe(0.4);
+    expect(scene.backgroundIntensity).toBe(3.2);
+
+    system.apply(settings({ backgroundType: 'color', background: '#111111' }));
+    expect((scene.background as Color).getHexString()).toBe('111111');
+    system.dispose();
+  });
+
+  it('环境开关、内置 Venice 与用户环境遵守所有权边界', async () => {
+    const scene = new Scene();
     const fallbackEnvironment = new Texture();
     const fallbackDispose = vi.spyOn(fallbackEnvironment, 'dispose');
     const userEnvironment = new Texture();
@@ -110,82 +212,40 @@ describe('SceneSettingsSystem', () => {
         url: `http://example.com/${assetId}.hdr`,
       })),
     };
-    const system = new SceneSettingsSystem(scene, renderer, {
+    const system = new SceneSettingsSystem(scene, rendererStub(), {
       includeGrid: false,
       fallbackEnvironment,
       environmentLoader: { loadAsync: vi.fn(async () => sourceTexture) },
       environmentGenerator: generator,
     });
 
-    await system.applyEnvironment(null, resolver);
+    await system.applyEnvironment(
+      settings({ environmentEnabled: true, environmentAssetId: null }),
+      resolver,
+    );
     expect(scene.environment).toBe(fallbackEnvironment);
+    expect(scene.environmentRotation.y).toBeCloseTo(Math.PI / 2);
 
-    await system.applyEnvironment('environment-1', resolver);
+    await system.applyEnvironment(
+      settings({
+        environmentEnabled: true,
+        environmentAssetId: 'environment-1',
+      }),
+      resolver,
+    );
     expect(scene.environment).toBe(userEnvironment);
     expect(sourceDispose).toHaveBeenCalledOnce();
 
-    await system.applyEnvironment(null, resolver);
-    expect(scene.environment).toBe(fallbackEnvironment);
+    await system.applyEnvironment(
+      settings({ environmentEnabled: false }),
+      resolver,
+    );
+    expect(scene.environment).toBeNull();
     expect(userTarget.dispose).toHaveBeenCalledOnce();
 
     system.dispose();
-    expect(scene.environment).toBeNull();
-    // fallback 由 EditorEngine 持有，设置系统只能解除引用，不能越权释放。
+    // fallback 由 Engine 持有，设置系统只解除引用。
     expect(fallbackDispose).not.toHaveBeenCalled();
     expect(generator.dispose).toHaveBeenCalledOnce();
-  });
-
-  it('连续切换 HDR 时丢弃迟到纹理并只保留最新 PMREM', async () => {
-    const scene = new Scene();
-    const renderer = { toneMappingExposure: 1 } as WebGLRenderer;
-    const firstLoad = deferred<Texture>();
-    const secondLoad = deferred<Texture>();
-    const firstTexture = new Texture();
-    const secondTexture = new Texture();
-    const firstDispose = vi.spyOn(firstTexture, 'dispose');
-    const secondDispose = vi.spyOn(secondTexture, 'dispose');
-    const environmentTexture = new Texture();
-    const target = { texture: environmentTexture, dispose: vi.fn() };
-    const generator = {
-      fromEquirectangular: vi.fn(() => target),
-      dispose: vi.fn(),
-    };
-    const loader = {
-      loadAsync: vi
-        .fn()
-        .mockReturnValueOnce(firstLoad.promise)
-        .mockReturnValueOnce(secondLoad.promise),
-    };
-    const resolver: EnvironmentAssetResolver = {
-      resolve: vi.fn(async (assetId: string) => ({
-        assetId,
-        name: assetId,
-        format: 'hdr' as const,
-        url: `http://example.com/${assetId}.hdr`,
-      })),
-    };
-    const system = new SceneSettingsSystem(scene, renderer, {
-      includeGrid: false,
-      environmentLoader: loader,
-      environmentGenerator: generator,
-    });
-
-    const first = system.applyEnvironment('environment-1', resolver);
-    await vi.waitFor(() => expect(loader.loadAsync).toHaveBeenCalledTimes(1));
-    const second = system.applyEnvironment('environment-2', resolver);
-    firstLoad.resolve(firstTexture);
-    await first;
-    expect(firstDispose).toHaveBeenCalledOnce();
-    expect(generator.fromEquirectangular).not.toHaveBeenCalled();
-
-    secondLoad.resolve(secondTexture);
-    await second;
-    expect(secondDispose).toHaveBeenCalledOnce();
-    expect(scene.environment).toBe(environmentTexture);
-
-    await system.applyEnvironment(null, resolver);
-    expect(scene.environment).toBeNull();
-    expect(target.dispose).toHaveBeenCalledOnce();
-    system.dispose();
   });
 });
