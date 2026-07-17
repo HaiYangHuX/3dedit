@@ -1,9 +1,10 @@
 import {
-  AmbientLight,
   Box3,
   Color,
   EventDispatcher,
+  NeutralToneMapping,
   PerspectiveCamera,
+  PMREMGenerator,
   Scene,
   Sphere,
   SRGBColorSpace,
@@ -12,8 +13,10 @@ import {
   Vector3,
   WebGLRenderer,
   type Object3D,
+  type WebGLRenderTarget,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import type { TransformControlsMode } from 'three/addons/controls/TransformControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { OutlinePass } from 'three/addons/postprocessing/OutlinePass.js';
@@ -80,6 +83,7 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
   private dropSystem?: ViewportDropSystem;
   private cameraSystem?: ViewportCameraSystem;
   private settingsSystem?: SceneSettingsSystem;
+  private fallbackEnvironmentTarget?: WebGLRenderTarget;
   private assetResolver?: AssetResolver;
   private resizeObserver?: ResizeObserver;
   private frameId?: number;
@@ -94,11 +98,7 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     if (this.renderer) throw new Error('EditorEngine 已初始化');
     if (this.disposed) throw new Error('已销毁的 EditorEngine 不能重新初始化');
 
-    this.scene.background = new Color('#111827');
-    // 编辑器辅助环境光不属于 SceneDocument，确保新建场景中的 PBR 模型仍可辨认。
-    const helperLight = new AmbientLight('#ffffff', 0.8);
-    helperLight.userData.editorHelper = true;
-    this.scene.add(helperLight);
+    this.scene.background = new Color('#3b3b3b');
     this.camera.position.set(5, 3, 8);
 
     const renderer = new WebGLRenderer({
@@ -106,10 +106,26 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
       powerPreference: 'high-performance',
     });
     renderer.outputColorSpace = SRGBColorSpace;
+    renderer.toneMapping = NeutralToneMapping;
+    renderer.toneMappingExposure = 1.2;
     renderer.shadowMap.enabled = true;
     container.append(renderer.domElement);
     this.renderer = renderer;
-    this.settingsSystem = new SceneSettingsSystem(this.scene, renderer);
+
+    // RoomEnvironment 是 r183 官方的进程内 IBL，避免依赖或复制商业站点的 HDR 文件。
+    const environmentGenerator = new PMREMGenerator(renderer);
+    const roomEnvironment = new RoomEnvironment();
+    try {
+      this.fallbackEnvironmentTarget =
+        environmentGenerator.fromScene(roomEnvironment);
+    } finally {
+      // PMREM 已生成独立纹理，源环境的几何体和材质可立即释放。
+      roomEnvironment.dispose();
+    }
+    this.settingsSystem = new SceneSettingsSystem(this.scene, renderer, {
+      fallbackEnvironment: this.fallbackEnvironmentTarget.texture,
+      environmentGenerator,
+    });
 
     this.controls = new OrbitControls(this.camera, renderer.domElement);
     this.controls.target.set(0, 0.5, 0);
@@ -401,6 +417,8 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.selectionSystem?.dispose();
     this.transformSystem?.dispose();
     this.settingsSystem?.dispose();
+    this.fallbackEnvironmentTarget?.dispose();
+    this.fallbackEnvironmentTarget = undefined;
     this.controls?.removeEventListener('change', this.invalidate);
     this.controls?.removeEventListener('change', this.emitCameraOrientation);
     this.controls?.removeEventListener('start', this.cancelCameraAnimation);

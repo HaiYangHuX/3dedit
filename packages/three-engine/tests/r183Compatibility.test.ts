@@ -7,10 +7,10 @@ function source(path: string): string {
 
 describe('Three.js r183 兼容边界', () => {
   it('不再实例化 r183 已弃用的 Clock、RGBELoader 和 USDZLoader', () => {
-    const engineSources = [
-      source('EditorEngine.ts'),
-      source('RuntimeThreeEngine.ts'),
-    ].join('\n');
+    const editorEngine = source('EditorEngine.ts');
+    const engineSources = [editorEngine, source('RuntimeThreeEngine.ts')].join(
+      '\n',
+    );
     const settings = source('settings/SceneSettingsSystem.ts');
     const assets = source('assets/AssetLoader.ts');
 
@@ -20,5 +20,8 @@ describe('Three.js r183 兼容边界', () => {
     expect(settings).toContain('HDRLoader');
     expect(assets).not.toContain('USDZLoader');
     expect(assets).toContain('USDLoader');
+    // r183 官方 RoomEnvironment 在无用户 HDR 时提供稳定的编辑器 PBR 光照。
+    expect(editorEngine).toContain('RoomEnvironment');
+    expect(editorEngine).toContain('fromScene(roomEnvironment)');
   });
 });

@@ -17,6 +17,9 @@ describe('SceneDocument', () => {
     expect(sceneDocumentSchema.parse(document)).toEqual(document);
     expect(document.schemaVersion).toBe(1);
     expect(document.revision).toBe(0);
+    // 新场景默认值对齐 ThreeFlowX r183，避免首次进入编辑器时得到近黑画面。
+    expect(document.settings.background).toBe('#3b3b3b');
+    expect(document.settings.exposure).toBe(1.2);
   });
 
   it('拒绝父节点不存在的场景树', () => {

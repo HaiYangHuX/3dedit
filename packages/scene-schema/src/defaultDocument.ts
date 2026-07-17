@@ -15,9 +15,9 @@ export function createDefaultSceneDocument(
     rootNodeIds: [],
     nodes: {},
     settings: {
-      background: '#111827',
+      background: '#3b3b3b',
       environmentAssetId: null,
-      exposure: 1,
+      exposure: 1.2,
       gridVisible: true,
     },
     interactions: [],
