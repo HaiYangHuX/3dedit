@@ -8,6 +8,7 @@ import {
   type Material,
   type WebGLRenderer,
 } from 'three';
+import { createDefaultSceneDocument } from '@digital-twin/scene-schema';
 import { describe, expect, it, vi } from 'vitest';
 import {
   SceneSettingsSystem,
@@ -53,6 +54,7 @@ describe('SceneSettingsSystem', () => {
     });
 
     system.apply({
+      ...createDefaultSceneDocument('project-1', 'scene-1', '场景').settings,
       background: '#020617',
       exposure: 1.6,
       gridVisible: false,

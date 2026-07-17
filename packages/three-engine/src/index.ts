@@ -76,6 +76,15 @@ export {
   type EnvironmentTextureLoader,
   type SceneSettingsSystemOptions,
 } from './settings/SceneSettingsSystem';
+export {
+  BUILTIN_ASSET_URLS,
+  BUILTIN_ENVIRONMENT_PREVIEW_URL,
+  BUILTIN_ENVIRONMENT_URL,
+  GROUND_ASSETS,
+  LAWN_MODEL_ASSETS,
+  WEATHER_ASSETS,
+  type GroundAssetDefinition,
+} from './settings/builtinAssets';
 export type {
   AssetInstanceProvider,
   LoadReport,
