@@ -53,15 +53,16 @@ pnpm dev
 - GLB/GLTF 会统计顶点、面、Mesh、材质、贴图、动画、相机、包围盒及 Draco/Meshopt/KTX2 扩展。
 - 解析成功前不会替换当前可用源文件；失败任务可重试。
 - 被当前场景引用的资源不能删除，接口返回 `ASSET_IN_USE` 409。
-- 编辑器左侧模型面板与模型库页面复用同一个 Asset Pinia，并提供平台专用拖放 MIME。
+- 编辑器左侧模型面板与模型库页面复用同一个 Asset Pinia；模型、几何体和灯光使用同一个强类型拖放 MIME，不依赖全局“当前拖拽对象”。
 
 ## 场景编辑器
 
 - 工作台按 ThreeFlowX 的高密度比例组织为 33px 顶栏、180px 竖向资源区、中央视口和 340px 检查器；统计浮层与方向方块不占用画布布局空间。
+- 新建编辑场景对齐 ThreeFlowX r183 的 `#3b3b3b` 背景、曝光 `1.2`、`FogExp2(0.01)` 和 2000/200 分段双层网格；没有用户 HDR 时使用 `RoomEnvironment + PMREMGenerator` 提供编辑器专用 IBL，发布运行时不会携带这些辅助资源。
 - 同一场景可实例化多个模型，并支持立方体、球体、平面、圆柱体和五种灯光。
 - 场景树、视口射线选择、OutlinePass 和属性面板通过 SceneNode ID 双向同步。
 - TransformControls 提供移动、旋转、缩放、local/world 空间、网格吸附；`W/E/R/F`、`Delete`、`Cmd/Ctrl+Z` 可用。视口工具条还支持六向视图、相机重置、PNG 截图和视口全屏。
-- 模型拖放位置由 canvas 相对射线与 `y=0` 平面求交，不受左右面板宽度影响。
+- 模型、几何体和灯光的拖放位置都由 canvas 相对射线与 `y=0` 平面求交，不受左右面板宽度影响；几何体和灯光的默认中心高度最低为 `0.5`。
 - 节点增删、变换、属性、层级、场景背景/曝光/网格均纳入命令历史和自动保存。
 
 ### PBR 材质与贴图
@@ -116,7 +117,7 @@ WebSocket 任务消息使用 `taskCode` 匹配编辑器配置，消息中的 `ta
 - Three.js 运行时和类型声明精确锁定为 `0.183.0` / `0.183.1`，Decoder 不从 CDN 漂移加载。
 - `scripts/copy-three-decoders.mjs` 只从 `three/examples/jsm/libs/draco/gltf` 和 `three/examples/jsm/libs/basis` 复制白名单 JS/WASM；任意文件缺失都会让构建立即失败。
 - 生成的 Decoder 文件被 `.gitignore` 排除，仓库仅保留目录与复制规则；线上部署必须保留 `/decoders/draco/` 和 `/decoders/basis/` 静态路径。
-- HDR 环境由 r183 `HDRLoader + PMREMGenerator` 转换，新环境成功前保留旧环境，路由切换或销毁后的迟到纹理会被立即释放；渲染循环使用 `Timer`，USDZ 使用 `USDLoader`，不实例化 r183 已弃用入口。
+- 用户 HDR 环境由 r183 `HDRLoader + PMREMGenerator` 转换，新环境成功前保留旧环境，清除 HDR 后恢复编辑器 RoomEnvironment fallback；路由切换或销毁后的迟到纹理会被立即释放。渲染循环使用 `Timer`，USDZ 使用 `USDLoader`，不实例化 r183 已弃用入口。
 
 ## 验证
 

@@ -2,12 +2,18 @@ import { expect, test } from '@playwright/test';
 
 test('编辑器工作台创建真实 WebGL Canvas', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
-  await page.goto('/editor/local-project/local-scene');
+  const pageErrors: string[] = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  // 使用不存在的场景 ID，避免本地已有数据库内容污染对象数量断言。
+  await page.goto(`/editor/local-project/foundation-${Date.now()}`);
   await expect(page.getByTestId('top-toolbar')).toBeVisible();
 
   const canvasHost = page.getByTestId('editor-canvas');
   await expect(canvasHost).toHaveAttribute('data-engine-ready', 'true');
   await expect(canvasHost.locator('canvas')).toHaveCount(1);
+  const initialObjectCount = Number(
+    (await canvasHost.getAttribute('data-scene-object-count')) ?? '0',
+  );
 
   const toolbar = await page.getByTestId('top-toolbar').boundingBox();
   const assetPanel = await page.getByTestId('asset-panel').boundingBox();
@@ -25,8 +31,42 @@ test('编辑器工作台创建真实 WebGL Canvas', async ({ page }) => {
   await page.locator('[data-view="front"]').click({ force: true });
   await page.locator('[data-tool="reset-camera"]').click();
 
+  await page.locator('[data-asset-category="geometry"]').click();
+  const box = page.getByTestId('add-geometry-box');
+  await expect(box).toHaveAttribute('draggable', 'true');
+  await box.dragTo(canvasHost, { targetPosition: { x: 540, y: 430 } });
+  await expect(canvasHost).toHaveAttribute(
+    'data-scene-object-count',
+    String(initialObjectCount + 1),
+  );
+  expect(Number(await page.getByLabel('位置 Y').inputValue())).toBe(0.5);
+
+  await page.locator('[data-asset-category="light"]').click();
+  const pointLight = page.getByTestId('add-light-point');
+  await expect(pointLight).toHaveAttribute('draggable', 'true');
+  await pointLight.dragTo(canvasHost, {
+    targetPosition: { x: 220, y: 350 },
+  });
+  await expect(canvasHost).toHaveAttribute(
+    'data-scene-object-count',
+    String(initialObjectCount + 2),
+  );
+  expect(Number(await page.getByLabel('位置 Y').inputValue())).toBe(0.5);
+
+  await page.getByTestId('undo-scene').click();
+  await expect(canvasHost).toHaveAttribute(
+    'data-scene-object-count',
+    String(initialObjectCount + 1),
+  );
+  await page.getByTestId('redo-scene').click();
+  await expect(canvasHost).toHaveAttribute(
+    'data-scene-object-count',
+    String(initialObjectCount + 2),
+  );
+
   const downloadPromise = page.waitForEvent('download');
   await page.locator('[data-tool="screenshot"]').click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(/\.png$/);
+  expect(pageErrors).toEqual([]);
 });
