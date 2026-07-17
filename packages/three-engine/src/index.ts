@@ -85,6 +85,12 @@ export {
   WEATHER_ASSETS,
   type GroundAssetDefinition,
 } from './settings/builtinAssets';
+export {
+  GroundSystem,
+  type GroundModelLoader,
+  type GroundSystemOptions,
+  type GroundTextureLoader,
+} from './settings/GroundSystem';
 export type {
   AssetInstanceProvider,
   LoadReport,
