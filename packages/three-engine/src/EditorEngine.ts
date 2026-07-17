@@ -36,6 +36,10 @@ import {
 } from './interaction/SelectionSystem.js';
 import { SelectionBoxSystem } from './interaction/SelectionBoxSystem.js';
 import {
+  configureOrbitControls,
+  updateOrbitControlsDistanceLimit,
+} from './interaction/OrbitControlsProfile.js';
+import {
   TransformSystem,
   type TransformCommit,
 } from './interaction/TransformSystem.js';
@@ -121,7 +125,8 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     if (this.disposed) throw new Error('已销毁的 EditorEngine 不能重新初始化');
 
     this.scene.background = new Color('#3b3b3b');
-    this.camera.position.set(5, 3, 8);
+    // 源站重置相机使用 (0, 2, 6)，target 位于世界原点，避免初始拖动绕着地面偏心旋转。
+    this.camera.position.set(0, 2, 6);
 
     const renderer = new WebGLRenderer({
       antialias: true,
@@ -189,7 +194,8 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.weatherSystem = new WeatherSystem(this.scene);
 
     this.controls = new OrbitControls(this.camera, renderer.domElement);
-    this.controls.target.set(0, 0.5, 0);
+    // 核心编辑器对应源站 renderModel.js，左键旋转/滚轮缩放但不允许平移漂移观察中心。
+    configureOrbitControls(this.controls, { enablePan: false });
     this.controls.addEventListener('change', this.invalidate);
     this.controls.addEventListener('change', this.emitCameraOrientation);
     this.controls.addEventListener('start', this.cancelCameraAnimation);
@@ -313,6 +319,7 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
       this.assetResolver = resolver;
     }
     const report = await this.documentSystem.loadDocument(document);
+    updateOrbitControlsDistanceLimit(this.controls!, this.documentSystem.root);
     this.ensureSelectionSystem();
     this.emitStats();
     this.invalidate();
@@ -322,6 +329,10 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
   addNode(node: SceneNode): Promise<Object3D> {
     if (!this.documentSystem) throw new Error('尚未加载场景文档');
     return this.documentSystem.addNode(node).then((object) => {
+      updateOrbitControlsDistanceLimit(
+        this.controls!,
+        this.documentSystem!.root,
+      );
       this.emitStats();
       this.invalidate();
       return object;
@@ -331,6 +342,9 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
   removeNodes(ids: Iterable<string>): void {
     const removing = [...ids];
     this.documentSystem?.removeNodes(removing);
+    if (this.documentSystem && this.controls) {
+      updateOrbitControlsDistanceLimit(this.controls, this.documentSystem.root);
+    }
     const selection = this.selectionSystem?.getSelection();
     if (selection) {
       this.selectionSystem?.setSelection(selection.ids, selection.primaryId);
@@ -341,6 +355,9 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
 
   async updateNode(node: SceneNode): Promise<void> {
     await this.documentSystem?.updateNode(node);
+    if (this.documentSystem && this.controls) {
+      updateOrbitControlsDistanceLimit(this.controls, this.documentSystem.root);
+    }
     const selection = this.selectionSystem?.getSelection();
     if (selection?.ids.includes(node.id)) {
       this.selectionSystem?.setSelection(selection.ids, selection.primaryId);
