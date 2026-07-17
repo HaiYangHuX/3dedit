@@ -20,6 +20,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import type { TransformControlsMode } from 'three/addons/controls/TransformControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { OutlinePass } from 'three/addons/postprocessing/OutlinePass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import type {
   SceneDocument,
@@ -77,6 +78,7 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
   private controls?: OrbitControls;
   private composer?: EffectComposer;
   private outline?: OutlinePass;
+  private output?: OutputPass;
   private documentSystem?: SceneDocumentSystem;
   private selectionSystem?: SelectionSystem;
   private transformSystem?: TransformSystem;
@@ -140,6 +142,9 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     this.outline = new OutlinePass(new Vector2(1, 1), this.scene, this.camera);
     this.composer.addPass(this.outline);
+    // 中间 RenderTarget 是线性色彩；OutputPass 必须位于末尾完成 r183 tone mapping 与 sRGB 输出。
+    this.output = new OutputPass();
+    this.composer.addPass(this.output);
 
     this.dropSystem = new ViewportDropSystem(this.camera, renderer.domElement);
     this.transformSystem = new TransformSystem({
@@ -424,6 +429,8 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.controls?.removeEventListener('start', this.cancelCameraAnimation);
     this.controls?.dispose();
     this.documentSystem?.dispose();
+    this.outline?.dispose();
+    this.output?.dispose();
     this.composer?.dispose();
     this.resources.dispose();
     const canvas = this.renderer?.domElement;

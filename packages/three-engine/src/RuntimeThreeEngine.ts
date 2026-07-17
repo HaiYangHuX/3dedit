@@ -13,6 +13,7 @@ import {
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { OutlinePass } from 'three/addons/postprocessing/OutlinePass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { AssetInstanceSystem } from './assets/AssetInstanceSystem.js';
 import { AssetLoader } from './assets/AssetLoader.js';
@@ -33,6 +34,7 @@ export class RuntimeThreeEngine {
   private controls?: OrbitControls;
   private composer?: EffectComposer;
   private outline?: OutlinePass;
+  private output?: OutputPass;
   private settings?: SceneSettingsSystem;
   private documentSystem?: SceneDocumentSystem;
   private pointerSystem?: RuntimePointerSystem;
@@ -73,8 +75,12 @@ export class RuntimeThreeEngine {
     outline.edgeThickness = 1.5;
     outline.visibleEdgeColor.set('#38bdf8');
     composer.addPass(outline);
+    // 运行时与编辑器共享 r183 颜色输出规则，避免发布画面再次被当成线性色显示。
+    const output = new OutputPass();
+    composer.addPass(output);
     this.composer = composer;
     this.outline = outline;
+    this.output = output;
 
     this.resizeObserver = new ResizeObserver(([entry]) => {
       if (!entry) return;
@@ -162,6 +168,8 @@ export class RuntimeThreeEngine {
     this.controls?.dispose();
     this.documentSystem?.dispose();
     this.settings?.dispose();
+    this.outline?.dispose();
+    this.output?.dispose();
     this.composer?.dispose();
     const canvas = this.renderer?.domElement;
     this.renderer?.dispose();
