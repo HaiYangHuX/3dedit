@@ -121,3 +121,36 @@ test('编辑器工作台创建真实 WebGL Canvas', async ({ page }) => {
   expect(download.suggestedFilename()).toMatch(/\.png$/);
   expect(pageErrors).toEqual([]);
 });
+
+test('编辑器鼠标映射为左键平移、右键旋转', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto(`/editor/local-project/mouse-controls-${Date.now()}`);
+
+  const canvasHost = page.getByTestId('editor-canvas');
+  await expect(canvasHost).toHaveAttribute('data-engine-ready', 'true');
+  const canvas = canvasHost.locator('canvas');
+  const bounds = await canvas.boundingBox();
+  expect(bounds).not.toBeNull();
+  if (!bounds) return;
+
+  const gizmoCube = page.locator('.viewport-gizmo-cube');
+  const initialTransform = await gizmoCube.getAttribute('style');
+  const center = {
+    x: bounds.x + bounds.width / 2,
+    y: bounds.y + bounds.height / 2,
+  };
+
+  // Pan 会同时移动相机和 target，所以左键拖动后相机朝向应保持不变。
+  await page.mouse.move(center.x, center.y);
+  await page.mouse.down({ button: 'left' });
+  await page.mouse.move(center.x + 120, center.y, { steps: 4 });
+  await page.mouse.up({ button: 'left' });
+  await expect(gizmoCube).toHaveAttribute('style', initialTransform ?? '');
+
+  // Rotate 只改变相机绕 target 的方向，可通过右下角视图立方体的四元数投影验证。
+  await page.mouse.move(center.x, center.y);
+  await page.mouse.down({ button: 'right' });
+  await page.mouse.move(center.x + 120, center.y, { steps: 4 });
+  await page.mouse.up({ button: 'right' });
+  await expect(gizmoCube).not.toHaveAttribute('style', initialTransform ?? '');
+});

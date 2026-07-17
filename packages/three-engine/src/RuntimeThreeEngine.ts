@@ -23,10 +23,7 @@ import { AssetInstanceSystem } from './assets/AssetInstanceSystem.js';
 import { AssetLoader } from './assets/AssetLoader.js';
 import type { AssetResolver } from './assets/types.js';
 import { SceneDocumentSystem } from './documents/SceneDocumentSystem.js';
-import {
-  configureOrbitControls,
-  updateOrbitControlsDistanceLimit,
-} from './interaction/OrbitControlsProfile.js';
+import { configureOrbitControls } from './interaction/OrbitControlsProfile.js';
 import { MaterialSystem } from './materials/MaterialSystem.js';
 import { RuntimeHostAdapter } from './runtime/RuntimeHostAdapter.js';
 import { RuntimePointerSystem } from './runtime/RuntimePointerSystem.js';
@@ -128,8 +125,8 @@ export class RuntimeThreeEngine {
     this.weatherSystem = new WeatherSystem(this.scene);
 
     const controls = new OrbitControls(this.camera, renderer.domElement);
-    // 源站运行时只允许旋转和滚轮缩放，平移留给编辑器场景，避免发布端视角偏移。
-    configureOrbitControls(controls, { enablePan: false });
+    // 预览与发布端沿用编辑器按键映射，避免同一场景在两端手感相反。
+    configureOrbitControls(controls, { enablePan: true });
     this.controls = controls;
 
     const composer = new EffectComposer(renderer);
@@ -191,7 +188,6 @@ export class RuntimeThreeEngine {
       this.assetResolver = resolver;
     }
     const report = await this.documentSystem.loadDocument(document);
-    updateOrbitControlsDistanceLimit(this.controls!, this.documentSystem.root);
     this.ensureRuntimePort();
     return report;
   }
