@@ -2,6 +2,7 @@ import type { Object3D } from 'three';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import { disposeObject3D } from '../ResourceTracker.js';
 import { createAssetPlaceholder } from '../objects/createPlaceholder.js';
+import { createNormalizedModelInstance } from './normalizeModelInstance.js';
 import type { AssetLoaderLike, AssetResolver, LoadedAsset } from './types.js';
 
 interface CacheEntry {
@@ -45,7 +46,8 @@ export class AssetInstanceSystem {
     try {
       const loaded = await this.getTemplate(assetId, generation);
       this.assertCurrent(generation);
-      const instance = clone(loaded.root);
+      // 在线 ThreeFlowX 会在每次拖入时按模型包围盒计算初始比例；克隆后再包装可保持共享 GPU 资源。
+      const instance = createNormalizedModelInstance(clone(loaded.root));
       instance.userData.assetId = assetId;
       instance.userData.animations = loaded.animations.map((clip) =>
         clip.clone(),

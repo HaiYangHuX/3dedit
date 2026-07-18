@@ -3,6 +3,11 @@ export {
   StaleAssetLoadError,
 } from './assets/AssetInstanceSystem';
 export {
+  createNormalizedModelInstance,
+  SOURCE_MODEL_TARGET_SIZE,
+  SOURCE_SMALL_MODEL_BASE_SIZE,
+} from './assets/normalizeModelInstance';
+export {
   AssetLoader,
   DEFAULT_DRACO_DECODER_PATH,
   DEFAULT_KTX2_TRANSCODER_PATH,
