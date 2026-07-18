@@ -320,10 +320,11 @@ function changeTreeSelection(selection: SelectionState): void {
 }
 
 function selectCamera(): void {
-  cameraSelected.value = true;
   selectedModelPart.value = null;
   // Camera 不是 SceneNode，先清空业务选择和 TransformControls。
+  // setSelection 可能同步回调 changeCanvasSelection，最后再置 true 才不会被空选择事件吞掉。
   commands.select({ ids: [], primaryId: null });
+  cameraSelected.value = true;
 }
 
 function changeModelPartSelection(selection: {

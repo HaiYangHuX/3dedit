@@ -302,6 +302,34 @@ describe('EditorWorkspace', () => {
     expect(ElMessageBox.confirm).toHaveBeenCalled();
   });
 
+  it('清空已有模型选择时同步回调不会吞掉 Camera 首次选择', async () => {
+    const wrapper = mount(EditorWorkspace, {
+      global: {
+        plugins: [createTestingPinia({ createSpy: vi.fn })],
+        stubs: {
+          EditorCanvas: {
+            name: 'EditorCanvas',
+            template: '<div data-testid="editor-canvas" />',
+          },
+          RouterLink: { template: '<a><slot /></a>' },
+        },
+      },
+    });
+    const canvas = wrapper.findComponent({ name: 'EditorCanvas' });
+    const tree = wrapper.findComponent({ name: 'SceneTree' });
+
+    // Engine.setSelection 会同步派发空 selection，模拟真实桥接时序。
+    commandMocks.select.mockImplementationOnce(() => {
+      canvas.vm.$emit('select', { ids: [], primaryId: null });
+    });
+    tree.vm.$emit('select-camera');
+    await flushPromises();
+
+    expect(wrapper.findComponent({ name: 'CameraInspector' }).exists()).toBe(
+      true,
+    );
+  });
+
   it('将源站视口工具转发到对应编辑命令', async () => {
     const wrapper = mount(EditorWorkspace, {
       global: {
