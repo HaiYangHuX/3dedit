@@ -15,10 +15,12 @@ import {
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { storeToRefs } from 'pinia';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import EditorCanvas from '../components/EditorCanvas.vue';
 import AssetLibraryPanel from '../components/AssetLibraryPanel.vue';
 import AssetPalette from '../components/editor/AssetPalette.vue';
 import EditorTopBar from '../components/editor/EditorTopBar.vue';
+import EditorHelpPanel from '../components/editor/EditorHelpPanel.vue';
 import CameraInspector from '../components/editor/CameraInspector.vue';
 import NodeInspector from '../components/editor/NodeInspector.vue';
 import InteractionPanel from '../components/editor/InteractionPanel.vue';
@@ -47,17 +49,18 @@ const props = withDefaults(
   defineProps<{ projectId?: string; sceneId?: string }>(),
   { projectId: 'local-project', sceneId: 'local-scene' },
 );
+const router = useRouter();
 const store = useDocumentStore();
-const { document, documentChangeVersion, saveState, error, canUndo, canRedo } =
+const { document, documentChangeVersion, saveState, error } =
   storeToRefs(store);
 const selectionStore = useSelectionStore();
 const { ids: selectedIds, primaryId } = storeToRefs(selectionStore);
 const canvas = ref<EditorCanvasBridge>();
 const assetStore = useAssetStore();
 const { assets } = storeToRefs(assetStore);
-const inspectorTab = ref<'scene' | 'interaction' | 'socket' | 'settings'>(
-  'scene',
-);
+const inspectorTab = ref<
+  'scene' | 'interaction' | 'socket' | 'settings' | 'help'
+>('scene');
 const assetCategory = ref<
   'model' | 'geometry' | 'light' | 'chart' | 'text' | 'video' | 'shader'
 >('model');
@@ -90,6 +93,15 @@ const runtimeOrigin = (
 
 function showEditorError(reason: unknown, fallback = '编辑操作执行失败'): void {
   ElMessage.error(reason instanceof Error ? reason.message : fallback);
+}
+
+function backToProject(): void {
+  // 返回只切换管理路由，不隐式保存草稿，避免破坏“点击保存才提交”的边界。
+  const target =
+    props.projectId && props.projectId !== 'local-project'
+      ? `/projects/${encodeURIComponent(props.projectId)}`
+      : '/projects';
+  void router.push(target);
 }
 
 const commands = useEditorCommands(canvas, {
@@ -189,12 +201,13 @@ watch(
 );
 
 onMounted(() => {
-  window.addEventListener('keydown', commands.handleKeydown);
+  // 使用捕获阶段优先接管 Ctrl/Cmd+Z 等浏览器默认快捷键，再交给可编辑控件自行处理。
+  window.addEventListener('keydown', commands.handleKeydown, true);
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener('keydown', commands.handleKeydown);
-  store.disposeAutoSave();
+  window.removeEventListener('keydown', commands.handleKeydown, true);
+  store.dispose();
 });
 
 async function saveDocument(): Promise<void> {
@@ -262,12 +275,38 @@ function commitTransform(commit: TransformCommit): void {
     .catch((reason) => showEditorError(reason, '保存变换失败'));
 }
 
-function undoCommand(): void {
-  void commands.undo().catch(showEditorError);
-}
+async function resetScene(): Promise<void> {
+  try {
+    await ElMessageBox.confirm(
+      '将清空当前场景节点，并恢复项目配置、Camera、漫游和交互设置。重置结果需要再次点击“保存”才会提交。',
+      '重置场景',
+      {
+        type: 'warning',
+        confirmButtonText: '重置',
+        cancelButtonText: '取消',
+      },
+    );
+  } catch {
+    return;
+  }
 
-function redoCommand(): void {
-  void commands.redo().catch(showEditorError);
+  try {
+    await commands.resetScene();
+    cameraSelected.value = false;
+    selectedModelPart.value = null;
+    modelStructures.value = {};
+    modelAssetFormats.value = {};
+    cameraRoamingState.value = {
+      mode: 'idle',
+      pointCount: 0,
+      activePathId: null,
+    };
+    publication.value = undefined;
+    inspectorTab.value = 'scene';
+    ElMessage.success('场景已重置，请点击“保存”提交');
+  } catch (reason) {
+    showEditorError(reason, '场景重置失败');
+  }
 }
 
 function runCommand(operation: Promise<unknown>): void {
@@ -341,6 +380,21 @@ function changeModelPartSelection(selection: {
   selectedModelPart.value = selected
     ? { nodeId: selection.nodeId, objectId: selection.objectId }
     : null;
+}
+
+function removeModelPart(selection: {
+  nodeId: string;
+  partPath: string;
+  objectId: string;
+}): void {
+  // 删除后模型结构会异步刷新；先清理当前 Mesh 选择，避免高亮引用已隐藏的 UUID。
+  if (
+    selectedModelPart.value?.nodeId === selection.nodeId &&
+    selectedModelPart.value.objectId === selection.objectId
+  ) {
+    selectedModelPart.value = null;
+  }
+  runCommand(commands.removeModelPart(selection.nodeId, selection.partPath));
 }
 
 function changeCameraState(camera: SceneCamera): void {
@@ -456,15 +510,16 @@ function toggleChooseAllModel(active: boolean): void {
   commands.setSelectWholeModel(active);
 }
 
-async function ensureRuntimeDocumentSaved(): Promise<void> {
-  if (saveState.value === 'dirty' || saveState.value === 'error') {
-    await store.save();
+function requireExplicitSaveBeforeRuntimeAction(): void {
+  if (saveState.value !== 'saved') {
+    throw new Error('当前场景有未保存更改，请先点击“保存”');
   }
 }
 
 async function openPreview(): Promise<void> {
   try {
-    await ensureRuntimeDocumentSaved();
+    // 预览只读取服务端文档；禁止在预览入口隐式保存，保存边界必须由顶部按钮触发。
+    requireExplicitSaveBeforeRuntimeAction();
     const url = `${runtimeOrigin}/preview/${encodeURIComponent(props.sceneId)}`;
     previewWindow = window.open(url, 'digital-twin-preview');
     if (!previewWindow) throw new Error('浏览器阻止了预览窗口');
@@ -477,7 +532,8 @@ async function openPreview(): Promise<void> {
 async function publishScene(): Promise<void> {
   publishing.value = true;
   try {
-    await ensureRuntimeDocumentSaved();
+    // 发布同样不应绕过显式保存，否则用户看到的草稿与发布内容会产生歧义。
+    requireExplicitSaveBeforeRuntimeAction();
     publication.value = await publicationApi.publish(props.projectId, {
       sceneId: props.sceneId,
     });
@@ -523,13 +579,11 @@ async function copyText(value: string): Promise<void> {
       :scene-name="document.name"
       :save-state-label="stateLabel"
       :save-state-error="saveState === 'conflict' || saveState === 'error'"
-      :can-undo="canUndo"
-      :can-redo="canRedo"
       :saving="saveState === 'saving'"
       :publishing="publishing"
       :show-reload="saveState === 'conflict'"
-      @undo="undoCommand"
-      @redo="redoCommand"
+      @back-to-project="backToProject"
+      @reset="resetScene"
       @save="saveDocument"
       @reload="reloadScene"
       @preview="openPreview"
@@ -681,6 +735,13 @@ async function copyText(value: string): Promise<void> {
         >
           项目配置
         </button>
+        <button
+          type="button"
+          :class="{ active: inspectorTab === 'help' }"
+          @click="inspectorTab = 'help'"
+        >
+          帮助
+        </button>
       </nav>
       <div v-if="inspectorTab === 'scene'" class="scene-content-panel">
         <SceneTree
@@ -702,6 +763,7 @@ async function copyText(value: string): Promise<void> {
           "
           @rename="(id, name) => runCommand(commands.updateNode(id, { name }))"
           @remove="(id) => runCommand(commands.removeNodes([id]))"
+          @remove-model-part="removeModelPart"
           @duplicate="(id) => runCommand(commands.duplicateNode(id))"
           @group="(ids) => runCommand(commands.groupNodes(ids))"
           @reparent="
@@ -752,6 +814,7 @@ async function copyText(value: string): Promise<void> {
         />
         <RuntimeDiagnostics :entries="runtimeDiagnostics" />
       </div>
+      <EditorHelpPanel v-else-if="inspectorTab === 'help'" />
       <SceneSettingsInspector
         v-else
         :settings="document.settings"

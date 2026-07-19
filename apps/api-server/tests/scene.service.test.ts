@@ -19,6 +19,42 @@ const sceneRow = {
 };
 
 describe('SceneService', () => {
+  it('创建场景时保存表单上传后的封面地址', async () => {
+    const transaction = {
+      project: { findUnique: vi.fn().mockResolvedValue({ id: 'project-1' }) },
+      scene: {
+        aggregate: vi.fn().mockResolvedValue({ _max: { sortOrder: null } }),
+        create: vi.fn().mockImplementation(({ data }) => ({
+          ...sceneRow,
+          ...data,
+          createdAt: now,
+          updatedAt: now,
+        })),
+      },
+    };
+    const prisma = {
+      $transaction: vi.fn(
+        async (callback: (client: typeof transaction) => Promise<unknown>) =>
+          callback(transaction),
+      ),
+    } as unknown as PrismaService;
+    const service = new SceneService(prisma);
+
+    await service.create('project-1', {
+      name: '主厂房',
+      description: '主厂房设备总览',
+      coverKey: 'https://assets.test/scene-cover.jpg',
+    });
+
+    expect(transaction.scene.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        name: '主厂房',
+        description: '主厂房设备总览',
+        coverKey: 'https://assets.test/scene-cover.jpg',
+      }),
+    });
+  });
+
   it('使用 id 和 baseRevision 执行原子保存', async () => {
     const prisma = {
       scene: {
@@ -70,12 +106,11 @@ describe('SceneService', () => {
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
-  it('拒绝删除项目的最后一个场景', async () => {
+  it('允许删除项目的最后一个场景', async () => {
     const transaction = {
       scene: {
         findUnique: vi.fn().mockResolvedValue(sceneRow),
-        count: vi.fn().mockResolvedValue(1),
-        delete: vi.fn(),
+        delete: vi.fn().mockResolvedValue(sceneRow),
       },
     };
     const prisma = {
@@ -86,9 +121,9 @@ describe('SceneService', () => {
     } as unknown as PrismaService;
     const service = new SceneService(prisma);
 
-    await expect(service.remove('scene-1')).rejects.toBeInstanceOf(
-      ConflictException,
-    );
-    expect(transaction.scene.delete).not.toHaveBeenCalled();
+    await expect(service.remove('scene-1')).resolves.toBeUndefined();
+    expect(transaction.scene.delete).toHaveBeenCalledWith({
+      where: { id: 'scene-1' },
+    });
   });
 });

@@ -28,7 +28,7 @@ export interface OrbitControlsProfileOptions {
 }
 
 /**
- * 复现 ThreeFlowX 4.0.4 的 OrbitControls 初始化。
+ * 复现 数字孪生 4.0.4 的 OrbitControls 初始化。
  * 按键映射必须显式设置，因为 OrbitControls 默认恰好是左键旋转、右键平移。
  */
 export function configureOrbitControls(

@@ -40,9 +40,10 @@ export class SceneDocumentSystem {
 
   async loadDocument(document: SceneDocument): Promise<LoadReport> {
     const version = ++this.loadVersion;
-    this.clearRuntimeNodes();
-    this.generation = this.assets.beginGeneration();
-    this.materialGeneration = this.materials?.beginGeneration() ?? 0;
+    // 先在场景外创建新对象；旧根节点会一直可见到新代次提交，避免撤销/重做黑屏闪烁。
+    this.generation = this.assets.beginGeneration({ preserveExisting: true });
+    this.materialGeneration =
+      this.materials?.beginGeneration({ preserveExisting: true }) ?? 0;
     const results = await Promise.allSettled(
       Object.values(document.nodes).map(async (node) => ({
         node,
@@ -71,14 +72,42 @@ export class SceneDocumentSystem {
       throw unexpected.reason;
     }
 
+    this.replaceRuntimeNodes(created, document);
+    return this.buildReport();
+  }
+
+  /** 新文档资源全部成功后才替换旧对象，提交点只有一个，视觉上不会看到中间态。 */
+  private replaceRuntimeNodes(
+    created: Array<{ node: SceneNode; object: Object3D }>,
+    document: SceneDocument,
+  ): void {
+    const previous = [...this.objects.values()];
+    for (const object of previous) object.removeFromParent();
+    for (const object of previous) {
+      this.materials?.restore(object);
+      if (!this.assets.release(object)) disposeObject3D(object);
+    }
+    this.objects.clear();
     for (const { node, object } of created) this.objects.set(node.id, object);
     this.attachHierarchy(document);
-    return this.buildReport();
   }
 
   async addNode(node: SceneNode): Promise<Object3D> {
     if (this.objects.has(node.id)) throw new Error(`节点已存在: ${node.id}`);
+    // 记录开始加载时的代次；撤销新增节点会触发文档重载，迟到的模型结果必须丢弃，
+    // 否则异步加载完成后会把已经撤销的模型重新挂回场景。
+    const version = this.loadVersion;
+    const generation = this.generation;
     const object = await this.createNodeObject(node);
+    if (
+      this.disposed ||
+      version !== this.loadVersion ||
+      generation !== this.generation
+    ) {
+      this.materials?.restore(object);
+      if (!this.assets.release(object)) disposeObject3D(object);
+      throw new StaleAssetLoadError();
+    }
     this.objects.set(node.id, object);
     const parent = node.parentId ? this.objects.get(node.parentId) : this.root;
     (parent ?? this.root).add(object);
@@ -139,6 +168,7 @@ export class SceneDocumentSystem {
       if ('castShadow' in object) object.castShadow = light.castShadow;
     }
     await this.applyNodeMaterial(object, node);
+    this.applyModelPartExclusions(object, node);
   }
 
   private requiresReplacement(object: Object3D, node: SceneNode): boolean {
@@ -240,6 +270,7 @@ export class SceneDocumentSystem {
     }
     const target = owner.getObjectByProperty('uuid', objectId);
     if (!(target instanceof Mesh)) return undefined;
+    if (target.userData.modelPartExcluded === true) return undefined;
 
     let current: Object3D | null = target;
     while (current && current !== owner) {
@@ -283,14 +314,24 @@ export class SceneDocumentSystem {
 
   private collectModelParts(owner: Object3D): ModelPartItem[] {
     const parts = new Map<string, ModelPartItem>();
-    const visit = (object: Object3D, isOwner = false): void => {
+    const visit = (
+      object: Object3D,
+      isOwner = false,
+      path: string[] = [],
+    ): void => {
       // attachHierarchy 会把业务子节点挂到模型根下；它们必须由 SceneDocument 树单独展示。
       if (!isOwner && typeof object.userData.sceneNodeId === 'string') return;
-      if (object instanceof Mesh) {
+      const partPath = path.join('/') || '$root';
+      if (
+        object instanceof Mesh &&
+        object.userData.modelPartExcluded !== true
+      ) {
+        // 资源内部的 UUID 会随每次实例化变化，树展示和删除协议改用层级索引路径。
         if (object.material instanceof Material) {
           parts.set(object.uuid, {
             objectId: object.uuid,
             targetObjectId: object.uuid,
+            partPath,
             name: object.name || '未命名材质',
             objectType: object.type,
           });
@@ -301,16 +342,59 @@ export class SceneDocumentSystem {
             parts.set(material.uuid, {
               objectId: material.uuid,
               targetObjectId: object.uuid,
+              partPath,
               name: material.name || '未命名材质',
               objectType: material.type,
             });
           }
         }
       }
-      for (const child of object.children) visit(child);
+      object.children.forEach((child, index) =>
+        visit(child, false, [...path, String(index)]),
+      );
     };
     visit(owner, true);
     return [...parts.values()];
+  }
+
+  /**
+   * 将场景树的“删除子节点”投影为模型内部 Mesh 的可见性。
+   *
+   * 模型实例每次加载都会产生新的 Three UUID，故不能把 UUID 写入 SceneDocument；
+   * 这里使用从资源根开始的子索引路径，并在运行时写入标记供结构列表和射线选择复用。
+   */
+  private applyModelPartExclusions(object: Object3D, node: SceneNode): void {
+    const model = node.components.find(
+      (component) => component.kind === 'model',
+    );
+    if (model?.kind !== 'model') return;
+    const excluded = new Set(model.excludedPartPaths ?? []);
+    const visit = (
+      current: Object3D,
+      path: string[],
+      isOwner = false,
+    ): void => {
+      // 业务子节点挂在模型根下，但不是资源内部部件，不能被路径过滤影响。
+      if (!isOwner && typeof current.userData.sceneNodeId === 'string') return;
+      const partPath = path.join('/') || '$root';
+      if (current instanceof Mesh) {
+        const storedBaseVisible = current.userData.modelPartBaseVisible;
+        const baseVisible =
+          typeof storedBaseVisible === 'boolean'
+            ? storedBaseVisible
+            : current.visible;
+        current.userData.modelPartBaseVisible = baseVisible;
+        current.userData.modelPartPath = partPath;
+        current.userData.modelPartExcluded = excluded.has(partPath);
+        // 资源作者主动隐藏的 Mesh 必须保持隐藏；只有排除列表造成的隐藏可以被撤销恢复。
+        current.visible =
+          (isOwner ? node.enabled : baseVisible) && !excluded.has(partPath);
+      }
+      current.children.forEach((child, index) =>
+        visit(child, [...path, String(index)]),
+      );
+    };
+    visit(object, [], true);
   }
 
   dispose(): void {
@@ -385,6 +469,7 @@ export class SceneDocumentSystem {
   private async createNodeObject(node: SceneNode): Promise<Object3D> {
     const object = await createSceneObject(node, this.assets, this.generation);
     try {
+      this.applyModelPartExclusions(object, node);
       await this.applyNodeMaterial(object, node);
       return object;
     } catch (reason) {

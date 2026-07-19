@@ -2,17 +2,21 @@ import { sceneDocumentSchema } from '@digital-twin/scene-schema';
 import { z } from 'zod';
 
 const sceneNameSchema = z.string().trim().min(1).max(80);
+const sceneDescriptionSchema = z.string().trim().max(1_000);
 const identifierSchema = z.string().min(1);
 const isoDateSchema = z.string().datetime({ offset: true });
 
 /** 新建场景时名称由前端提供，服务端统一清理首尾空格。 */
 export const createSceneInputSchema = z.object({
   name: sceneNameSchema,
+  description: sceneDescriptionSchema.optional(),
+  coverKey: z.string().trim().min(1).nullable().optional(),
 });
 
 export const updateSceneInputSchema = z
   .object({
     name: sceneNameSchema.optional(),
+    description: sceneDescriptionSchema.optional(),
     coverKey: z.string().trim().min(1).nullable().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
@@ -43,6 +47,8 @@ export const sceneSummarySchema = z.object({
   id: identifierSchema,
   projectId: identifierSchema,
   name: sceneNameSchema,
+  // 旧导出的场景没有描述时按空字符串处理，新接口始终返回该字段。
+  description: sceneDescriptionSchema.optional(),
   sortOrder: z.number().int().nonnegative(),
   revision: z.number().int().nonnegative(),
   contentHash: z.string(),

@@ -1,6 +1,7 @@
 export { AddNodeCommand } from './commands/AddNodeCommand';
 export { CommandHistory } from './commands/CommandHistory';
 export { RemoveNodesCommand } from './commands/RemoveNodesCommand';
+export { ResetSceneCommand } from './commands/ResetSceneCommand';
 export { ReparentNodeCommand } from './commands/ReparentNodeCommand';
 export {
   TransformNodesCommand,

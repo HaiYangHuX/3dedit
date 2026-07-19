@@ -82,6 +82,8 @@ async function loadRuntime(): Promise<void> {
   try {
     await engine.loadDocument(props.document, props.resolver);
     if (disposed || generation !== loadGeneration) return;
+    // 预览首次打开需要保证归一化模型落在可视范围；用户后续可继续用 OrbitControls 调整视角。
+    if (props.mode === 'preview') engine.fitDocumentCamera?.();
     const nextRuntime = new SceneRuntime({
       host: engine.createHost(),
       createSocket,
@@ -219,6 +221,16 @@ defineExpose({
 <style scoped>
 .runtime-canvas {
   position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* setPixelRatio 会把 drawing buffer 放大到 DPR 倍；CSS 尺寸必须仍锁定在容器内，
+ * 否则高 DPI 屏幕会把 2560×1440 的画布按物理尺寸铺出 1280×720 容器，
+ * 造成模型只出现在右下角，用户误以为资源没有加载。 */
+.runtime-canvas :deep(canvas) {
+  display: block;
   width: 100%;
   height: 100%;
 }

@@ -9,6 +9,7 @@ export {
   assetMetadataSchema,
   assetSchema,
   assetStatusSchema,
+  assetVisibilitySchema,
   completeUploadInputSchema,
   createUploadInputSchema,
   listAssetsQuerySchema,
@@ -24,6 +25,7 @@ export type {
   AssetKind,
   AssetListResponse,
   AssetStatus,
+  AssetVisibility,
   CompleteUploadInput,
   CreateUploadInput,
   CreateUploadRequest,
@@ -37,6 +39,7 @@ export {
   createProjectInputSchema,
   listProjectsQuerySchema,
   projectDetailSchema,
+  projectStatusSchema,
   projectSummarySchema,
   updateProjectInputSchema,
 } from './project.js';
@@ -45,6 +48,7 @@ export type {
   CreateProjectInput,
   ListProjectsQuery,
   ProjectDetail,
+  ProjectStatus,
   ProjectSummary,
   UpdateProjectInput,
 } from './project.js';

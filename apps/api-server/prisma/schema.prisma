@@ -11,6 +11,13 @@ model Project {
   id          String       @id @default(cuid())
   name        String
   description String       @default("")
+  code        String       @default("")
+  status      String       @default("draft")
+  tags        String[]     @default([])
+  ownerName   String       @default("平台管理员")
+  industry    String       @default("制造业")
+  location    String       @default("")
+  notes       String       @default("")
   coverKey    String?
   scenes      Scene[]
   publication Publication?
@@ -23,6 +30,7 @@ model Scene {
   projectId   String
   project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   name        String
+  description String   @default("")
   sortOrder   Int      @default(0)
   revision    Int      @default(0)
   document    Json
@@ -35,27 +43,39 @@ model Scene {
 }
 
 model Asset {
-  id           String            @id @default(cuid())
-  name         String
-  kind         String
-  format       String
-  status       String            @default("uploading")
-  sourceHash   String            @unique
-  category     String            @default("未分类")
-  tags         String[]          @default([])
-  favorite     Boolean           @default(false)
-  error        String?
-  retryCount   Int               @default(0)
-  activeFileId String?           @unique
-  activeFile   AssetFile?        @relation("ActiveAssetFile", fields: [activeFileId], references: [id], onDelete: SetNull)
-  metadata     Json              @default("{}")
-  files        AssetFile[]       @relation("AssetFiles")
-  uploads      UploadSession[]
-  dependencies AssetDependency[] @relation("AssetDependencies")
-  dependents   AssetDependency[] @relation("AssetDependents")
-  jobs         ProcessingJob[]
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
+  id            String            @id @default(cuid())
+  name          String
+  code          String            @default("")
+  description   String            @default("")
+  kind          String
+  format        String
+  status        String            @default("uploading")
+  sourceHash    String            @unique
+  category      String            @default("未分类")
+  tags          String[]          @default([])
+  favorite      Boolean           @default(false)
+  version       String            @default("1.0.0")
+  author        String            @default("")
+  manufacturer  String            @default("")
+  license       String            @default("内部资产")
+  unit          String            @default("m")
+  scale         Float             @default(1)
+  visibility    String            @default("private")
+  coverAssetId  String?
+  coverAsset    Asset?            @relation("AssetCover", fields: [coverAssetId], references: [id], onDelete: SetNull)
+  coveredAssets Asset[]           @relation("AssetCover")
+  error         String?
+  retryCount    Int               @default(0)
+  activeFileId  String?           @unique
+  activeFile    AssetFile?        @relation("ActiveAssetFile", fields: [activeFileId], references: [id], onDelete: SetNull)
+  metadata      Json              @default("{}")
+  files         AssetFile[]       @relation("AssetFiles")
+  uploads       UploadSession[]
+  dependencies  AssetDependency[] @relation("AssetDependencies")
+  dependents    AssetDependency[] @relation("AssetDependents")
+  jobs          ProcessingJob[]
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
 }
 
 model AssetFile {
@@ -82,6 +102,7 @@ model UploadSession {
   size      BigInt
   sha256    String
   format    String
+  metadata  Json     @default("{}")
   objectKey String   @unique
   uploadId  String
   partSize  Int

@@ -38,6 +38,18 @@ export interface UploadTask {
 }
 
 export interface UploadFileOptions {
+  /** 业务元数据会在创建上传会话时一次性写入，避免上传完成后出现半成品资源。 */
+  name?: string;
+  code?: string;
+  description?: string;
+  version?: string;
+  author?: string;
+  manufacturer?: string;
+  license?: string;
+  unit?: string;
+  scale?: number;
+  visibility?: 'private' | 'team' | 'public';
+  coverAssetId?: string | null;
   category?: string;
   tags?: string[];
   assetId?: string;
@@ -198,6 +210,17 @@ export const useAssetStore = defineStore('asset', () => {
         size: file.size,
         sha256,
         mimeType: file.type || 'application/octet-stream',
+        name: options.name,
+        code: options.code,
+        description: options.description,
+        version: options.version,
+        author: options.author,
+        manufacturer: options.manufacturer,
+        license: options.license,
+        unit: options.unit,
+        scale: options.scale,
+        visibility: options.visibility,
+        coverAssetId: options.coverAssetId,
         category: options.category,
         tags: options.tags,
         assetId: options.assetId,

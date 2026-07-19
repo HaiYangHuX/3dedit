@@ -8,30 +8,29 @@ import ViewportStats from '../src/components/editor/ViewportStats.vue';
 import ViewportToolbar from '../src/components/editor/ViewportToolbar.vue';
 
 describe('编辑器高密度框架组件', () => {
-  it('顶栏转发撤销、保存、预览和发布意图', async () => {
+  it('顶栏保留保存、重置、预览和发布入口，撤销重做仅由快捷键触发', async () => {
     const wrapper = mount(EditorTopBar, {
       props: {
         sceneName: '厂区场景',
         saveStateLabel: '已保存',
-        canUndo: true,
-        canRedo: false,
       },
     });
 
     expect(wrapper.text()).toContain('厂区场景');
     expect(wrapper.text()).toContain('Three r183');
-    await wrapper.get('[data-testid="undo-scene"]').trigger('click');
     await wrapper.get('[data-testid="save-scene"]').trigger('click');
+    await wrapper.get('[data-testid="back-to-project"]').trigger('click');
+    await wrapper.get('[data-testid="reset-scene"]').trigger('click');
     await wrapper.get('[data-testid="preview-scene"]').trigger('click');
     await wrapper.get('[data-testid="publish-scene"]').trigger('click');
 
-    expect(wrapper.emitted('undo')).toHaveLength(1);
     expect(wrapper.emitted('save')).toHaveLength(1);
+    expect(wrapper.emitted('back-to-project')).toHaveLength(1);
+    expect(wrapper.emitted('reset')).toHaveLength(1);
     expect(wrapper.emitted('preview')).toHaveLength(1);
     expect(wrapper.emitted('publish')).toHaveLength(1);
-    expect(
-      wrapper.get('[data-testid="redo-scene"]').attributes('disabled'),
-    ).toBeDefined();
+    expect(wrapper.find('[data-testid="undo-scene"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="redo-scene"]').exists()).toBe(false);
   });
 
   it('左侧竖向分类轨道更新类别并保留内容插槽', async () => {

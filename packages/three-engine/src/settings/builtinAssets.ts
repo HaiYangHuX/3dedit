@@ -203,7 +203,7 @@ export interface GroundAssetDefinition {
   dirtMapUrl?: string;
 }
 
-/** 字段配对直接源自 ThreeFlowX r183 的 Bn 地面配置数组。 */
+/** 字段配对直接源自 数字孪生 r183 的 Bn 地面配置数组。 */
 export const GROUND_ASSETS: Record<GroundAssetKey, GroundAssetDefinition> = {
   lawn: {
     label: '草坪',

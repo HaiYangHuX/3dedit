@@ -1,22 +1,36 @@
 import type {
+  CopyProjectInput,
+  CreateProjectInput,
+  CreateSceneInput,
   ProjectDetail,
   ProjectSummary,
   SceneDetail,
   SceneSummary,
   UpdateProjectInput,
+  UpdateSceneInput,
 } from '@digital-twin/api-contracts';
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { ApiError } from '../api/client';
 import { projectApi } from '../api/projects';
 
-function toProjectSummary(project: ProjectDetail): ProjectSummary {
+/**
+ * 列表只保留卡片和编辑表单真正需要的字段；运营属性继续由 API 兼容旧数据，
+ * 但不再进入前端项目管理状态，避免被误展示或在后续请求中回写。
+ */
+function toProjectSummary(
+  project: ProjectSummary | ProjectDetail,
+): ProjectSummary {
+  const scenes = 'scenes' in project ? project.scenes : undefined;
   return {
     id: project.id,
     name: project.name,
-    description: project.description,
-    coverKey: project.coverKey,
-    sceneCount: project.sceneCount,
+    description: project.description ?? '',
+    code: project.code ?? '',
+    coverKey: project.coverKey ?? null,
+    sceneCount: project.sceneCount ?? scenes?.length ?? 0,
+    assetCount: project.assetCount ?? 0,
+    lastPublishedAt: project.lastPublishedAt ?? null,
     createdAt: project.createdAt,
     updatedAt: project.updatedAt,
   };
@@ -27,6 +41,7 @@ function toSceneSummary(scene: SceneDetail): SceneSummary {
     id: scene.id,
     projectId: scene.projectId,
     name: scene.name,
+    description: scene.description ?? '',
     sortOrder: scene.sortOrder,
     revision: scene.revision,
     contentHash: scene.contentHash,
@@ -66,7 +81,7 @@ export const useProjectStore = defineStore('project', () => {
 
   async function loadProjects(keyword = ''): Promise<void> {
     await perform(async () => {
-      projects.value = await projectApi.list(keyword);
+      projects.value = (await projectApi.list(keyword)).map(toProjectSummary);
     });
   }
 
@@ -79,12 +94,15 @@ export const useProjectStore = defineStore('project', () => {
     });
   }
 
+  /** 支持传入完整表单对象，也兼容旧调用 createProject(name, description)。 */
   async function createProject(
-    name: string,
-    description: string,
+    input: CreateProjectInput | string,
+    description = '',
   ): Promise<ProjectDetail> {
+    const payload: CreateProjectInput =
+      typeof input === 'string' ? { name: input, description } : input;
     return perform(async () => {
-      const project = await projectApi.createProject({ name, description });
+      const project = await projectApi.createProject(payload);
       currentProject.value = project;
       upsertProject(project);
       return project;
@@ -103,9 +121,12 @@ export const useProjectStore = defineStore('project', () => {
     });
   }
 
-  async function copyProject(id: string): Promise<ProjectDetail> {
+  async function copyProject(
+    id: string,
+    input: CopyProjectInput = {},
+  ): Promise<ProjectDetail> {
     return perform(async () => {
-      const project = await projectApi.copyProject(id, {});
+      const project = await projectApi.copyProject(id, input);
       currentProject.value = project;
       upsertProject(project);
       return project;
@@ -120,9 +141,15 @@ export const useProjectStore = defineStore('project', () => {
     });
   }
 
-  async function createScene(projectId: string, name: string): Promise<void> {
+  /** 创建场景支持完整表单对象，同时兼容旧调用方只传名称的方式。 */
+  async function createScene(
+    projectId: string,
+    input: CreateSceneInput | string,
+  ): Promise<void> {
     await perform(async () => {
-      const scene = await projectApi.createScene(projectId, { name });
+      const payload: CreateSceneInput =
+        typeof input === 'string' ? { name: input } : input;
+      const scene = await projectApi.createScene(projectId, payload);
       if (!currentProject.value || currentProject.value.id !== projectId)
         return;
       currentProject.value.scenes.push(toSceneSummary(scene));
@@ -138,6 +165,25 @@ export const useProjectStore = defineStore('project', () => {
       currentProject.value.scenes.push(toSceneSummary(scene));
       currentProject.value.sceneCount = currentProject.value.scenes.length;
       upsertProject(currentProject.value);
+    });
+  }
+
+  /** 更新场景元数据后同步当前项目，避免返回列表仍显示旧名称。 */
+  async function updateScene(
+    id: string,
+    input: UpdateSceneInput,
+  ): Promise<SceneDetail> {
+    return perform(async () => {
+      const scene = await projectApi.updateScene(id, input);
+      if (!currentProject.value) return scene;
+      const index = currentProject.value.scenes.findIndex(
+        (item) => item.id === id,
+      );
+      if (index !== -1) {
+        currentProject.value.scenes[index] = toSceneSummary(scene);
+        upsertProject(currentProject.value);
+      }
+      return scene;
     });
   }
 
@@ -166,6 +212,7 @@ export const useProjectStore = defineStore('project', () => {
     deleteProject,
     createScene,
     copyScene,
+    updateScene,
     deleteScene,
   };
 });

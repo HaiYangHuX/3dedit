@@ -18,9 +18,6 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import type { TransformControlsMode } from 'three/addons/controls/TransformControls.js';
 import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import type {
   CameraRoamingPath,
   SceneDocument,
@@ -112,7 +109,7 @@ export interface EditorEngineEventMap {
 }
 
 /**
- * 统一拥有场景渲染循环、容器尺寸监听、控制器、后期通道和 GPU 资源。
+ * 统一拥有场景渲染循环、容器尺寸监听、控制器和 GPU 资源。
  * 调用方必须在组件卸载时执行 dispose，不能单独销毁其中任意成员。
  */
 export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
@@ -122,8 +119,6 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
   private readonly resources = new ResourceTracker();
   private renderer?: WebGLRenderer;
   private controls?: OrbitControls;
-  private composer?: EffectComposer;
-  private output?: OutputPass;
   private documentSystem?: SceneDocumentSystem;
   private selectionSystem?: SelectionSystem;
   private selectionHighlight?: SelectionBoxSystem;
@@ -170,12 +165,20 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     const renderer = new WebGLRenderer({
       antialias: true,
       powerPreference: 'high-performance',
+      stencil: false,
+      depth: true,
+      logarithmicDepthBuffer: false,
     });
+    renderer.setClearColor(0xcccccc);
     renderer.outputColorSpace = SRGBColorSpace;
     renderer.toneMapping = NeutralToneMapping;
     renderer.toneMappingExposure = 1.2;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = PCFShadowMap;
+    // 与原站 initRender 一致：主场景与右下角 Gizmo 在同一 Canvas 分步绘制。
+    renderer.autoClear = false;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(container.clientWidth, container.clientHeight, false);
     container.append(renderer.domElement);
     this.renderer = renderer;
 
@@ -233,7 +236,7 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.weatherSystem = new WeatherSystem(this.scene);
 
     this.controls = new OrbitControls(this.camera, renderer.domElement);
-    // ThreeFlowX 4.0.4 编辑器使用左键平移、滚轮缩放、右键旋转。
+    // 数字孪生 4.0.4 编辑器使用左键平移、滚轮缩放、右键旋转。
     configureOrbitControls(this.controls, { enablePan: true });
     this.controls.addEventListener('change', this.invalidate);
     this.controls.addEventListener('change', this.emitCameraOrientation);
@@ -287,11 +290,6 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.controls.update();
     this.emitCameraOrientation();
 
-    this.composer = new EffectComposer(renderer);
-    this.composer.addPass(new RenderPass(this.scene, this.camera));
-    // 中间 RenderTarget 是线性色彩；末尾 OutputPass 负责 r183 tone mapping 与 sRGB 输出。
-    this.output = new OutputPass();
-    this.composer.addPass(this.output);
     this.selectionHighlight = new SelectionBoxSystem(this.scene);
 
     this.dropSystem = new ViewportDropSystem(this.camera, renderer.domElement);
@@ -337,14 +335,12 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
   };
 
   resize(width: number, height: number, dpr: number): void {
-    if (!this.renderer || !this.composer || width <= 0 || height <= 0) return;
+    if (!this.renderer || width <= 0 || height <= 0) return;
     const pixelRatio = Math.min(dpr, 2);
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setPixelRatio(pixelRatio);
     this.renderer.setSize(width, height, false);
-    this.composer.setPixelRatio(pixelRatio);
-    this.composer.setSize(width, height);
     this.viewportGizmo?.resize();
     this.invalidate();
   }
@@ -383,8 +379,9 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.selectionHighlight?.update();
     // 先消费当前脏标记，渲染期间产生的新事件才能正确请求下一帧。
     this.invalidated = false;
-    // Composer 是启用后期处理时唯一的最终渲染路径，不能再调用 renderer.render。
-    this.composer?.render(delta);
+    // 原站直接渲染到默认 framebuffer；经过 Composer 会丢失 Canvas MSAA，
+    // 在 cj.glb 这类高密度建筑模型缩放时就会表现为毛边和闪烁。
+    this.renderer?.render(this.scene, this.camera);
     if (this.viewportGizmo?.render()) this.invalidated = true;
     this.flushScreenshotRequests();
   };
@@ -812,7 +809,7 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     );
   }
 
-  /** 在下一次 Composer 写完默认 framebuffer 后立即读取，避免得到透明空图。 */
+  /** 在下一次主场景渲染完成后立即读取，避免得到透明空图。 */
   captureScreenshot(): Promise<Blob> {
     if (!this.renderer || this.disposed) {
       return Promise.reject(new Error('EditorEngine 尚未初始化'));
@@ -845,7 +842,10 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
       }
     }
     if (this.pointerLockSystem?.isActive || this.measurementSystem?.active) {
-      return false;
+      // 第一人称/测量模式接管这些按键，不能再被编辑器误判为变换工具快捷键。
+      return ['KeyW', 'KeyE', 'KeyR', 'KeyF', 'KeyA', 'KeyS', 'KeyD'].includes(
+        code,
+      );
     }
     if (this.transformSystem?.handleShortcut(code)) {
       this.invalidate();
@@ -879,8 +879,6 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.controls?.removeEventListener('end', this.emitCameraState);
     this.controls?.dispose();
     this.documentSystem?.dispose();
-    this.output?.dispose();
-    this.composer?.dispose();
     this.resources.dispose();
     const canvas = this.renderer?.domElement;
     this.renderer?.dispose();
@@ -910,6 +908,10 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
           this.transformSystem?.setSelection(selection.primaryId);
           this.dispatchEvent({ type: 'selectionchange', ...selection });
           this.invalidate();
+        },
+        onDoubleClick: () => {
+          // SelectionSystem 已经在双击回调前同步了根节点选择，直接复用统一聚焦计算。
+          this.focusSelection();
         },
       });
     }

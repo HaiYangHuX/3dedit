@@ -13,7 +13,7 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
-import type { UploadSession as UploadSessionRow } from '@prisma/client';
+import type { Prisma, UploadSession as UploadSessionRow } from '@prisma/client';
 import { MinioService } from '../infrastructure/minio.service.js';
 import { QueueService } from '../infrastructure/queue.service.js';
 import { PrismaService } from '../infrastructure/prisma.service.js';
@@ -44,6 +44,59 @@ function sanitizeFileName(fileName: string): string {
     .replace(/^[.-]+|[.-]+$/g, '')
     .slice(0, 180);
   return sanitized || 'asset';
+}
+
+/** 把表单元数据快照写入上传会话，替换上传完成前不改变资源当前元数据。 */
+function buildAssetMetadataSnapshot(
+  input: CreateUploadInput,
+  fallbackVersion = '1.0.0',
+): Prisma.InputJsonObject {
+  return {
+    name: input.name,
+    code: input.code ?? '',
+    description: input.description ?? '',
+    kind: input.kind,
+    format: input.format,
+    category: input.category ?? '未分类',
+    tags: input.tags ?? [],
+    version: input.version ?? fallbackVersion,
+    author: input.author ?? '',
+    manufacturer: input.manufacturer ?? '',
+    license: input.license ?? '内部资产',
+    unit: input.unit ?? 'm',
+    scale: input.scale ?? 1,
+    visibility: input.visibility ?? 'private',
+    ...(input.coverAssetId !== undefined
+      ? { coverAssetId: input.coverAssetId }
+      : {}),
+  };
+}
+
+function assetDataFromSnapshot(value: unknown): Prisma.AssetUpdateInput {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const snapshot = value as Record<string, unknown>;
+  const allowed = [
+    'name',
+    'code',
+    'description',
+    'kind',
+    'format',
+    'category',
+    'tags',
+    'version',
+    'author',
+    'manufacturer',
+    'license',
+    'unit',
+    'scale',
+    'visibility',
+    'coverAssetId',
+  ] as const;
+  return Object.fromEntries(
+    allowed
+      .filter((key) => snapshot[key] !== undefined)
+      .map((key) => [key, snapshot[key]]),
+  ) as Prisma.AssetUpdateInput;
 }
 
 function validateParts(
@@ -80,7 +133,11 @@ export class UploadService {
 
   async create(input: CreateUploadInput): Promise<UploadSession> {
     const isReplacement = Boolean(input.assetId);
-    let asset: { id: string; activeFile?: { objectKey: string } | null };
+    let asset: {
+      id: string;
+      version?: string;
+      activeFile?: { objectKey: string } | null;
+    };
 
     if (input.assetId) {
       const existing = await this.prisma.asset.findUnique({
@@ -104,12 +161,22 @@ export class UploadService {
       asset = await this.prisma.asset.create({
         data: {
           name: input.name,
+          code: input.code,
+          description: input.description,
           kind: input.kind,
           format: input.format,
           status: 'uploading',
           sourceHash: input.sha256,
           category: input.category,
           tags: input.tags,
+          version: input.version,
+          author: input.author,
+          manufacturer: input.manufacturer,
+          license: input.license,
+          unit: input.unit,
+          scale: input.scale,
+          visibility: input.visibility,
+          coverAssetId: input.coverAssetId,
         },
       });
     }
@@ -139,6 +206,10 @@ export class UploadService {
           size: BigInt(input.size),
           sha256: input.sha256,
           format: input.format,
+          metadata: buildAssetMetadataSnapshot(
+            input,
+            isReplacement ? (asset.version ?? '1.0.0') : '1.0.0',
+          ),
           objectKey,
           uploadId,
           partSize,
@@ -256,7 +327,11 @@ export class UploadService {
       });
       await transaction.asset.update({
         where: { id: claim.session.assetId },
-        data: { status: 'queued', error: null },
+        data: {
+          status: 'queued',
+          error: null,
+          ...assetDataFromSnapshot(claim.session.metadata),
+        },
       });
       const jobData: AnalyzeAssetJobData = {
         assetId: claim.session.assetId,

@@ -13,18 +13,49 @@ import type { Prisma, Project, Scene } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../infrastructure/prisma.service.js';
 
-type ProjectListRow = Project & { _count: { scenes: number } };
-type ProjectDetailRow = Project & {
-  scenes: Scene[];
-  publication: { status: string } | null;
+type ProjectPublication = { status?: string; publishedAt: Date } | null;
+type ProjectListRow = Project & {
+  scenes?: Pick<Scene, 'document'>[];
+  publication?: ProjectPublication;
   _count: { scenes: number };
 };
+type ProjectDetailRow = Project & {
+  scenes: Scene[];
+  publication: ProjectPublication;
+  _count: { scenes: number };
+};
+
+/** 项目场景文档中的资源引用不是独立表关系，因此统计时需要按资源 id 去重。 */
+function extractAssetIds(scenes: { document: unknown }[] = []): Set<string> {
+  const ids = new Set<string>();
+  for (const scene of scenes) {
+    const document = scene.document;
+    if (!document || typeof document !== 'object' || Array.isArray(document)) {
+      continue;
+    }
+    const references = (document as Record<string, unknown>).assetReferences;
+    if (!Array.isArray(references)) continue;
+    for (const reference of references) {
+      if (
+        !reference ||
+        typeof reference !== 'object' ||
+        Array.isArray(reference)
+      ) {
+        continue;
+      }
+      const assetId = (reference as Record<string, unknown>).assetId;
+      if (typeof assetId === 'string' && assetId.length > 0) ids.add(assetId);
+    }
+  }
+  return ids;
+}
 
 function mapSceneSummary(scene: Scene): SceneSummary {
   return {
     id: scene.id,
     projectId: scene.projectId,
     name: scene.name,
+    description: scene.description ?? '',
     sortOrder: scene.sortOrder,
     revision: scene.revision,
     contentHash: scene.contentHash,
@@ -35,12 +66,22 @@ function mapSceneSummary(scene: Scene): SceneSummary {
 }
 
 function mapProjectSummary(project: ProjectListRow): ProjectSummary {
+  const scenes = project.scenes ?? [];
   return {
     id: project.id,
     name: project.name,
-    description: project.description,
-    coverKey: project.coverKey,
+    description: project.description ?? '',
+    code: project.code ?? '',
+    status: (project.status ?? 'draft') as ProjectSummary['status'],
+    tags: project.tags ?? [],
+    ownerName: project.ownerName ?? '平台管理员',
+    industry: project.industry ?? '制造业',
+    location: project.location ?? '',
+    notes: project.notes ?? '',
+    coverKey: project.coverKey ?? null,
     sceneCount: project._count.scenes,
+    assetCount: extractAssetIds(scenes).size,
+    lastPublishedAt: project.publication?.publishedAt?.toISOString() ?? null,
     createdAt: project.createdAt.toISOString(),
     updatedAt: project.updatedAt.toISOString(),
   };
@@ -65,16 +106,22 @@ export class ProjectService {
         ? {
             OR: [
               { name: { contains: query.keyword, mode: 'insensitive' } },
+              { code: { contains: query.keyword, mode: 'insensitive' } },
               {
                 description: {
                   contains: query.keyword,
                   mode: 'insensitive',
                 },
               },
+              { tags: { has: query.keyword } },
             ],
           }
         : undefined,
-      include: { _count: { select: { scenes: true } } },
+      include: {
+        scenes: { select: { document: true } },
+        publication: { select: { publishedAt: true } },
+        _count: { select: { scenes: true } },
+      },
       orderBy: { updatedAt: 'desc' },
     });
     return projects.map(mapProjectSummary);
@@ -117,7 +164,7 @@ export class ProjectService {
       where: { id },
       include: {
         scenes: { orderBy: { sortOrder: 'asc' } },
-        publication: { select: { status: true } },
+        publication: { select: { status: true, publishedAt: true } },
         _count: { select: { scenes: true } },
       },
     });
@@ -145,6 +192,13 @@ export class ProjectService {
           id: projectId,
           name: input.name ?? `${source.name} 副本`,
           description: source.description,
+          code: source.code,
+          status: 'draft',
+          tags: source.tags,
+          ownerName: source.ownerName,
+          industry: source.industry,
+          location: source.location,
+          notes: source.notes,
           coverKey: source.coverKey,
         },
       });

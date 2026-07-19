@@ -18,6 +18,7 @@ export interface SelectionSystemOptions {
   getObject(nodeId: string): Object3D | undefined;
   highlight: SelectionHighlightTarget;
   onSelectionChange?(selection: SelectionState): void;
+  onDoubleClick?(nodeId: string): void;
   clickTolerance?: number;
 }
 
@@ -50,6 +51,7 @@ export class SelectionSystem {
   constructor(private readonly options: SelectionSystemOptions) {
     options.canvas.addEventListener('pointerdown', this.handlePointerDown);
     options.canvas.addEventListener('pointerup', this.handlePointerUp);
+    options.canvas.addEventListener('dblclick', this.handleDoubleClick);
   }
 
   getSelection(): SelectionState {
@@ -130,6 +132,7 @@ export class SelectionSystem {
       this.handlePointerDown,
     );
     this.options.canvas.removeEventListener('pointerup', this.handlePointerUp);
+    this.options.canvas.removeEventListener('dblclick', this.handleDoubleClick);
     this.selectedIds.length = 0;
     this.pickedObjects.clear();
     this.highlightedObjects = [];
@@ -198,6 +201,15 @@ export class SelectionSystem {
     // OrbitControls 会在极小手抖时派发 change；源站只以 5px 位移判定点击。
     if (suppressed || moved) return;
     this.selectAt(event.clientX, event.clientY, event.ctrlKey || event.metaKey);
+  };
+
+  private readonly handleDoubleClick = (event: MouseEvent): void => {
+    if (!this.enabled) return;
+    const hit = this.pick(event.clientX, event.clientY);
+    if (!hit) return;
+    // 双击先同步业务选择，再让宿主将相机过渡到当前模型，匹配源站“F/双击材质”语义。
+    this.selectAt(event.clientX, event.clientY, event.ctrlKey || event.metaKey);
+    this.options.onDoubleClick?.(hit.nodeId);
   };
 
   private refreshHighlight(ids: readonly string[]): void {

@@ -1,6 +1,6 @@
 # cj.glb 模型导入尺寸与明暗保真实施计划
 
-**Goal:** 按 ThreeFlowX 4.0.4 在线源码恢复模型 Box3 归一化，使超大单位 GLB 在 Editor/Runtime 中以相同初始尺度和渲染基线显示。
+**Goal:** 按 数字孪生 4.0.4 在线源码恢复模型 Box3 归一化，使超大单位 GLB 在 Editor/Runtime 中以相同初始尺度和渲染基线显示。
 
 **Architecture:** `AssetInstanceSystem` 继续负责模板缓存与实例生命周期；新增纯 Three.js 归一化模块，在克隆模板后建立业务根与内部 content 两层结构。EditorEngine 和 RuntimeThreeEngine 无需分别实现，避免两端再次漂移。
 

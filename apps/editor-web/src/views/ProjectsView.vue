@@ -1,20 +1,31 @@
 <script setup lang="ts">
+import type {
+  CreateProjectInput,
+  UpdateProjectInput,
+} from '@digital-twin/api-contracts';
+import {
+  Edit,
+  FolderOpened,
+  Plus,
+  Refresh,
+  Search,
+  View,
+} from '@element-plus/icons-vue';
 import {
   ElAlert,
   ElButton,
   ElCard,
-  ElDialog,
   ElEmpty,
-  ElForm,
-  ElFormItem,
+  ElIcon,
   ElInput,
   ElMessage,
   ElMessageBox,
   ElSkeleton,
 } from 'element-plus';
 import { storeToRefs } from 'pinia';
-import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { RouterLink, useRouter } from 'vue-router';
+import ProjectFormDialog from '../components/ProjectFormDialog.vue';
 import { useProjectStore } from '../stores/project';
 
 const router = useRouter();
@@ -22,8 +33,14 @@ const store = useProjectStore();
 const { projects, loading, error } = storeToRefs(store);
 const keyword = ref('');
 const dialogVisible = ref(false);
+const editVisible = ref(false);
 const submitting = ref(false);
-const form = reactive({ name: '', description: '' });
+const editingProjectId = ref<string | null>(null);
+const formProject = computed(
+  () =>
+    projects.value.find((project) => project.id === editingProjectId.value) ??
+    null,
+);
 let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
 function formatTime(value: string): string {
@@ -43,7 +60,7 @@ async function loadProjects(): Promise<void> {
 
 watch(keyword, () => {
   if (searchTimer) clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => void loadProjects(), 300);
+  searchTimer = setTimeout(() => void loadProjects(), 280);
 });
 
 onMounted(() => void loadProjects());
@@ -52,24 +69,46 @@ onBeforeUnmount(() => {
 });
 
 function openCreateDialog(): void {
-  form.name = '';
-  form.description = '';
   dialogVisible.value = true;
 }
 
-async function submitProject(): Promise<void> {
-  if (!form.name.trim()) {
+function openEditDialog(id: string): void {
+  editingProjectId.value = id;
+  editVisible.value = true;
+}
+
+async function submitProject(
+  input: CreateProjectInput | UpdateProjectInput,
+): Promise<void> {
+  if (!input.name) {
     ElMessage.warning('请输入项目名称');
     return;
   }
   submitting.value = true;
   try {
-    const project = await store.createProject(form.name, form.description);
+    // 创建表单的 name/description 为必填，联合事件类型在这里收窄后再提交。
+    const project = await store.createProject(input as CreateProjectInput);
     dialogVisible.value = false;
     ElMessage.success('项目已创建');
     await router.push(`/projects/${project.id}`);
   } catch {
     ElMessage.error(store.error || '项目创建失败');
+  } finally {
+    submitting.value = false;
+  }
+}
+
+async function updateProject(
+  input: CreateProjectInput | UpdateProjectInput,
+): Promise<void> {
+  if (!editingProjectId.value) return;
+  submitting.value = true;
+  try {
+    await store.updateProject(editingProjectId.value, input);
+    editVisible.value = false;
+    ElMessage.success('项目资料已更新');
+  } catch {
+    ElMessage.error(store.error || '项目更新失败');
   } finally {
     submitting.value = false;
   }
@@ -102,100 +141,126 @@ async function deleteProject(id: string, name: string): Promise<void> {
 </script>
 
 <template>
-  <main class="management-page">
-    <header class="management-header">
-      <div>
-        <p class="eyebrow">数字孪生工作台</p>
-        <h1>项目管理</h1>
-      </div>
-      <div class="header-actions">
-        <RouterLink to="/assets">模型与素材库</RouterLink>
-        <ElButton
-          type="primary"
-          data-testid="create-project"
-          @click="openCreateDialog"
-        >
-          创建项目
-        </ElButton>
-      </div>
-    </header>
-
-    <section class="management-tools">
+  <div class="management-page projects-page">
+    <section class="management-toolbar">
       <ElInput
         v-model="keyword"
         clearable
-        placeholder="搜索项目名称或描述"
+        class="management-search"
+        placeholder="搜索项目名称或编码"
         aria-label="搜索项目"
-      />
-      <span>{{ projects.length }} 个项目</span>
+      >
+        <template #prefix
+          ><ElIcon><Search /></ElIcon
+        ></template>
+      </ElInput>
+      <span class="management-toolbar__count"
+        >共 {{ projects.length }} 个项目</span
+      >
+      <ElButton text :loading="loading" @click="loadProjects"
+        ><ElIcon><Refresh /></ElIcon> 刷新</ElButton
+      >
+      <ElButton
+        type="primary"
+        data-testid="create-project"
+        @click="openCreateDialog"
+      >
+        <ElIcon><Plus /></ElIcon> 创建项目
+      </ElButton>
     </section>
 
-    <ElAlert v-if="error" :title="error" type="error" :closable="false" />
+    <ElAlert
+      v-if="error"
+      :title="error"
+      type="error"
+      :closable="false"
+      class="management-alert"
+    />
     <ElSkeleton v-if="loading && projects.length === 0" :rows="6" animated />
     <ElEmpty
       v-else-if="projects.length === 0"
       description="尚未创建数字孪生项目"
-    />
-    <section v-else class="card-grid" aria-label="项目列表">
+    >
+      <ElButton type="primary" @click="openCreateDialog"
+        >创建第一个项目</ElButton
+      >
+    </ElEmpty>
+    <section v-else class="project-card-grid" aria-label="项目列表">
       <ElCard
         v-for="project in projects"
         :key="project.id"
-        class="project-card"
+        class="project-card product-card"
+        shadow="hover"
       >
-        <div class="card-cover">
-          <span>{{ project.name.slice(0, 1) }}</span>
-        </div>
-        <div class="card-content">
-          <h2>{{ project.name }}</h2>
-          <p>{{ project.description || '暂无项目描述' }}</p>
-          <div class="card-meta">
-            <span>{{ project.sceneCount }} 个场景</span>
-            <span>更新于 {{ formatTime(project.updatedAt) }}</span>
-          </div>
-          <div class="card-actions">
-            <RouterLink :to="`/projects/${project.id}`">
-              <ElButton type="primary">打开项目</ElButton>
-            </RouterLink>
-            <ElButton @click="copyProject(project.id)">复制</ElButton>
+        <RouterLink :to="`/projects/${project.id}`" class="project-card__cover">
+          <img
+            v-if="project.coverKey?.startsWith('http')"
+            :src="project.coverKey"
+            :alt="project.name"
+          />
+          <span v-else class="project-card__cover-fallback">{{
+            project.name.slice(0, 1)
+          }}</span>
+        </RouterLink>
+        <div class="project-card__body">
+          <div class="project-card__title-row">
+            <div class="project-card__title-wrap">
+              <RouterLink :to="`/projects/${project.id}`"
+                ><h2>{{ project.name }}</h2></RouterLink
+              >
+              <span>{{ project.code || '未设置项目编码' }}</span>
+            </div>
             <ElButton
-              type="danger"
-              plain
-              @click="deleteProject(project.id, project.name)"
+              text
+              circle
+              title="编辑项目资料"
+              @click="openEditDialog(project.id)"
+              ><ElIcon><Edit /></ElIcon
+            ></ElButton>
+          </div>
+          <div class="project-card__meta">
+            <span
+              ><ElIcon><FolderOpened /></ElIcon>
+              {{ project.sceneCount ?? 0 }} 个场景</span
+            ><span
+              ><ElIcon><View /></ElIcon>
+              {{ project.assetCount ?? 0 }} 个资源</span
             >
-              删除
-            </ElButton>
+          </div>
+          <div class="project-card__footer">
+            <span>更新于 {{ formatTime(project.updatedAt) }}</span>
+            <div class="project-card__actions">
+              <RouterLink :to="`/projects/${project.id}`"
+                ><ElButton type="primary" size="small"
+                  >打开项目</ElButton
+                ></RouterLink
+              ><ElButton size="small" @click="copyProject(project.id)"
+                >复制</ElButton
+              ><ElButton
+                size="small"
+                type="danger"
+                plain
+                @click="deleteProject(project.id, project.name)"
+                >删除</ElButton
+              >
+            </div>
           </div>
         </div>
       </ElCard>
     </section>
 
-    <ElDialog
+    <ProjectFormDialog
       v-model="dialogVisible"
-      title="创建数字孪生项目"
-      width="480px"
-      data-testid="project-dialog"
-      destroy-on-close
-    >
-      <ElForm label-position="top" @submit.prevent="submitProject">
-        <ElFormItem label="项目名称" required>
-          <ElInput v-model="form.name" maxlength="80" show-word-limit />
-        </ElFormItem>
-        <ElFormItem label="项目描述">
-          <ElInput
-            v-model="form.description"
-            type="textarea"
-            maxlength="500"
-            show-word-limit
-            :rows="4"
-          />
-        </ElFormItem>
-      </ElForm>
-      <template #footer>
-        <ElButton @click="dialogVisible = false">取消</ElButton>
-        <ElButton type="primary" :loading="submitting" @click="submitProject">
-          创建
-        </ElButton>
-      </template>
-    </ElDialog>
-  </main>
+      :submitting="submitting"
+      @submit="submitProject"
+    />
+    <ProjectFormDialog
+      v-model="editVisible"
+      mode="edit"
+      :project="formProject"
+      :submitting="submitting"
+      test-id="project-edit-dialog"
+      @submit="updateProject"
+    />
+  </div>
 </template>

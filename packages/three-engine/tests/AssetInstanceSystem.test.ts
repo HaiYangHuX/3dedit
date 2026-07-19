@@ -44,7 +44,7 @@ const resolver: AssetResolver = {
 };
 
 describe('AssetInstanceSystem', () => {
-  it('按 ThreeFlowX 4.0.4 在线源码把大型模型最大边归一为 1.5', async () => {
+  it('按 数字孪生 4.0.4 在线源码把大型模型最大边归一为 1.5', async () => {
     const root = new Group();
     const mesh = new Mesh(
       // cj.glb 的实际包围盒约为 232.61 × 7.41 × 59.02，用同尺度保护本次回归。
@@ -72,6 +72,33 @@ describe('AssetInstanceSystem', () => {
       expect(object.receiveShadow).toBe(true);
     });
 
+    system.dispose();
+  });
+
+  it('归一化后立即刷新 GLTF 内部带平移节点的 world matrix', async () => {
+    const root = new Group();
+    const translated = new Group();
+    translated.position.x = 100;
+    translated.add(
+      new Mesh(new BoxGeometry(200, 2, 2), new MeshStandardMaterial()),
+    );
+    root.add(translated);
+    const loader: AssetLoaderLike = {
+      load: vi.fn().mockResolvedValue({ root, animations: [] }),
+      dispose: vi.fn(),
+    };
+    const system = new AssetInstanceSystem(resolver, loader);
+    const generation = system.beginGeneration();
+
+    const instance = await system.instantiate('asset-1', generation);
+    const nestedMesh = firstMesh(instance);
+    nestedMesh.updateWorldMatrix(true, false);
+
+    // 最大边为 200，因此内部节点的 100 单位平移也必须按归一化比例缩放。
+    expect(nestedMesh.getWorldPosition(new Vector3()).x).toBeCloseTo(
+      100 * (1.5 / 200),
+      5,
+    );
     system.dispose();
   });
 
@@ -160,6 +187,24 @@ describe('AssetInstanceSystem', () => {
 
     await expect(pending).rejects.toBeInstanceOf(StaleAssetLoadError);
     expect(dispose).toHaveBeenCalledTimes(1);
+    system.dispose();
+  });
+
+  it('保留旧代次实例直到新场景提交，避免重载期间模型消失', async () => {
+    const loader: AssetLoaderLike = {
+      load: vi.fn().mockResolvedValue(model()),
+      dispose: vi.fn(),
+    };
+    const system = new AssetInstanceSystem(resolver, loader);
+    const oldGeneration = system.beginGeneration();
+    const oldInstance = await system.instantiate('asset-1', oldGeneration);
+
+    const nextGeneration = system.beginGeneration({ preserveExisting: true });
+    expect(system.release(oldInstance)).toBe(true);
+    const nextInstance = await system.instantiate('asset-1', nextGeneration);
+
+    expect(nextInstance).not.toBe(oldInstance);
+    system.release(nextInstance);
     system.dispose();
   });
 

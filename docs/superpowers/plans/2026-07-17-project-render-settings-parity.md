@@ -1,10 +1,10 @@
-# ThreeFlowX r183 项目渲染配置迁移 Implementation Plan
+# 数字孪生 r183 项目渲染配置迁移 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 将 ThreeFlowX r183 项目配置的全部枚举、真实默认值、内置资源和 Three.js 行为完整迁移到编辑器与发布运行时。
+**Goal:** 将 数字孪生 r183 项目配置的全部枚举、真实默认值、内置资源和 Three.js 行为完整迁移到编辑器与发布运行时。
 
-**Architecture:** SceneDocument 作为唯一可持久化配置源，`SceneSettingsSystem` 管理 renderer/背景/环境/雾，`GroundSystem` 管理九种地面，`WeatherSystem` 管理雨雪粒子。EditorEngine 和 RuntimeThreeEngine 共用三个系统与内置资源，UI 仍通过 `UpdateSceneSettingsCommand` 保持撤销、重做和自动保存。
+**Architecture:** SceneDocument 作为唯一可持久化配置源，`SceneSettingsSystem` 管理 renderer/背景/环境/雾，`GroundSystem` 管理九种地面，`WeatherSystem` 管理雨雪粒子。EditorEngine 和 RuntimeThreeEngine 共用三个系统与内置资源，UI 仍通过 `UpdateSceneSettingsCommand` 保持撤销、重做和显式保存。
 
 **Tech Stack:** Vue 3.5、TypeScript 5.9、Pinia 4、Element Plus 2.14、Three.js 0.183.0、Zod、Vitest、Playwright、Vite 7。
 
@@ -15,7 +15,7 @@
 - 默认值固定为 Neutral、PCF、1.2、`#3b3b3b`、Venice HDR、FogExp2 0.01、Grid、无天气。
 - `NoShadow` 映射 `BasicShadowMap`，但 `renderer.shadowMap.enabled` 始终为 `true`。
 - 无背景显示 `#a0a0a0`，不启用透明 Canvas。
-- 内置资源通过 `new URL(..., import.meta.url)` 打包，不引用 ThreeFlowX 远程 URL。
+- 内置资源通过 `new URL(..., import.meta.url)` 打包，不引用 数字孪生 远程 URL。
 - 更改不覆写导入模型原始材质参数，不以降低曝光掩盖 PBR 问题。
 - 编辑器和发布运行时使用 Composer 作为唯一 Canvas 输出路径，不新建第二条 RAF。
 - 新增注释使用中文，只解释资源所有权、异步代次、源站特殊行为和其他非显然约束。

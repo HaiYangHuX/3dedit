@@ -24,6 +24,8 @@ export interface ModelPartItem {
   objectId: string;
   /** 黄色包围盒实际绑定的 Mesh UUID。 */
   targetObjectId: string;
+  /** 从模型根开始、由子节点索引组成的稳定路径，例如 0/2/1；根 Mesh 使用 $root。 */
+  partPath?: string;
   name: string;
   objectType: string;
 }
@@ -33,7 +35,11 @@ export type ModelStructureMap = Record<string, ModelPartItem[]>;
 
 /** SceneDocumentSystem 只依赖实例能力，单元测试无需创建真实网络 Loader。 */
 export interface AssetInstanceProvider {
-  beginGeneration(): number;
+  /**
+   * 开启新的异步加载代次；重载文档时保留现有实例，待新场景完整就绪后再释放。
+   * 这样撤销/重做不会因为先清空旧根节点而产生黑屏闪烁。
+   */
+  beginGeneration(options?: { preserveExisting?: boolean }): number;
   instantiate(assetId: string, generation: number): Promise<Object3D>;
   release(root: Object3D): boolean;
   dispose(): void;

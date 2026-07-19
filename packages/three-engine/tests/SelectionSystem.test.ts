@@ -177,6 +177,45 @@ describe('SelectionSystem', () => {
     selection.dispose();
   });
 
+  it('双击命中材质时通知宿主聚焦当前模型', () => {
+    const canvas = new CanvasStub();
+    const camera = new PerspectiveCamera(50, 2, 0.1, 100);
+    camera.position.set(0, 0, 5);
+    camera.lookAt(0, 0, 0);
+    camera.updateMatrixWorld();
+    const sceneRoot = new Scene();
+    const node = businessNode('node-1', 0);
+    sceneRoot.add(node);
+    sceneRoot.updateMatrixWorld(true);
+    const doubleClick = vi.fn();
+    const selection = new SelectionSystem({
+      camera,
+      canvas: canvas as unknown as HTMLElement,
+      root: sceneRoot,
+      getNodeId: () => 'node-1',
+      getObject: () => node,
+      highlight: { setObjects: vi.fn(), clear: vi.fn() },
+      onDoubleClick: doubleClick,
+    });
+    const [x, y] = screenPoint(
+      new Vector3(),
+      camera,
+      canvas.getBoundingClientRect(),
+    );
+
+    const event = new Event('dblclick') as MouseEvent;
+    Object.defineProperties(event, {
+      clientX: { value: x },
+      clientY: { value: y },
+      ctrlKey: { value: false },
+      metaKey: { value: false },
+    });
+    canvas.dispatchEvent(event);
+
+    expect(doubleClick).toHaveBeenCalledWith('node-1');
+    selection.dispose();
+  });
+
   it('节点 ID 未变但运行对象被重建时刷新高亮引用且不重复派发选择事件', () => {
     const canvas = new CanvasStub();
     const camera = new PerspectiveCamera();

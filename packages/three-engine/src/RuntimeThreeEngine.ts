@@ -6,15 +6,18 @@ import {
   type SceneDocument,
 } from '@digital-twin/scene-schema';
 import {
+  Box3,
   Color,
   NeutralToneMapping,
   PCFShadowMap,
   PerspectiveCamera,
   PMREMGenerator,
   Scene,
+  Sphere,
   SRGBColorSpace,
   Timer,
   Vector2,
+  Vector3,
   WebGLRenderer,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -217,6 +220,9 @@ export class RuntimeThreeEngine {
     this.stopCameraRoaming();
     this.applyCameraRoamingList(document.cameraRoamingList);
     this.applyCamera(document.camera);
+    // OrbitControls 内部缓存球面坐标；文档相机异步加载后必须立即同步一次，
+    // 否则首帧会用初始化前的缓存姿态覆盖保存的 rotation/target，模型看似“消失”。
+    this.controls?.update();
     this.settings?.apply(document.settings);
     // 先停止旧文档动画和补间，模型异步加载期间不能继续修改已移除的 Object3D。
     this.hostAdapter?.dispose();
@@ -297,6 +303,33 @@ export class RuntimeThreeEngine {
     this.controls?.update();
   }
 
+  /** 根据已加载文档的包围盒取景，保持当前视线方向，只重新计算目标和距离。 */
+  fitDocumentCamera(): boolean {
+    if (!this.controls) return false;
+    const root = this.documentSystem?.root;
+    if (!root || root.children.length === 0) return false;
+    this.scene.updateMatrixWorld(true);
+    const bounds = new Box3().setFromObject(root);
+    if (bounds.isEmpty()) return false;
+    const center = bounds.getCenter(new Vector3());
+    const sphere = bounds.getBoundingSphere(new Sphere());
+    const offset = this.camera.position.clone().sub(this.controls.target);
+    if (offset.lengthSq() < 1e-8) offset.set(0.4, 0.35, 1);
+    offset.normalize();
+    const halfFov = (this.camera.fov * Math.PI) / 360;
+    // 源站 Preview 的固定 Camera 与模型原始尺度约保持 2.2 倍包围球距离；
+    // 归一化模型沿用同一视野比例，避免首次打开时贴脸或缩成不可识别的细线。
+    const distance = Math.max((sphere.radius / Math.sin(halfFov)) * 2.2, 0.5);
+    this.controls.target.copy(center);
+    this.camera.position.copy(center).addScaledVector(offset, distance);
+    this.camera.lookAt(center);
+    this.camera.updateProjectionMatrix();
+    this.controls.update();
+    // 预览工具栏的“重置”应回到这次可见的初始取景，而不是回到尚未适配模型尺度的旧 Camera。
+    this.initialCamera = this.captureCameraState();
+    return true;
+  }
+
   requestFirstPerson(): boolean {
     if (!this.pointerLockSystem) return false;
     this.stopCameraRoaming();
@@ -357,6 +390,10 @@ export class RuntimeThreeEngine {
     this.camera.updateProjectionMatrix();
     this.renderer.setPixelRatio(pixelRatio);
     this.renderer.setSize(width, height, false);
+    // updateStyle=false 保留物理像素尺寸控制，但动态创建的 canvas 不会继承 Vue scoped CSS；
+    // 显式锁定 CSS 尺寸，避免 DPR=2 时画布以 2560×1440 CSS 像素溢出 1280×720 容器。
+    this.renderer.domElement.style.width = '100%';
+    this.renderer.domElement.style.height = '100%';
     this.composer.setPixelRatio(pixelRatio);
     this.composer.setSize(width, height);
     this.outline?.setSize(width, height);
@@ -448,6 +485,33 @@ export class RuntimeThreeEngine {
       subscribeNodeEvent: (nodeId, event, listener) =>
         this.pointerSystem!.subscribe(nodeId, event, listener),
     });
+  }
+
+  /** 将运行期 Camera 快照转换回可持久化 DTO，避免 reset 依赖 Three 实例引用。 */
+  private captureCameraState(): SceneCamera {
+    const shadowCamera = this.camera as PerspectiveCamera & {
+      castShadow?: boolean;
+      receiveShadow?: boolean;
+    };
+    return {
+      type: 'perspective',
+      name: this.camera.name || 'Camera',
+      position: this.camera.position.toArray(),
+      rotation: [
+        this.camera.rotation.x,
+        this.camera.rotation.y,
+        this.camera.rotation.z,
+      ],
+      scale: this.camera.scale.toArray(),
+      target: this.controls?.target.toArray() ?? [0, 0.5, 0],
+      visible: this.camera.visible,
+      castShadow: shadowCamera.castShadow ?? false,
+      receiveShadow: shadowCamera.receiveShadow ?? false,
+      frustumCulled: this.camera.frustumCulled,
+      fov: this.camera.fov,
+      near: this.camera.near,
+      far: this.camera.far,
+    };
   }
 
   private emitNavigationState(): void {

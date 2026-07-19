@@ -20,7 +20,7 @@ export interface MeasurementSystemOptions {
   onChange?(): void;
 }
 
-/** ThreeFlowX 以 10 个世界单位代表 1 米，并固定显示两位小数。 */
+/** 数字孪生 以 10 个世界单位代表 1 米，并固定显示两位小数。 */
 export function formatMeasurementDistance(worldDistance: number): string {
   return `${(Math.max(worldDistance, 0) / 10).toFixed(2)}m`;
 }

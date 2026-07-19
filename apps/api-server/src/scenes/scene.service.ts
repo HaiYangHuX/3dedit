@@ -18,7 +18,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, type Scene } from '@prisma/client';
+import { type Prisma, type Scene } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../infrastructure/prisma.service.js';
 import { hashSceneDocument, normalizeSceneDocument } from './scene-document.js';
@@ -28,6 +28,7 @@ function mapSceneSummary(scene: Scene): SceneSummary {
     id: scene.id,
     projectId: scene.projectId,
     name: scene.name,
+    description: scene.description ?? '',
     sortOrder: scene.sortOrder,
     revision: scene.revision,
     contentHash: scene.contentHash,
@@ -79,6 +80,8 @@ export class SceneService {
           id: sceneId,
           projectId,
           name: input.name,
+          description: input.description ?? '',
+          coverKey: input.coverKey ?? null,
           sortOrder: (aggregate._max.sortOrder ?? -1) + 1,
           document: createDefaultSceneDocument(
             projectId,
@@ -130,6 +133,7 @@ export class SceneService {
           id: sceneId,
           projectId: source.projectId,
           name,
+          description: source.description ?? '',
           sortOrder: (aggregate._max.sortOrder ?? -1) + 1,
           revision: 0,
           document: toJson(document),
@@ -202,23 +206,11 @@ export class SceneService {
   }
 
   async remove(id: string): Promise<void> {
-    await this.prisma.$transaction(
-      async (transaction) => {
-        const scene = await transaction.scene.findUnique({ where: { id } });
-        if (!scene) throw new NotFoundException('场景不存在');
-        const count = await transaction.scene.count({
-          where: { projectId: scene.projectId },
-        });
-        if (count <= 1) {
-          throw new ConflictException({
-            code: 'LAST_SCENE_REQUIRED',
-            message: '项目至少需要保留一个场景',
-          });
-        }
-        await transaction.scene.delete({ where: { id } });
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-    );
+    await this.prisma.$transaction(async (transaction) => {
+      const scene = await transaction.scene.findUnique({ where: { id } });
+      if (!scene) throw new NotFoundException('场景不存在');
+      await transaction.scene.delete({ where: { id } });
+    });
   }
 
   private async requireScene(id: string): Promise<Scene> {

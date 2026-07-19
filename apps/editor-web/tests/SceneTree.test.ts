@@ -67,12 +67,14 @@ describe('SceneTree', () => {
             {
               objectId: 'mesh-frame',
               targetObjectId: 'mesh-frame',
+              partPath: '0',
               name: '刀具库框架-材质',
               objectType: 'Mesh',
             },
             {
               objectId: 'material-shell',
               targetObjectId: 'mesh-shell',
+              partPath: '1',
               name: '外壳材质',
               objectType: 'MeshStandardMaterial',
             },
@@ -110,8 +112,26 @@ describe('SceneTree', () => {
     expect(wrapper.findAll('.scene-tree-element-icon').length).toBeGreaterThan(
       2,
     );
-    expect(wrapper.findAllComponents(ElTooltip)).toHaveLength(5);
+    expect(wrapper.findAllComponents(ElTooltip)).toHaveLength(7);
     expect(wrapper.find('.scene-tree-toolbar').exists()).toBe(false);
+    expect(
+      wrapper.get('[data-node-id="model"] [aria-label="删除酸洗清洗机.glb"]'),
+    ).toBeDefined();
+    await wrapper
+      .get('[data-node-id="model"] [aria-label="删除酸洗清洗机.glb"]')
+      .trigger('click');
+    expect(wrapper.emitted('remove')?.at(-1)).toEqual(['model']);
+
+    await wrapper
+      .get('[data-object-id="mesh-frame"] [aria-label="删除刀具库框架-材质"]')
+      .trigger('click');
+    expect(wrapper.emitted('remove-model-part')?.at(-1)).toEqual([
+      {
+        nodeId: 'model',
+        partPath: '0',
+        objectId: 'mesh-frame',
+      },
+    ]);
 
     await wrapper
       .get('[data-object-id="material-shell"] .scene-tree-label')
@@ -137,6 +157,7 @@ describe('SceneTree', () => {
     const sharedPart = {
       objectId: 'shared-material',
       targetObjectId: 'mesh',
+      partPath: '0',
       name: '共享材质',
       objectType: 'MeshStandardMaterial',
     };

@@ -7,7 +7,7 @@ import type { EditorCommand } from './types.js';
 
 export type EditableSceneSettingsPatch = Partial<SceneDocument['settings']>;
 
-/** 场景级配置与节点命令共用同一历史游标和自动保存边界。 */
+/** 场景级配置与节点命令共用同一历史游标和显式保存边界。 */
 export class UpdateSceneSettingsCommand implements EditorCommand<EditorDocumentContext> {
   readonly label = '更新场景设置';
   private before?: SceneDocument['settings'];

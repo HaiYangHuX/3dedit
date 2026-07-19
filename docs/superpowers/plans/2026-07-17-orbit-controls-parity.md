@@ -1,6 +1,6 @@
 # Orbit Controls Parity Implementation Plan
 
-**Goal:** 对齐 ThreeFlowX `4.0.4` 线上编辑器的 OrbitControls 按键映射、缩放速度、观察中心和旋转限制。
+**Goal:** 对齐 数字孪生 `4.0.4` 线上编辑器的 OrbitControls 按键映射、缩放速度、观察中心和旋转限制。
 
 **Architecture:** `OrbitControlsProfile` 作为 Three 引擎内部的唯一控制器配置边界；EditorEngine 与 RuntimeThreeEngine 共用同一预设。
 

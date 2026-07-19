@@ -1,6 +1,6 @@
 import { Box3, Group, Mesh, Vector3, type Object3D } from 'three';
 
-/** ThreeFlowX 4.0.4 在线 bundle 中拖入模型的最大边目标值。 */
+/** 数字孪生 4.0.4 在线 bundle 中拖入模型的最大边目标值。 */
 export const SOURCE_MODEL_TARGET_SIZE = 1.5;
 
 /**
@@ -49,5 +49,8 @@ export function createNormalizedModelInstance(content: Object3D): Group {
   };
   instance.receiveShadow = true;
   instance.add(content);
+  // scale 是在 content 已经计算过一次矩阵后写入的；立即刷新整棵子树，
+  // 否则 GLTF 内部带有大坐标平移的 Mesh 会沿用旧 matrixWorld，渲染器会把它画到错误位置。
+  instance.updateMatrixWorld(true);
   return instance;
 }

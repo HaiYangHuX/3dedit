@@ -2,11 +2,11 @@
 
 ## 目标
 
-让编辑器和发布运行时的轨道相机操作与 ThreeFlowX 线上编辑器一致。Three.js 继续锁定 `0.183.0`，不引入第二套相机控制器。
+让编辑器和发布运行时的轨道相机操作与 数字孪生 线上编辑器一致。Three.js 继续锁定 `0.183.0`，不引入第二套相机控制器。
 
 ## 实现依据
 
-以线上 ThreeFlowX `4.0.4` 的 `renderScene-OLdlmnPo.js` 为最终依据，不再沿用 GitHub 仓库旧版控制策略。线上 `initControls()` 明确设置：
+以线上 数字孪生 `4.0.4` 的 `renderScene-OLdlmnPo.js` 为最终依据，不再沿用 GitHub 仓库旧版控制策略。线上 `initControls()` 明确设置：
 
 - 左键 `MOUSE.PAN`、中键 `MOUSE.DOLLY`、右键 `MOUSE.ROTATE`。
 - `enableZoom = true`，`zoomSpeed = 1.5`，`rotateSpeed = 1`，`panSpeed = 1`。

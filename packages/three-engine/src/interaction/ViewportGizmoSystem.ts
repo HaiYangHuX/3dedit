@@ -90,7 +90,7 @@ export class ViewportGizmoSystem {
     if (!this.disposed) this.gizmo.update();
   }
 
-  /** 主场景 composer 完成后调用，返回值用于保持动画期间持续渲染。 */
+  /** 主场景直接渲染完成后调用，返回值用于保持动画期间持续渲染。 */
   render(): boolean {
     if (this.disposed) return false;
     this.gizmo.render();

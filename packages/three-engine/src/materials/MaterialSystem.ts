@@ -48,7 +48,7 @@ export interface MaterialApplyReport {
 
 /** SceneDocumentSystem 只依赖投影能力，测试无需创建真实 TextureLoader。 */
 export interface MaterialProjectionSystem {
-  beginGeneration(): number;
+  beginGeneration(options?: { preserveExisting?: boolean }): number;
   apply(
     root: Object3D,
     component: MaterialComponent | undefined,
@@ -74,6 +74,7 @@ interface MeshSnapshot {
 interface RootMaterialEntry {
   snapshots: MeshSnapshot[];
   version: number;
+  generation: number;
   key?: string;
   material?: Material;
   textures: Set<Texture>;
@@ -236,7 +237,11 @@ function applyScalarTextureParameters(
  */
 export class MaterialSystem implements MaterialProjectionSystem {
   private readonly textureLoader: TextureLoaderLike;
-  private readonly textureCache = new Map<string, TextureCacheEntry>();
+  // 旧场景材质在新场景贴图加载完成前仍可见，因此按代次保留贴图模板。
+  private readonly textureCache = new Map<
+    string,
+    Map<number, TextureCacheEntry>
+  >();
   private readonly roots = new Map<Object3D, RootMaterialEntry>();
   private generation = 0;
   private disposed = false;
@@ -248,11 +253,13 @@ export class MaterialSystem implements MaterialProjectionSystem {
     this.textureLoader = options.textureLoader ?? new TextureLoader();
   }
 
-  beginGeneration(): number {
+  beginGeneration(options: { preserveExisting?: boolean } = {}): number {
     this.assertAlive();
     this.generation += 1;
-    for (const root of [...this.roots.keys()]) this.restore(root);
-    this.clearTextureCache();
+    if (!options.preserveExisting) {
+      for (const root of [...this.roots.keys()]) this.restore(root);
+      this.clearTextureCache();
+    }
     return this.generation;
   }
 
@@ -267,7 +274,7 @@ export class MaterialSystem implements MaterialProjectionSystem {
       return { applied: false, errors: [] };
     }
 
-    const entry = this.ensureRootEntry(root);
+    const entry = this.ensureRootEntry(root, generation);
     if (entry.snapshots.length === 0) {
       this.roots.delete(root);
       return { applied: false, errors: [] };
@@ -333,6 +340,12 @@ export class MaterialSystem implements MaterialProjectionSystem {
     this.releaseOverride(entry);
     this.roots.delete(root);
     delete root.userData.materialErrors;
+    if (
+      entry.generation !== this.generation &&
+      !this.hasRoots(entry.generation)
+    ) {
+      this.disposeGenerationTextureCache(entry.generation);
+    }
   }
 
   dispose(): void {
@@ -343,9 +356,13 @@ export class MaterialSystem implements MaterialProjectionSystem {
     this.clearTextureCache();
   }
 
-  private ensureRootEntry(root: Object3D): RootMaterialEntry {
+  private ensureRootEntry(
+    root: Object3D,
+    generation: number,
+  ): RootMaterialEntry {
     const existing = this.roots.get(root);
-    if (existing) return existing;
+    if (existing && existing.generation === generation) return existing;
+    if (existing) this.restore(root);
     const snapshots: MeshSnapshot[] = [];
     root.traverse((object) => {
       if (!(object instanceof Mesh)) return;
@@ -359,6 +376,7 @@ export class MaterialSystem implements MaterialProjectionSystem {
     const entry: RootMaterialEntry = {
       snapshots,
       version: 0,
+      generation,
       textures: new Set(),
       report: { applied: false, errors: [] },
     };
@@ -383,14 +401,19 @@ export class MaterialSystem implements MaterialProjectionSystem {
     assetId: string,
     generation: number,
   ): Promise<Texture> {
-    const cached = this.textureCache.get(assetId);
-    if (cached?.generation === generation) return cached.promise;
+    let entries = this.textureCache.get(assetId);
+    const cached = entries?.get(generation);
+    if (cached) return cached.promise;
+    if (!entries) {
+      entries = new Map<number, TextureCacheEntry>();
+      this.textureCache.set(assetId, entries);
+    }
     const entry: TextureCacheEntry = {
       generation,
       promise: Promise.resolve(undefined as never),
     };
     entry.promise = this.loadTextureEntry(assetId, entry);
-    this.textureCache.set(assetId, entry);
+    entries.set(generation, entry);
     return entry.promise;
   }
 
@@ -407,7 +430,7 @@ export class MaterialSystem implements MaterialProjectionSystem {
       if (
         this.disposed ||
         entry.generation !== this.generation ||
-        this.textureCache.get(assetId) !== entry
+        this.textureCache.get(assetId)?.get(entry.generation) !== entry
       ) {
         texture.dispose();
         throw new StaleMaterialLoadError();
@@ -415,8 +438,10 @@ export class MaterialSystem implements MaterialProjectionSystem {
       entry.texture = texture;
       return texture;
     } catch (reason) {
-      if (this.textureCache.get(assetId) === entry) {
-        this.textureCache.delete(assetId);
+      const entries = this.textureCache.get(assetId);
+      if (entries?.get(entry.generation) === entry) {
+        entries.delete(entry.generation);
+        if (entries.size === 0) this.textureCache.delete(assetId);
       }
       if (
         reason instanceof StaleMaterialLoadError ||
@@ -430,8 +455,27 @@ export class MaterialSystem implements MaterialProjectionSystem {
   }
 
   private clearTextureCache(): void {
-    for (const entry of this.textureCache.values()) entry.texture?.dispose();
+    for (const entries of this.textureCache.values()) {
+      for (const entry of entries.values()) entry.texture?.dispose();
+    }
     this.textureCache.clear();
+  }
+
+  private hasRoots(generation: number): boolean {
+    for (const entry of this.roots.values()) {
+      if (entry.generation === generation) return true;
+    }
+    return false;
+  }
+
+  private disposeGenerationTextureCache(generation: number): void {
+    for (const [assetId, entries] of this.textureCache) {
+      const entry = entries.get(generation);
+      if (!entry) continue;
+      entry.texture?.dispose();
+      entries.delete(generation);
+      if (entries.size === 0) this.textureCache.delete(assetId);
+    }
   }
 
   private assertApplyCurrent(

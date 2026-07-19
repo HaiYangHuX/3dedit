@@ -11,11 +11,7 @@ export interface TransformChange {
   after: Transform;
 }
 
-function sameTransform(first: Transform, second: Transform): boolean {
-  return JSON.stringify(first) === JSON.stringify(second);
-}
-
-/** 一次变换可包含多个节点；连续拖动同一集合时合并成单条历史。 */
+/** 一次变换可包含多个节点；每次鼠标松开都会形成独立历史步骤。 */
 export class TransformNodesCommand implements EditorCommand<EditorDocumentContext> {
   readonly label = '变换节点';
   private readonly changes: TransformChange[];
@@ -43,31 +39,5 @@ export class TransformNodesCommand implements EditorCommand<EditorDocumentContex
       if (node) node.transform = structuredClone(change.before);
     }
     notifyDocumentChanged(context);
-  }
-
-  merge(
-    next: EditorCommand<EditorDocumentContext>,
-  ): EditorCommand<EditorDocumentContext> | undefined {
-    if (!(next instanceof TransformNodesCommand)) return undefined;
-    if (this.changes.length !== next.changes.length) return undefined;
-    const merged: TransformChange[] = [];
-    for (let index = 0; index < this.changes.length; index += 1) {
-      const previous = this.changes[index];
-      const following = next.changes[index];
-      if (
-        !previous ||
-        !following ||
-        previous.id !== following.id ||
-        !sameTransform(previous.after, following.before)
-      ) {
-        return undefined;
-      }
-      merged.push({
-        id: previous.id,
-        before: previous.before,
-        after: following.after,
-      });
-    }
-    return new TransformNodesCommand(merged);
   }
 }

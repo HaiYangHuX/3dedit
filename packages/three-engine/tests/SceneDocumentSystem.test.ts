@@ -9,6 +9,7 @@ import {
   PointLight,
   Scene,
   SpotLight,
+  type Object3D,
 } from 'three';
 import {
   createDefaultMaterialComponent,
@@ -18,6 +19,7 @@ import {
 import { describe, expect, it, vi } from 'vitest';
 import {
   SceneDocumentSystem,
+  StaleAssetLoadError,
   type AssetInstanceProvider,
   type MaterialProjectionSystem,
 } from '../src/index.js';
@@ -56,6 +58,34 @@ function modelRoot(): Group {
 }
 
 describe('SceneDocumentSystem', () => {
+  it('重载文档期间撤销正在加载的新增模型，不允许迟到对象重新挂回画布', async () => {
+    const scene = new Scene();
+    let resolveInstance!: (object: Object3D) => void;
+    const delayedInstance = new Promise<Object3D>((resolve) => {
+      resolveInstance = resolve;
+    });
+    let generation = 0;
+    const assets: AssetInstanceProvider = {
+      beginGeneration: vi.fn(() => ++generation),
+      instantiate: vi.fn(() => delayedInstance),
+      release: vi.fn(() => true),
+      dispose: vi.fn(),
+    };
+    const system = new SceneDocumentSystem(scene, assets);
+    const empty = createDefaultSceneDocument('project-1', 'scene-1', '场景');
+    await system.loadDocument(empty);
+
+    const pendingAdd = system.addNode(
+      node('model', { kind: 'model', assetId: 'asset-1' }),
+    );
+    const reload = system.loadDocument(empty);
+    resolveInstance(modelRoot());
+
+    await reload;
+    await expect(pendingAdd).rejects.toBeInstanceOf(StaleAssetLoadError);
+    expect(system.getObject('model')).toBeUndefined();
+  });
+
   it('在节点创建更新删除和销毁时对称驱动材质投影', async () => {
     const scene = new Scene();
     const assets: AssetInstanceProvider = {
@@ -223,12 +253,14 @@ describe('SceneDocumentSystem', () => {
         {
           objectId: unnamedMesh.uuid,
           targetObjectId: unnamedMesh.uuid,
+          partPath: '0/0',
           name: '未命名材质',
           objectType: 'Mesh',
         },
         {
           objectId: namedMesh.uuid,
           targetObjectId: namedMesh.uuid,
+          partPath: '0/1/0',
           name: '支架',
           objectType: 'Mesh',
         },
@@ -241,6 +273,59 @@ describe('SceneDocumentSystem', () => {
         system.getObject('business-child')!.uuid,
       ),
     ).toBeUndefined();
+  });
+
+  it('按稳定部件路径隐藏模型子网格并在结构列表中移除，撤销快照可恢复', async () => {
+    const scene = new Scene();
+    const modelObject = new Group();
+    const firstMesh = new Mesh(
+      new BoxGeometry(1, 1, 1),
+      new MeshStandardMaterial({ color: '#fff' }),
+    );
+    firstMesh.name = '第一部分';
+    firstMesh.visible = false;
+    const secondMesh = new Mesh(
+      new BoxGeometry(1, 1, 1),
+      new MeshStandardMaterial({ color: '#999' }),
+    );
+    secondMesh.name = '第二部分';
+    modelObject.add(firstMesh, secondMesh);
+    const assets: AssetInstanceProvider = {
+      beginGeneration: vi.fn(() => 1),
+      instantiate: vi.fn(async () => modelObject.clone()),
+      release: vi.fn(() => true),
+      dispose: vi.fn(),
+    };
+    const system = new SceneDocumentSystem(scene, assets);
+    const document = createDefaultSceneDocument('project-1', 'scene-1', '场景');
+    const model = node('model', {
+      kind: 'model',
+      assetId: 'asset-1',
+      excludedPartPaths: ['1'],
+    });
+    document.nodes = { model };
+    document.rootNodeIds = [model.id];
+
+    await system.loadDocument(document);
+
+    const loaded = system.getObject('model')!;
+    expect(loaded.children[0]?.visible).toBe(false);
+    expect(loaded.children[1]?.visible).toBe(false);
+    expect(system.getModelStructures().model).toHaveLength(1);
+    expect(system.getModelStructures().model?.[0]?.partPath).toBe('0');
+    expect(
+      system.getModelPartObject('model', loaded.children[1]?.uuid ?? ''),
+    ).toBeUndefined();
+
+    const restored = structuredClone(model);
+    restored.components = [
+      { kind: 'model', assetId: 'asset-1', excludedPartPaths: [] },
+    ];
+    await system.updateNode(restored);
+    expect(system.getModelStructures().model).toHaveLength(2);
+    expect(system.getObject('model')?.children[0]?.visible).toBe(false);
+    expect(system.getObject('model')?.children[1]?.visible).toBe(true);
+    system.dispose();
   });
 
   it('多材质 Mesh 使用材质名称去重但仍解析到所属 Mesh', async () => {
@@ -274,12 +359,14 @@ describe('SceneDocumentSystem', () => {
       {
         objectId: sharedMaterial.uuid,
         targetObjectId: mesh.uuid,
+        partPath: '0',
         name: '刀具库框架-材质',
         objectType: 'MeshStandardMaterial',
       },
       {
         objectId: unnamedMaterial.uuid,
         targetObjectId: mesh.uuid,
+        partPath: '0',
         name: '未命名材质',
         objectType: 'MeshStandardMaterial',
       },
@@ -402,6 +489,47 @@ describe('SceneDocumentSystem', () => {
     expect(replacement).not.toBe(oldObject);
     expect(replacement.userData.assetId).toBe('asset-new');
     expect(system.root.children).toEqual([replacement]);
+    expect(assets.release).toHaveBeenCalledWith(oldObject);
+    system.dispose();
+  });
+
+  it('异步重载期间保留旧场景，所有新节点就绪后再一次性替换', async () => {
+    const scene = new Scene();
+    let resolveNext!: (object: Group) => void;
+    const nextObject = new Promise<Group>((resolve) => {
+      resolveNext = resolve;
+    });
+    const oldObject = modelRoot();
+    oldObject.name = '旧场景';
+    const newObject = modelRoot();
+    newObject.name = '新场景';
+    const assets: AssetInstanceProvider = {
+      beginGeneration: vi.fn(() => 1),
+      instantiate: vi.fn((assetId: string) =>
+        assetId === 'asset-new' ? nextObject : Promise.resolve(oldObject),
+      ),
+      release: vi.fn(() => true),
+      dispose: vi.fn(),
+    };
+    const system = new SceneDocumentSystem(scene, assets);
+    const first = createDefaultSceneDocument('project-1', 'scene-1', '场景');
+    const oldNode = node('model', { kind: 'model', assetId: 'asset-old' });
+    first.nodes = { model: oldNode };
+    first.rootNodeIds = ['model'];
+    await system.loadDocument(first);
+
+    const second = structuredClone(first);
+    second.nodes.model!.components = [{ kind: 'model', assetId: 'asset-new' }];
+    const loading = system.loadDocument(second);
+    await Promise.resolve();
+
+    // 新模型仍在解码时，旧模型必须继续可见，避免撤销/重做出现黑屏闪烁。
+    expect(system.root.children).toEqual([oldObject]);
+    expect(assets.release).not.toHaveBeenCalledWith(oldObject);
+
+    resolveNext(newObject);
+    await loading;
+    expect(system.root.children).toEqual([newObject]);
     expect(assets.release).toHaveBeenCalledWith(oldObject);
     system.dispose();
   });

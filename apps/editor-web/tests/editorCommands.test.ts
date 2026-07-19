@@ -1,5 +1,8 @@
 import type { Asset } from '@digital-twin/api-contracts';
-import { createDefaultSceneDocument } from '@digital-twin/scene-schema';
+import {
+  createDefaultSceneDocument,
+  type Transform,
+} from '@digital-twin/scene-schema';
 import { createPinia, setActivePinia } from 'pinia';
 import { shallowRef } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -130,6 +133,40 @@ describe('editor commands', () => {
     expect(bridge.setSelection).toHaveBeenCalledWith([node.id], node.id);
   });
 
+  it('删除模型二级部件只写入排除路径并可通过撤销恢复', async () => {
+    const store = useDocumentStore();
+    await store.loadScene('scene-1');
+    const bridge: EditorCanvasBridge = {
+      applyNodeAdded: vi.fn().mockResolvedValue(undefined),
+      applyNodeRemoved: vi.fn(),
+      applyNodeUpdated: vi.fn().mockResolvedValue(undefined),
+      loadDocument: vi.fn().mockResolvedValue(undefined),
+      setSelection: vi.fn(),
+      setTransformMode: vi.fn(),
+      focusSelection: vi.fn(),
+    };
+    const commands = useEditorCommands(shallowRef(bridge));
+    const model = await commands.addAssetNode(asset, [0, 0, 0]);
+
+    await commands.removeModelPart(model.id, '0/1');
+
+    expect(
+      store.document.nodes[model.id]?.components.find(
+        (component) => component.kind === 'model',
+      ),
+    ).toMatchObject({ excludedPartPaths: ['0/1'] });
+    expect(bridge.applyNodeUpdated).toHaveBeenLastCalledWith(
+      store.document.nodes[model.id],
+    );
+
+    await commands.undo();
+    expect(
+      store.document.nodes[model.id]?.components.find(
+        (component) => component.kind === 'model',
+      ),
+    ).not.toHaveProperty('excludedPartPaths');
+  });
+
   it('画布发出的选择只更新 Pinia，不再反向刷新同一个 BoxHelper', () => {
     const bridge: EditorCanvasBridge = {
       applyNodeAdded: vi.fn().mockResolvedValue(undefined),
@@ -193,6 +230,7 @@ describe('editor commands', () => {
       }),
     );
     await vi.waitFor(() => expect(bridge.loadDocument).toHaveBeenCalled());
+    expect(bridge.loadDocument).toHaveBeenCalledOnce();
     expect(store.document.nodes[first.id]).toBeDefined();
 
     for (const code of ['KeyW', 'KeyE', 'KeyR', 'KeyF']) {
@@ -202,6 +240,157 @@ describe('editor commands', () => {
     expect(bridge.setTransformMode).toHaveBeenNthCalledWith(2, 'rotate');
     expect(bridge.setTransformMode).toHaveBeenNthCalledWith(3, 'scale');
     expect(bridge.focusSelection).toHaveBeenCalled();
+  });
+
+  it('兼容原站字母键事件并重置场景后刷新画布与选择', async () => {
+    const store = useDocumentStore();
+    await store.loadScene('scene-1');
+    const bridge: EditorCanvasBridge = {
+      applyNodeAdded: vi.fn().mockResolvedValue(undefined),
+      applyNodeRemoved: vi.fn(),
+      applyNodeUpdated: vi.fn(),
+      loadDocument: vi.fn().mockResolvedValue(undefined),
+      setSelection: vi.fn(),
+      setTransformMode: vi.fn(),
+      focusSelection: vi.fn().mockReturnValue(true),
+    };
+    const commands = useEditorCommands(shallowRef(bridge));
+
+    for (const [key, mode] of [
+      ['w', 'translate'],
+      ['e', 'rotate'],
+      ['r', 'scale'],
+    ] as const) {
+      commands.handleKeydown(
+        new KeyboardEvent('keydown', { key, code: '', cancelable: true }),
+      );
+      expect(bridge.setTransformMode).toHaveBeenLastCalledWith(mode);
+    }
+
+    await commands.resetScene();
+    expect(bridge.loadDocument).toHaveBeenCalledWith(store.document);
+    expect(bridge.setSelection).toHaveBeenCalledWith([], null);
+  });
+
+  it('忽略浏览器自动重复的撤销键，不会把一次长按解释成多步撤销', async () => {
+    const store = useDocumentStore();
+    await store.loadScene('scene-1');
+    const bridge: EditorCanvasBridge = {
+      applyNodeAdded: vi.fn().mockResolvedValue(undefined),
+      applyNodeRemoved: vi.fn(),
+      applyNodeUpdated: vi.fn(),
+      loadDocument: vi.fn().mockResolvedValue(undefined),
+      setSelection: vi.fn(),
+      setTransformMode: vi.fn(),
+      focusSelection: vi.fn(),
+    };
+    const commands = useEditorCommands(shallowRef(bridge));
+    const first = await commands.addAssetNode(asset, [0, 0, 0]);
+    const second = await commands.addAssetNode(asset, [1, 0, 0]);
+
+    commands.handleKeydown(
+      new KeyboardEvent('keydown', {
+        code: 'KeyZ',
+        ctrlKey: true,
+        cancelable: true,
+      }),
+    );
+    commands.handleKeydown(
+      new KeyboardEvent('keydown', {
+        code: 'KeyZ',
+        ctrlKey: true,
+        repeat: true,
+        cancelable: true,
+      }),
+    );
+
+    await vi.waitFor(() => expect(bridge.loadDocument).toHaveBeenCalled());
+    expect(bridge.loadDocument).toHaveBeenCalledOnce();
+    expect(store.document.nodes[first.id]).toBeDefined();
+    expect(store.document.nodes[second.id]).toBeUndefined();
+  });
+
+  it('等待前一次撤销完成后才允许下一次撤销，保持历史逐步回退', async () => {
+    const store = useDocumentStore();
+    await store.loadScene('scene-1');
+    let releaseReload!: () => void;
+    const reload = new Promise<void>((resolve) => {
+      releaseReload = resolve;
+    });
+    const bridge: EditorCanvasBridge = {
+      applyNodeAdded: vi.fn().mockResolvedValue(undefined),
+      applyNodeRemoved: vi.fn(),
+      applyNodeUpdated: vi.fn(),
+      loadDocument: vi
+        .fn()
+        .mockReturnValueOnce(reload)
+        .mockResolvedValue(undefined),
+      setSelection: vi.fn(),
+      setTransformMode: vi.fn(),
+      focusSelection: vi.fn(),
+    };
+    const commands = useEditorCommands(shallowRef(bridge));
+    const first = await commands.addAssetNode(asset, [0, 0, 0]);
+    const second = await commands.addAssetNode(asset, [1, 0, 0]);
+
+    const firstUndo = commands.undo();
+    const secondUndo = commands.undo();
+    await vi.waitFor(() => expect(bridge.loadDocument).toHaveBeenCalledOnce());
+    expect(store.document.nodes[first.id]).toBeDefined();
+    expect(store.document.nodes[second.id]).toBeUndefined();
+
+    releaseReload();
+    await firstUndo;
+    await vi.waitFor(() =>
+      expect(bridge.loadDocument).toHaveBeenCalledTimes(2),
+    );
+    await secondUndo;
+    expect(store.document.nodes[first.id]).toBeUndefined();
+    expect(store.document.nodes[second.id]).toBeUndefined();
+  });
+
+  it('撤销变换只增量同步节点并保留当前选中，不重建整张画布', async () => {
+    const store = useDocumentStore();
+    await store.loadScene('scene-1');
+    const bridge: EditorCanvasBridge = {
+      applyNodeAdded: vi.fn().mockResolvedValue(undefined),
+      applyNodeRemoved: vi.fn(),
+      applyNodeUpdated: vi.fn().mockResolvedValue(undefined),
+      loadDocument: vi.fn().mockResolvedValue(undefined),
+      setSelection: vi.fn(),
+      setTransformMode: vi.fn(),
+      focusSelection: vi.fn(),
+    };
+    const commands = useEditorCommands(shallowRef(bridge));
+    const node = await commands.addGeometry('box');
+    commands.select({ ids: [node.id], primaryId: node.id });
+    const first: Transform = {
+      ...node.transform,
+      position: [1, 0, 0],
+    };
+    const second: Transform = {
+      ...first,
+      position: [2, 0, 0],
+    };
+
+    await commands.commitTransform({
+      nodeId: node.id,
+      before: node.transform,
+      after: first,
+    });
+    await commands.commitTransform({
+      nodeId: node.id,
+      before: first,
+      after: second,
+    });
+    await commands.undo();
+
+    expect(store.document.nodes[node.id]?.transform).toEqual(first);
+    expect(bridge.applyNodeUpdated).toHaveBeenLastCalledWith(
+      store.document.nodes[node.id],
+    );
+    expect(bridge.loadDocument).not.toHaveBeenCalled();
+    expect(useSelectionStore().primaryId).toBe(node.id);
   });
 
   it('快捷键异步操作失败时进入统一错误回调', async () => {
@@ -320,5 +509,36 @@ describe('editor commands', () => {
     expect(bridge.applyCamera).toHaveBeenCalledWith(store.document.camera);
     expect(store.document.cameraRoamingList).toEqual(paths);
     expect(bridge.applyCameraRoamingList).toHaveBeenCalledWith(paths);
+  });
+
+  it('OrbitControls 鼠标移动只更新保存快照，不占用模型操作的撤销步骤', async () => {
+    const store = useDocumentStore();
+    await store.loadScene('scene-1');
+    const bridge: EditorCanvasBridge = {
+      applyNodeAdded: vi.fn().mockResolvedValue(undefined),
+      applyNodeRemoved: vi.fn(),
+      applyNodeUpdated: vi.fn(),
+      applyCamera: vi.fn(),
+      loadDocument: vi.fn().mockResolvedValue(undefined),
+      setSelection: vi.fn(),
+      setTransformMode: vi.fn(),
+      focusSelection: vi.fn(),
+    };
+    const commands = useEditorCommands(shallowRef(bridge));
+    const node = await commands.addGeometry('box');
+    const movedCamera = {
+      ...structuredClone(store.document.camera),
+      position: [5, 4, 3] as [number, number, number],
+      target: [1, 0, 1] as [number, number, number],
+    };
+
+    await commands.syncCameraFromCanvas(movedCamera);
+    await commands.undo();
+
+    // 原站的 OrbitControls 导航不写 historyModules；撤销应直接回到上一个模型命令。
+    expect(store.document.nodes[node.id]).toBeUndefined();
+    expect(store.document.camera.position).toEqual(movedCamera.position);
+    expect(store.document.camera.target).toEqual(movedCamera.target);
+    expect(bridge.applyCamera).not.toHaveBeenCalled();
   });
 });

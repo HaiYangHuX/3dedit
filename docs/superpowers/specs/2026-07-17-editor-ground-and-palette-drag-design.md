@@ -2,11 +2,11 @@
 
 ## 1. 目标
 
-修复编辑器默认画面过黑、网格缺乏地面纵深，以及几何体和灯光只能点击添加、不能拖入视口的问题。实现应对照 ThreeFlowX 线上 r183 行为，但继续遵守当前项目的强类型 SceneDocument、命令历史和 Three.js 资源所有权边界。
+修复编辑器默认画面过黑、网格缺乏地面纵深，以及几何体和灯光只能点击添加、不能拖入视口的问题。实现应对照 数字孪生 线上 r183 行为，但继续遵守当前项目的强类型 SceneDocument、命令历史和 Three.js 资源所有权边界。
 
 ## 2. 参考实现结论
 
-### 2.1 ThreeFlowX 线上 r183
+### 2.1 数字孪生 线上 r183
 
 对 `http://threeflowx.cn/edit/#/` 当前构建产物只读检查后确认：
 
@@ -67,7 +67,7 @@ type ScenePaletteDragPayload =
 
 - 所有左侧可添加条目用同一自定义 MIME 写入 JSON payload。
 - `EditorCanvas` 只负责校验 payload、用现有 `ViewportDropSystem` 计算世界坐标，并发出 `scene-drop` DTO；不直接写 Pinia 或 SceneDocument。
-- `EditorWorkspace` 按 `kind` 分派到 `addAssetNode`、`addGeometry` 或 `addLight`，所以拖放与点击继续共享同一命令历史、自动保存和 Three 增量桥接。
+- `EditorWorkspace` 按 `kind` 分派到 `addAssetNode`、`addGeometry` 或 `addLight`，所以拖放与点击继续共享同一命令历史、显式保存和 Three 增量桥接。
 - 几何体 drop 的中心 Y 最低为 `0.5`；灯光最低为 `0.5`；模型保持现有 `y=0` 落地语义。
 - 点击添加继续保留，拖放只是增加精确位置入口。
 
@@ -82,4 +82,3 @@ type ScenePaletteDragPayload =
 - drop 坐标相对 WebGL canvas 计算，不受左右面板宽度影响。
 - 拖放新增进入撤销/重做、保存和刷新还原闭环。
 - 网格、PMREM 和默认环境没有重复创建或 GPU 资源泄漏。
-

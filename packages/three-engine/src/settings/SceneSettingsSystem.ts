@@ -259,7 +259,7 @@ export class SceneSettingsSystem {
     }
   }
 
-  /** 复现 ThreeFlowX r183 的细网格 + 主网格，迁移期后由 GroundSystem 独立持有。 */
+  /** 复现 数字孪生 r183 的细网格 + 主网格，迁移期后由 GroundSystem 独立持有。 */
   private createEditorGrid(): Group {
     const group = new Group();
     group.name = '__editor_grid__';

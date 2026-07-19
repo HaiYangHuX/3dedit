@@ -57,7 +57,7 @@ const expectedHashes: Record<keyof typeof BUILTIN_ASSET_URLS, string> = {
     '90744bba21624d434e850521b28ef04f72c5d66c571c671522f9e0bead692afb',
 };
 
-describe('ThreeFlowX 内置项目资源', () => {
+describe('数字孪生 内置项目资源', () => {
   it('保留经取证的原始文件哈希', async () => {
     for (const [name, url] of Object.entries(BUILTIN_ASSET_URLS)) {
       const content = await readFile(fileURLToPath(url));

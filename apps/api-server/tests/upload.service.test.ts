@@ -185,4 +185,101 @@ describe('UploadService', () => {
       ConflictException,
     );
   });
+
+  it('替换上传只更新普通 Asset.version，不访问版本历史表', async () => {
+    const existing = {
+      id: 'asset-1',
+      version: '2.3.4',
+      activeFile: {
+        objectKey: 'assets/asset-1/source/old.glb',
+      },
+    };
+    const session = {
+      id: 'upload-replace-1',
+      assetId: 'asset-1',
+      objectKey: 'assets/asset-1/source/new.glb',
+      uploadId: 'minio-upload-replace-1',
+      fileName: 'new.glb',
+      mimeType: 'model/gltf-binary',
+      size: 1_024n,
+      sha256: SHA256,
+      partSize: 5 * 1024 * 1024,
+      partCount: 1,
+      status: 'uploading',
+      expiresAt: new Date('2026-07-17T08:00:00.000Z'),
+      metadata: {
+        name: '水泵新模型',
+        version: '2.3.4',
+      },
+    };
+    const transaction = {
+      uploadSession: {
+        findUnique: vi.fn().mockResolvedValue(session),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      assetFile: {
+        create: vi.fn().mockResolvedValue({ id: 'file-replace-1' }),
+      },
+      asset: { update: vi.fn().mockResolvedValue(existing) },
+      processingJob: {
+        create: vi.fn().mockResolvedValue({ id: 'job-replace-1' }),
+      },
+    };
+    const prisma = {
+      asset: {
+        findUnique: vi.fn().mockResolvedValue(existing),
+        update: vi.fn().mockResolvedValue(existing),
+      },
+      uploadSession: {
+        create: vi.fn().mockResolvedValue(session),
+      },
+      $transaction: vi.fn(
+        async (callback: (client: typeof transaction) => Promise<unknown>) =>
+          callback(transaction),
+      ),
+    } as unknown as PrismaService;
+    const minio = {
+      createMultipartUpload: vi
+        .fn()
+        .mockResolvedValue('minio-upload-replace-1'),
+      presignUploadPart: vi
+        .fn()
+        .mockResolvedValue('https://minio.test/replace-part/1'),
+      completeMultipartUpload: vi.fn().mockResolvedValue(undefined),
+    } as unknown as MinioService;
+    const queue = {
+      enqueueAssetAnalysis: vi.fn().mockResolvedValue(undefined),
+    } as unknown as QueueService;
+    const service = new UploadService(prisma, minio, queue, () => now);
+
+    await service.create({
+      fileName: 'new.glb',
+      size: 1_024,
+      sha256: SHA256,
+      mimeType: 'model/gltf-binary',
+      name: '水泵新模型',
+      assetId: 'asset-1',
+      category: '设备',
+      tags: [],
+      format: 'glb',
+      kind: 'model',
+    });
+    expect(prisma.uploadSession.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        metadata: expect.objectContaining({ version: '2.3.4' }),
+      }),
+    });
+    await service.complete('upload-replace-1', {
+      parts: [{ partNumber: 1, etag: 'etag-replace-1' }],
+    });
+
+    expect(prisma.asset.update).toHaveBeenCalledWith({
+      where: { id: 'asset-1' },
+      data: { status: 'uploading', error: null },
+    });
+    expect(transaction.asset.update).toHaveBeenCalledWith({
+      where: { id: 'asset-1' },
+      data: expect.objectContaining({ version: '2.3.4' }),
+    });
+  });
 });

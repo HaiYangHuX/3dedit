@@ -22,11 +22,26 @@ describe('项目与场景 API 契约', () => {
     });
     expect(() => createProjectInputSchema.parse({ name: '   ' })).toThrow();
     expect(() => updateProjectInputSchema.parse({})).toThrow();
+    expect(
+      createProjectInputSchema.parse({
+        name: '带封面的项目',
+        coverKey: ' https://assets.test/project-cover.jpg ',
+      }),
+    ).toMatchObject({
+      name: '带封面的项目',
+      coverKey: 'https://assets.test/project-cover.jpg',
+    });
   });
 
   it('验证场景名称与不重复的排序 ID', () => {
-    expect(createSceneInputSchema.parse({ name: '  厂区  ' })).toEqual({
+    expect(
+      createSceneInputSchema.parse({
+        name: '  厂区  ',
+        coverKey: ' https://assets.test/scene-cover.jpg ',
+      }),
+    ).toEqual({
       name: '厂区',
+      coverKey: 'https://assets.test/scene-cover.jpg',
     });
     expect(() =>
       reorderScenesInputSchema.parse({ sceneIds: ['scene-1', 'scene-1'] }),
@@ -62,6 +77,15 @@ describe('资源上传 API 契约', () => {
         mimeType: 'model/gltf-binary',
       }),
     ).toMatchObject({ format: 'glb', kind: 'model' });
+    expect(
+      createUploadInputSchema.parse({
+        fileName: 'Pump.GLB',
+        size: 6_000_000,
+        sha256,
+        mimeType: 'model/gltf-binary',
+        version: 'release-candidate',
+      }),
+    ).toMatchObject({ version: 'release-candidate' });
     expect(() =>
       createUploadInputSchema.parse({
         fileName: 'virus.exe',

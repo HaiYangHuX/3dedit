@@ -46,6 +46,7 @@ interface TreeItem {
   name: string;
   objectType?: string;
   targetObjectId?: string;
+  partPath?: string;
   node?: SceneNode;
   children: TreeItem[];
 }
@@ -78,6 +79,9 @@ const emit = defineEmits<{
       targetObjectId: string;
     },
   ];
+  'remove-model-part': [
+    payload: { nodeId: string; partPath: string; objectId: string },
+  ];
   'toggle-visible': [id: string, enabled: boolean];
   'toggle-locked': [id: string, locked: boolean];
   rename: [id: string, name: string];
@@ -100,6 +104,7 @@ function buildModelPart(part: ModelPartItem, ownerNodeId: string): TreeItem {
     name: part.name,
     objectType: part.objectType,
     targetObjectId: part.targetObjectId,
+    partPath: part.partPath,
     // 源站对深层 Mesh 做 traverse 后平铺；模型项永远不能再产生第三级。
     children: [],
   };
@@ -283,6 +288,14 @@ function sceneNodeIcon(item: TreeItem): Component {
   if ((item.node?.components.length ?? 0) === 0) return Collection;
   return Operation;
 }
+
+/** 模型根节点的删除入口紧跟名称，展开二级结构后仍能快速定位到整模操作。 */
+function isModelRoot(item: TreeItem): boolean {
+  return Boolean(
+    item.kind === 'scene-node' &&
+    item.node?.components.some((component) => component.kind === 'model'),
+  );
+}
 </script>
 
 <template>
@@ -370,6 +383,40 @@ function sceneNodeIcon(item: TreeItem): Component {
               <span class="scene-tree-name" :title="data.name">
                 {{ data.name }}
               </span>
+              <ElTooltip
+                v-if="data.kind === 'model-part' && data.partPath"
+                :content="`删除${data.name}`"
+                placement="top"
+              >
+                <button
+                  type="button"
+                  class="scene-tree-action-button scene-tree-inline-delete is-danger"
+                  :aria-label="`删除${data.name}`"
+                  @click.stop="
+                    emit('remove-model-part', {
+                      nodeId: data.ownerNodeId,
+                      partPath: data.partPath,
+                      objectId: data.id,
+                    })
+                  "
+                >
+                  <Delete class="scene-tree-element-icon" aria-hidden="true" />
+                </button>
+              </ElTooltip>
+              <ElTooltip
+                v-if="isModelRoot(data) && data.node"
+                :content="`删除${data.node.name}`"
+                placement="top"
+              >
+                <button
+                  type="button"
+                  class="scene-tree-action-button scene-tree-inline-delete is-danger"
+                  :aria-label="`删除${data.node.name}`"
+                  @click.stop="emit('remove', data.id)"
+                >
+                  <Delete class="scene-tree-element-icon" aria-hidden="true" />
+                </button>
+              </ElTooltip>
             </span>
 
             <span
@@ -447,7 +494,11 @@ function sceneNodeIcon(item: TreeItem): Component {
                   />
                 </button>
               </ElTooltip>
-              <ElTooltip :content="`删除${data.node.name}`" placement="top">
+              <ElTooltip
+                v-if="!isModelRoot(data)"
+                :content="`删除${data.node.name}`"
+                placement="top"
+              >
                 <button
                   type="button"
                   class="scene-tree-action-button is-danger"

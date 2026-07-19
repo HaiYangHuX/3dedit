@@ -3,6 +3,7 @@ import {
   AddNodeCommand,
   RemoveNodesCommand,
   ReparentNodeCommand,
+  ResetSceneCommand,
   TransformNodesCommand,
   UpdateCameraCommand,
   UpdateCameraRoamingListCommand,
@@ -26,7 +27,7 @@ import type {
   SelectionState,
   TransformCommit,
 } from '@digital-twin/three-engine';
-import type { Ref } from 'vue';
+import { toRaw, type Ref } from 'vue';
 import {
   createAssetNode,
   createGeometryNode,
@@ -85,6 +86,9 @@ export function useEditorCommands(
 ) {
   const documentStore = useDocumentStore();
   const selectionStore = useSelectionStore();
+  // Three 场景同步可能跨越多个 microtask；历史操作必须串行，避免连续 keydown
+  // 让同一个游标被并发递减，最终出现“跳步”或文档与画布不一致。
+  let historyOperation: Promise<void> | undefined;
 
   function syncCanvasSelection(): void {
     canvas.value?.setSelection(selectionStore.ids, selectionStore.primaryId);
@@ -174,6 +178,34 @@ export function useEditorCommands(
     await updateNode(nodeId, patch);
   }
 
+  /**
+   * 删除模型的二级 Mesh 部件只更新模型组件的排除路径，不删除整个 SceneNode。
+   * 该操作复用 UpdateNodeCommand，因此和其他属性编辑一样可逐步撤销，且仍需显式保存。
+   */
+  async function removeModelPart(
+    nodeId: string,
+    partPath: string,
+  ): Promise<void> {
+    const node = documentStore.document.nodes[nodeId];
+    const model = node?.components.find(
+      (component) => component.kind === 'model',
+    );
+    if (!node || model?.kind !== 'model' || !partPath) return;
+    const excludedPartPaths = [
+      ...new Set([...(model.excludedPartPaths ?? []), partPath]),
+    ];
+    if (excludedPartPaths.length === (model.excludedPartPaths?.length ?? 0)) {
+      return;
+    }
+    await updateNode(nodeId, {
+      components: node.components.map((component) =>
+        component.kind === 'model'
+          ? { ...component, excludedPartPaths }
+          : component,
+      ),
+    });
+  }
+
   async function reparentNode(
     nodeId: string,
     parentId: string | null,
@@ -243,9 +275,9 @@ export function useEditorCommands(
     );
   }
 
-  /** Orbit/Gizmo 已经修改活动 Camera，此入口只落文档，不能再反向应用到 Engine。 */
+  /** Orbit/Gizmo 只更新保存快照；与原站一致，鼠标导航不进入撤销历史。 */
   async function syncCameraFromCanvas(camera: SceneCamera): Promise<void> {
-    await documentStore.execute(new UpdateCameraCommand(camera));
+    documentStore.syncCameraSnapshot(camera);
   }
 
   function startCameraRoamingDrawing(): boolean {
@@ -278,21 +310,114 @@ export function useEditorCommands(
     if (node) await canvas.value?.applyNodeUpdated(node);
   }
 
-  async function reloadCanvasAfterHistoryChange(): Promise<void> {
-    selectionStore.clear();
-    await canvas.value?.loadDocument(documentStore.document);
+  async function syncCanvasAfterHistoryChange(
+    previous: SceneDocument,
+  ): Promise<void> {
+    const next = documentStore.document;
+    const bridge = canvas.value;
+    if (!bridge) return;
+
+    // 变换、节点属性、Camera 和场景配置都可以直接投影，避免原站式编辑体验中
+    // 每次撤销都销毁并重建整个 Three 场景。只有层级/节点集合变化才需要完整重载。
+    if (hasHierarchyChange(previous, next)) {
+      await bridge.loadDocument(next);
+    } else {
+      try {
+        const settingsChanged = !sameJson(previous.settings, next.settings);
+        const cameraChanged = !sameJson(previous.camera, next.camera);
+        const roamingChanged = !sameJson(
+          previous.cameraRoamingList,
+          next.cameraRoamingList,
+        );
+        const applySettings = bridge.applySceneSettings;
+        const applyCamera = bridge.applyCamera;
+        const applyRoaming = bridge.applyCameraRoamingList;
+        // 可选桥接不存在时不能静默跳过，否则文档已撤销而视口仍显示旧配置。
+        if (
+          (settingsChanged && !applySettings) ||
+          (cameraChanged && !applyCamera) ||
+          (roamingChanged && !applyRoaming)
+        ) {
+          await bridge.loadDocument(next);
+          restoreHistorySelection();
+          return;
+        }
+
+        const removedIds = Object.keys(previous.nodes).filter(
+          (id) => !next.nodes[id],
+        );
+        if (removedIds.length > 0) bridge.applyNodeRemoved(removedIds);
+
+        await Promise.all(
+          Object.keys(next.nodes).flatMap((id) => {
+            const before = previous.nodes[id];
+            const after = next.nodes[id];
+            return before && after && !sameJson(before, after)
+              ? [bridge.applyNodeUpdated(after)]
+              : [];
+          }),
+        );
+        if (settingsChanged) applySettings?.(next.settings);
+        if (cameraChanged) applyCamera?.(next.camera);
+        if (roamingChanged) applyRoaming?.(next.cameraRoamingList);
+      } catch {
+        // 增量投影失败时以完整快照兜底，不能让文档和视口停在不同历史步。
+        await bridge.loadDocument(next);
+      }
+    }
+    restoreHistorySelection();
+  }
+
+  function restoreHistorySelection(): void {
+    const ids = selectionStore.ids.filter((id) =>
+      Boolean(documentStore.document.nodes[id]),
+    );
+    const primaryId =
+      selectionStore.primaryId && ids.includes(selectionStore.primaryId)
+        ? selectionStore.primaryId
+        : (ids.at(-1) ?? null);
+    selectionStore.set({ ids, primaryId });
+    syncCanvasSelection();
   }
 
   async function undo(): Promise<void> {
-    if (!documentStore.canUndo) return;
-    await documentStore.undo();
-    await reloadCanvasAfterHistoryChange();
+    await scheduleHistoryOperation(async () => {
+      if (!documentStore.canUndo) return;
+      const previous = snapshotDocument(documentStore.document);
+      await documentStore.undo();
+      await syncCanvasAfterHistoryChange(previous);
+    });
   }
 
   async function redo(): Promise<void> {
-    if (!documentStore.canRedo) return;
-    await documentStore.redo();
-    await reloadCanvasAfterHistoryChange();
+    await scheduleHistoryOperation(async () => {
+      if (!documentStore.canRedo) return;
+      const previous = snapshotDocument(documentStore.document);
+      await documentStore.redo();
+      await syncCanvasAfterHistoryChange(previous);
+    });
+  }
+
+  /** 串行排队明确的撤销/重做请求；键盘 repeat 已在入口处过滤。 */
+  function scheduleHistoryOperation(
+    operation: () => Promise<void>,
+  ): Promise<void> {
+    const pending = historyOperation
+      ? historyOperation.catch(() => undefined).then(operation)
+      : operation();
+    const guarded = pending.finally(() => {
+      if (historyOperation === guarded) historyOperation = undefined;
+    });
+    historyOperation = guarded;
+    return guarded;
+  }
+
+  /** 重置后清理业务选中并让 Engine 以完整文档快照重建场景。 */
+  async function resetScene(): Promise<void> {
+    await documentStore.execute(new ResetSceneCommand());
+    selectionStore.clear();
+    syncCanvasSelection();
+    await canvas.value?.loadDocument(documentStore.document);
   }
 
   function setTransformMode(mode: 'translate' | 'rotate' | 'scale'): void {
@@ -350,21 +475,31 @@ export function useEditorCommands(
 
   function handleKeydown(event: KeyboardEvent): void {
     if (isEditableTarget(event.target)) return;
-    if (event.code === 'Escape' && canvas.value?.handleShortcut?.('Escape')) {
+    // code 在绝大多数浏览器稳定，但旧站和部分测试环境只提供 key；统一成物理按键名称。
+    const code = event.code || keyToCode(event.key);
+    if (code === 'Escape' && canvas.value?.handleShortcut?.('Escape')) {
       event.preventDefault();
       return;
     }
     const commandModifier = event.metaKey || event.ctrlKey;
-    if (commandModifier && event.code === 'KeyZ') {
+    if (commandModifier && code === 'KeyZ') {
       event.preventDefault();
+      // 浏览器长按会产生 repeat keydown；原站一次按键只对应一个历史步。
+      if (event.repeat) return;
       void (event.shiftKey ? redo() : undo()).catch((reason) =>
         options.onError?.(reason),
       );
       return;
     }
-    if (event.code === 'Delete' || event.code === 'Backspace') {
+    if (code === 'Delete' || code === 'Backspace') {
       event.preventDefault();
+      // 删除是异步命令，长按键的重复事件会在第一条命令完成前再次提交同一节点。
+      if (event.repeat) return;
       void removeSelection().catch((reason) => options.onError?.(reason));
+      return;
+    }
+    if (canvas.value?.handleShortcut?.(code)) {
+      event.preventDefault();
       return;
     }
     const modes: Partial<Record<string, 'translate' | 'rotate' | 'scale'>> = {
@@ -372,11 +507,11 @@ export function useEditorCommands(
       KeyE: 'rotate',
       KeyR: 'scale',
     };
-    const mode = modes[event.code];
+    const mode = modes[code];
     if (mode) {
       event.preventDefault();
       setTransformMode(mode);
-    } else if (event.code === 'KeyF') {
+    } else if (code === 'KeyF') {
       event.preventDefault();
       focusSelection();
     }
@@ -392,6 +527,7 @@ export function useEditorCommands(
     removeSelection,
     updateNode,
     updateSelection,
+    removeModelPart,
     reparentNode,
     duplicateNode,
     groupNodes,
@@ -405,6 +541,7 @@ export function useEditorCommands(
     stopCameraRoaming,
     updateRuntimeConfig,
     commitTransform,
+    resetScene,
     undo,
     redo,
     setTransformMode,
@@ -418,4 +555,44 @@ export function useEditorCommands(
     captureScreenshot,
     handleKeydown,
   };
+}
+
+function keyToCode(key: string): string {
+  const normalized = key.toLowerCase();
+  if (normalized.length === 1 && normalized >= 'a' && normalized <= 'z') {
+    return `Key${normalized.toUpperCase()}`;
+  }
+  return key;
+}
+
+function snapshotDocument(document: SceneDocument): SceneDocument {
+  // Pinia 可能返回 Proxy；历史比较必须基于独立 JSON 快照，不能被后续命令原地修改。
+  return structuredClone(toRaw(document));
+}
+
+function sameJson(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function hasHierarchyChange(
+  previous: SceneDocument,
+  next: SceneDocument,
+): boolean {
+  if (!sameJson(previous.rootNodeIds, next.rootNodeIds)) return true;
+  const ids = new Set([
+    ...Object.keys(previous.nodes),
+    ...Object.keys(next.nodes),
+  ]);
+  for (const id of ids) {
+    const before = previous.nodes[id];
+    const after = next.nodes[id];
+    if (!before || !after) return true;
+    if (
+      before.parentId !== after.parentId ||
+      !sameJson(before.childIds, after.childIds)
+    ) {
+      return true;
+    }
+  }
+  return false;
 }

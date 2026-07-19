@@ -20,7 +20,11 @@ import { MinioService } from '../infrastructure/minio.service.js';
 import { PrismaService } from '../infrastructure/prisma.service.js';
 
 type AssetRow = Prisma.AssetGetPayload<{
-  include: { files: true; activeFile: true };
+  include: {
+    files: true;
+    activeFile: true;
+    coverAsset: { include: { files: true; activeFile: true } };
+  };
 }>;
 
 function extractReferences(document: unknown): string[] {
@@ -73,6 +77,16 @@ export class AssetService {
         ? {
             OR: [
               { name: { contains: query.keyword, mode: 'insensitive' } },
+              { code: { contains: query.keyword, mode: 'insensitive' } },
+              {
+                description: { contains: query.keyword, mode: 'insensitive' },
+              },
+              {
+                manufacturer: {
+                  contains: query.keyword,
+                  mode: 'insensitive',
+                },
+              },
               { tags: { has: query.keyword } },
             ],
           }
@@ -82,7 +96,11 @@ export class AssetService {
       this.prisma.asset.count({ where }),
       this.prisma.asset.findMany({
         where,
-        include: { files: true, activeFile: true },
+        include: {
+          files: true,
+          activeFile: true,
+          coverAsset: { include: { files: true, activeFile: true } },
+        },
         orderBy: { updatedAt: 'desc' },
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
@@ -106,7 +124,11 @@ export class AssetService {
     const [asset, scenes] = await Promise.all([
       this.prisma.asset.findUnique({
         where: { id },
-        include: { files: true, activeFile: true },
+        include: {
+          files: true,
+          activeFile: true,
+          coverAsset: { include: { files: true, activeFile: true } },
+        },
       }),
       this.prisma.scene.findMany({ select: { document: true } }),
     ]);
@@ -116,7 +138,7 @@ export class AssetService {
     return {
       ...summary,
       files: await Promise.all(
-        asset.files.map(async (file) => ({
+        (asset.files ?? []).map(async (file) => ({
           ...this.mapFile(file),
           downloadUrl: await this.minio.presignGet(file.objectKey),
         })),
@@ -161,23 +183,49 @@ export class AssetService {
     asset: AssetRow,
     referenceCount: number,
   ): Promise<Asset> {
-    const thumbnail = asset.files.find((file) => file.role === 'thumbnail');
+    const files = asset.files ?? [];
+    const thumbnail = files.find((file) => file.role === 'thumbnail');
+    // 自定义封面优先返回原图源文件；未配置封面时才回退模型解析出的缩略图。
+    const coverFiles =
+      asset.coverAsset &&
+      (asset.coverAsset.kind === 'image' || !asset.coverAsset.kind)
+        ? asset.coverAsset.files
+        : undefined;
+    const coverThumbnail =
+      asset.coverAsset?.activeFile ??
+      coverFiles?.find((file) => file.role === 'source') ??
+      coverFiles?.find((file) => file.role === 'thumbnail');
+    const thumbnailUrl = thumbnail
+      ? await this.minio.presignGet(thumbnail.objectKey)
+      : null;
+    const coverUrl = coverThumbnail
+      ? await this.minio.presignGet(coverThumbnail.objectKey)
+      : thumbnailUrl;
     return {
       id: asset.id,
       name: asset.name,
+      code: asset.code ?? '',
+      description: asset.description ?? '',
       kind: assetKindSchema.parse(asset.kind),
       format: assetFormatSchema.parse(asset.format),
       status: assetStatusSchema.parse(asset.status),
-      category: asset.category,
-      tags: asset.tags,
-      favorite: asset.favorite,
+      category: asset.category ?? '未分类',
+      tags: asset.tags ?? [],
+      favorite: asset.favorite ?? false,
+      version: asset.version ?? '1.0.0',
+      author: asset.author ?? '',
+      manufacturer: asset.manufacturer ?? '',
+      license: asset.license ?? '内部资产',
+      unit: asset.unit ?? 'm',
+      scale: asset.scale ?? 1,
+      visibility: (asset.visibility ?? 'private') as Asset['visibility'],
+      coverAssetId: asset.coverAssetId ?? null,
+      coverUrl,
       sourceHash: asset.sourceHash,
       metadata: assetMetadataSchema.parse(asset.metadata),
       error: asset.error,
       retryCount: asset.retryCount,
-      thumbnailUrl: thumbnail
-        ? await this.minio.presignGet(thumbnail.objectKey)
-        : null,
+      thumbnailUrl,
       sourceSize: Number(asset.activeFile?.size ?? 0n),
       referenceCount,
       createdAt: asset.createdAt.toISOString(),

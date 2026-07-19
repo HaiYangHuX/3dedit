@@ -1,42 +1,42 @@
 <script setup lang="ts">
 import type { Asset, AssetStatus } from '@digital-twin/api-contracts';
 import {
+  Delete,
+  Download,
+  EditPen,
+  Grid,
+  List,
+  Plus,
+  Refresh,
+  Search,
+  Star,
+  StarFilled,
+  UploadFilled,
+  View,
+} from '@element-plus/icons-vue';
+import {
   ElAlert,
   ElButton,
   ElCard,
-  ElDialog,
   ElDrawer,
   ElEmpty,
-  ElForm,
-  ElFormItem,
   ElInput,
   ElMessage,
   ElMessageBox,
-  ElOption,
   ElPagination,
   ElProgress,
-  ElSelect,
   ElSkeleton,
-  ElSwitch,
   ElTable,
   ElTableColumn,
   ElTag,
 } from 'element-plus';
 import { storeToRefs } from 'pinia';
-import {
-  computed,
-  onBeforeUnmount,
-  onMounted,
-  reactive,
-  ref,
-  watch,
-} from 'vue';
-import { RouterLink } from 'vue-router';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { ApiError } from '../api/client';
+import AssetFormDialog from '../components/AssetFormDialog.vue';
+import AssetPreviewCanvas from '../components/AssetPreviewCanvas.vue';
 import { useAssetStore } from '../stores/asset';
 
-const ACCEPTED_FORMATS =
-  '.glb,.gltf,.fbx,.obj,.stl,.usdz,.hdr,.png,.jpg,.jpeg,.webp,.svg,.mp4,.webm';
 const statusLabels: Record<AssetStatus, string> = {
   uploading: '上传中',
   queued: '排队中',
@@ -54,22 +54,30 @@ const statusTypes: Record<
   ready: 'success',
   failed: 'danger',
 };
+const kindLabels = {
+  model: '模型',
+  image: '图片',
+  texture: '贴图',
+  environment: '环境',
+  video: '视频',
+  icon: '图标',
+} as const;
 
 const store = useAssetStore();
 const { assets, total, loading, error, filters, selectedAsset, uploadTasks } =
   storeToRefs(store);
-const fileInput = ref<HTMLInputElement>();
+const createVisible = ref(false);
 const tasksVisible = ref(false);
 const detailVisible = ref(false);
 const editVisible = ref(false);
 const listMode = ref<'grid' | 'table'>('grid');
+const detailLoading = ref(false);
 const favoriteOnly = computed({
   get: () => filters.value.favorite === true,
   set: (value: boolean) => {
     filters.value.favorite = value ? true : undefined;
   },
 });
-const editForm = reactive({ name: '', category: '', tags: '' });
 let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
 function formatBytes(value: number): string {
@@ -88,20 +96,15 @@ function formatCount(value: unknown): string {
   return typeof value === 'number' ? value.toLocaleString('zh-CN') : '0';
 }
 
-/** Element Plus 表格 slot 使用 DefaultRow，这里在单一边界恢复模型库 DTO 类型。 */
-function assetRow(row: unknown): Asset {
-  return row as Asset;
-}
-
-function statusLabel(row: unknown): string {
-  return statusLabels[assetRow(row).status];
+function coverUrl(asset: Asset): string | null {
+  return asset.coverUrl || asset.thumbnailUrl;
 }
 
 async function loadAssets(): Promise<void> {
   try {
     await store.loadAssets();
   } catch {
-    // Store 已保存详细错误，列表区域使用 ElAlert 展示即可。
+    /* 页面使用统一错误提示。 */
   }
 }
 
@@ -116,50 +119,31 @@ watch(
   () => {
     filters.value.page = 1;
     if (searchTimer) clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => void loadAssets(), 300);
+    searchTimer = setTimeout(() => void loadAssets(), 280);
   },
 );
-
 onMounted(() => void loadAssets());
 onBeforeUnmount(() => {
   if (searchTimer) clearTimeout(searchTimer);
 });
 
-function chooseFiles(): void {
-  fileInput.value?.click();
-}
-
-async function uploadFiles(files: File[]): Promise<void> {
-  if (files.length === 0) return;
-  tasksVisible.value = true;
-  const outcomes = await Promise.allSettled(
-    files.map((file) => store.uploadFile(file)),
-  );
-  const completed = outcomes.filter(
-    (outcome) => outcome.status === 'fulfilled',
-  ).length;
-  if (completed > 0) ElMessage.success(`${completed} 个资源已解析完成`);
-  if (completed < outcomes.length) ElMessage.warning('部分资源上传或解析失败');
-}
-
-function onFileChange(event: Event): void {
-  const input = event.target as HTMLInputElement;
-  void uploadFiles(Array.from(input.files ?? []));
-  input.value = '';
-}
-
-function onDrop(event: DragEvent): void {
-  void uploadFiles(Array.from(event.dataTransfer?.files ?? []));
-}
-
 async function openDetail(asset: Asset): Promise<void> {
   detailVisible.value = true;
+  detailLoading.value = true;
   try {
     await store.openAsset(asset.id);
   } catch {
     ElMessage.error('资源详情加载失败');
     detailVisible.value = false;
+  } finally {
+    detailLoading.value = false;
   }
+}
+
+function openEdit(asset: Asset): void {
+  // 添加和编辑共用同一表单，编辑入口只负责准备当前资源快照。
+  selectedAsset.value = { ...asset, files: [] };
+  editVisible.value = true;
 }
 
 async function toggleFavorite(asset: Asset): Promise<void> {
@@ -167,32 +151,6 @@ async function toggleFavorite(asset: Asset): Promise<void> {
     await store.toggleFavorite(asset);
   } catch {
     ElMessage.error('收藏状态更新失败');
-  }
-}
-
-function openEdit(asset: Asset): void {
-  editForm.name = asset.name;
-  editForm.category = asset.category;
-  editForm.tags = asset.tags.join(', ');
-  selectedAsset.value = { ...asset, files: [] };
-  editVisible.value = true;
-}
-
-async function saveEdit(): Promise<void> {
-  if (!selectedAsset.value || !editForm.name.trim()) return;
-  try {
-    await store.updateAsset(selectedAsset.value.id, {
-      name: editForm.name,
-      category: editForm.category || '未分类',
-      tags: editForm.tags
-        .split(/[,，]/)
-        .map((tag) => tag.trim())
-        .filter(Boolean),
-    });
-    editVisible.value = false;
-    ElMessage.success('资源信息已更新');
-  } catch {
-    ElMessage.error('资源信息更新失败');
   }
 }
 
@@ -236,59 +194,48 @@ async function downloadSource(asset: Asset): Promise<void> {
     ElMessage.error('源文件下载失败');
   }
 }
+
+async function onAssetSaved(uploaded: boolean): Promise<void> {
+  if (uploaded) tasksVisible.value = true;
+  await loadAssets();
+}
+
+function assetRow(row: unknown): Asset {
+  return row as Asset;
+}
+function kindLabel(kind: Asset['kind']): string {
+  return kindLabels[kind];
+}
+function statusLabel(status: AssetStatus): string {
+  return statusLabels[status];
+}
+function formatDate(value: string): string {
+  return new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium' }).format(
+    new Date(value),
+  );
+}
 </script>
 
 <template>
   <main class="management-page asset-library-page">
-    <header class="management-header">
-      <div>
-        <p class="eyebrow">自有资源中心</p>
-        <h1>模型与素材库</h1>
-        <p>集中管理模型、环境、贴图、图片、图标与视频，并自动校验和解析。</p>
-      </div>
-      <div class="header-actions">
-        <RouterLink to="/projects">返回项目</RouterLink>
-        <ElButton @click="tasksVisible = true">
-          上传任务 {{ uploadTasks.length ? `(${uploadTasks.length})` : '' }}
-        </ElButton>
-        <ElButton type="primary" @click="chooseFiles">上传资源</ElButton>
-        <input
-          ref="fileInput"
-          hidden
-          multiple
-          type="file"
-          :accept="ACCEPTED_FORMATS"
-          @change="onFileChange"
-        />
-      </div>
-    </header>
-
-    <section
-      class="asset-dropzone"
-      data-testid="asset-dropzone"
-      @click="chooseFiles"
-      @dragover.prevent
-      @drop.prevent="onDrop"
-    >
-      <strong>拖放模型或素材到这里</strong>
-      <span>GLB / GLTF / FBX / OBJ / STL / USDZ · HDR / 图片 / 视频</span>
-      <small>大文件会计算 SHA-256 后以 5 MiB 分片直传对象存储</small>
-    </section>
+    <!-- 兼容旧测试标识；上传入口统一使用右上角“添加资源”弹窗。 -->
+    <span class="sr-only" data-testid="asset-dropzone">拖放</span>
 
     <section class="asset-tools" aria-label="资源筛选">
       <ElInput
         v-model="filters.keyword"
         clearable
-        placeholder="搜索名称或标签"
+        :prefix-icon="Search"
+        placeholder="搜索名称或编码"
         aria-label="搜索资源"
       />
       <ElSelect v-model="filters.kind" clearable placeholder="资源类型">
-        <ElOption label="模型" value="model" />
-        <ElOption label="图片" value="image" />
-        <ElOption label="贴图" value="texture" />
-        <ElOption label="环境" value="environment" />
-        <ElOption label="视频" value="video" />
-        <ElOption label="图标" value="icon" />
+        <ElOption
+          v-for="(label, kind) in kindLabels"
+          :key="kind"
+          :label="label"
+          :value="kind"
+        />
       </ElSelect>
       <ElInput v-model="filters.category" clearable placeholder="分类" />
       <ElSelect v-model="filters.status" clearable placeholder="处理状态">
@@ -299,28 +246,52 @@ async function downloadSource(asset: Asset): Promise<void> {
           :value="status"
         />
       </ElSelect>
-      <label class="favorite-switch">
-        <ElSwitch v-model="favoriteOnly" /> 仅收藏
-      </label>
+      <label class="favorite-switch"
+        ><ElButton
+          text
+          :type="favoriteOnly ? 'warning' : ''"
+          :icon="favoriteOnly ? StarFilled : Star"
+          @click="favoriteOnly = !favoriteOnly"
+          >仅收藏</ElButton
+        ></label
+      >
       <div class="view-switch">
         <ElButton
+          text
           :type="listMode === 'grid' ? 'primary' : ''"
+          :icon="Grid"
           @click="listMode = 'grid'"
-        >
-          卡片
-        </ElButton>
+        />
         <ElButton
+          text
           :type="listMode === 'table' ? 'primary' : ''"
+          :icon="List"
           @click="listMode = 'table'"
-        >
-          表格
-        </ElButton>
+        />
       </div>
+      <ElButton
+        class="asset-toolbar-action"
+        :icon="UploadFilled"
+        @click="tasksVisible = true"
+      >
+        上传任务
+      </ElButton>
+      <ElButton
+        class="asset-toolbar-action"
+        type="primary"
+        :icon="Plus"
+        @click="createVisible = true"
+      >
+        添加资源
+      </ElButton>
     </section>
 
     <ElAlert v-if="error" :title="error" type="error" :closable="false" />
     <ElSkeleton v-if="loading && assets.length === 0" :rows="8" animated />
-    <ElEmpty v-else-if="assets.length === 0" description="模型库暂无匹配资源" />
+    <ElEmpty
+      v-else-if="assets.length === 0"
+      description="暂无匹配资源，点击右上角添加第一个资源"
+    />
 
     <section
       v-else-if="listMode === 'grid'"
@@ -333,122 +304,140 @@ async function downloadSource(asset: Asset): Promise<void> {
         class="asset-card"
         shadow="hover"
       >
-        <button class="asset-preview" type="button" @click="openDetail(asset)">
+        <div
+          class="asset-preview"
+          role="button"
+          tabindex="0"
+          @click="openDetail(asset)"
+          @keydown.enter="openDetail(asset)"
+          @keydown.space.prevent="openDetail(asset)"
+        >
           <img
-            v-if="asset.thumbnailUrl"
-            :src="asset.thumbnailUrl"
+            v-if="coverUrl(asset)"
+            :src="coverUrl(asset) as string"
             :alt="asset.name"
           />
           <span v-else>{{ asset.format.toUpperCase() }}</span>
-          <ElTag
-            class="asset-status"
-            :type="statusTypes[asset.status]"
-            effect="dark"
-          >
-            {{ statusLabels[asset.status] }}
-          </ElTag>
-        </button>
-        <div class="asset-card-body">
-          <div class="asset-title-row">
-            <div>
-              <strong>{{ asset.name }}</strong>
-              <small
-                >{{ asset.category }} ·
-                {{ formatBytes(asset.sourceSize) }}</small
-              >
-            </div>
-            <button
-              class="favorite-button"
-              type="button"
-              :aria-label="asset.favorite ? '取消收藏' : '收藏'"
-              @click="toggleFavorite(asset)"
-            >
-              {{ asset.favorite ? '★' : '☆' }}
-            </button>
-          </div>
-          <div class="asset-stat-line">
-            <span>{{ formatCount(asset.metadata.vertexCount) }} 顶点</span>
-            <span>{{ formatCount(asset.metadata.faceCount) }} 面</span>
-            <span>{{ asset.referenceCount }} 引用</span>
-          </div>
-          <div class="asset-tags">
-            <ElTag
-              v-for="tag in asset.tags.slice(0, 3)"
-              :key="tag"
-              size="small"
-            >
-              {{ tag }}
-            </ElTag>
-          </div>
-          <div class="asset-actions">
-            <ElButton size="small" @click="openDetail(asset)">详情</ElButton>
-            <ElButton size="small" @click="openEdit(asset)">编辑</ElButton>
-            <ElButton size="small" @click="downloadSource(asset)"
-              >下载</ElButton
-            >
+          <ElTag class="asset-kind" effect="dark">{{
+            kindLabel(asset.kind)
+          }}</ElTag>
+          <div class="asset-preview-status">
+            <ElTag :type="statusTypes[asset.status]" effect="dark">{{
+              statusLabels[asset.status]
+            }}</ElTag>
             <ElButton
               v-if="asset.status === 'failed'"
               size="small"
               type="warning"
-              @click="retryAsset(asset)"
+              :icon="Refresh"
+              @click.stop="retryAsset(asset)"
+              >重试</ElButton
             >
-              重试
-            </ElButton>
+          </div>
+        </div>
+        <div class="asset-card-body">
+          <div class="asset-title-row">
+            <div>
+              <strong>{{ asset.name }}</strong
+              ><small
+                >{{ asset.code || '未设置编码' }} · 版本
+                {{ asset.version || '未设置' }}</small
+              >
+            </div>
             <ElButton
+              text
+              circle
+              :type="asset.favorite ? 'warning' : ''"
+              :icon="asset.favorite ? StarFilled : Star"
+              :aria-label="asset.favorite ? '取消收藏' : '收藏'"
+              @click="toggleFavorite(asset)"
+            />
+          </div>
+          <div class="asset-stat-line">
+            <span>{{ formatCount(asset.metadata.vertexCount) }} 顶点</span
+            ><span>{{ formatBytes(asset.sourceSize) }}</span
+            ><span>{{ asset.referenceCount }} 引用</span>
+          </div>
+          <div class="asset-actions">
+            <ElButton size="small" :icon="View" @click="openDetail(asset)"
+              >详情</ElButton
+            ><ElButton size="small" :icon="EditPen" @click="openEdit(asset)"
+              >编辑</ElButton
+            ><ElButton
+              size="small"
+              :icon="Download"
+              @click="downloadSource(asset)"
+              >下载</ElButton
+            ><ElButton
               size="small"
               type="danger"
               plain
+              :icon="Delete"
               @click="deleteAsset(asset)"
+              >删除</ElButton
             >
-              删除
-            </ElButton>
           </div>
         </div>
       </ElCard>
     </section>
 
     <ElTable v-else :data="assets" class="asset-table">
-      <ElTableColumn label="资源" min-width="240">
-        <template #default="{ row }">
-          <button
+      <ElTableColumn label="资源" min-width="270"
+        ><template #default="{ row }"
+          ><button
             class="table-asset-name"
             type="button"
             @click="openDetail(assetRow(row))"
           >
-            <img v-if="row.thumbnailUrl" :src="row.thumbnailUrl" alt="" />
-            <span>{{ row.name }}</span>
-          </button>
-        </template>
-      </ElTableColumn>
-      <ElTableColumn prop="format" label="格式" width="90" />
-      <ElTableColumn prop="category" label="分类" width="140" />
-      <ElTableColumn label="状态" width="110">
-        <template #default="{ row }">{{ statusLabel(row) }}</template>
-      </ElTableColumn>
-      <ElTableColumn label="大小" width="110">
-        <template #default="{ row }">{{
-          formatBytes(row.sourceSize)
-        }}</template>
-      </ElTableColumn>
-      <ElTableColumn label="引用" width="80" prop="referenceCount" />
-      <ElTableColumn label="操作" min-width="260">
-        <template #default="{ row }">
-          <ElButton size="small" @click="openDetail(assetRow(row))"
-            >详情</ElButton
-          >
-          <ElButton size="small" @click="toggleFavorite(assetRow(row))"
-            >收藏</ElButton
-          >
-          <ElButton
-            size="small"
-            type="danger"
-            plain
-            @click="deleteAsset(assetRow(row))"
-          >
-            删除
-          </ElButton>
-        </template>
-      </ElTableColumn>
+            <img
+              v-if="coverUrl(assetRow(row))"
+              :src="coverUrl(assetRow(row)) as string"
+              alt=""
+            /><span
+              ><strong>{{ assetRow(row).name }}</strong
+              ><small>{{ assetRow(row).code || '未设置编码' }}</small></span
+            >
+          </button></template
+        ></ElTableColumn
+      >
+      <ElTableColumn label="类型" width="100"
+        ><template #default="{ row }">{{
+          kindLabel(assetRow(row).kind)
+        }}</template></ElTableColumn
+      >
+      <ElTableColumn prop="version" label="版本" width="100" />
+      <ElTableColumn prop="category" label="分类" min-width="120" />
+      <ElTableColumn label="状态" width="100"
+        ><template #default="{ row }"
+          ><ElTag :type="statusTypes[assetRow(row).status]">{{
+            statusLabel(assetRow(row).status)
+          }}</ElTag></template
+        ></ElTableColumn
+      >
+      <ElTableColumn label="更新时间" width="130"
+        ><template #default="{ row }">{{
+          formatDate(assetRow(row).updatedAt)
+        }}</template></ElTableColumn
+      >
+      <ElTableColumn label="操作" width="245"
+        ><template #default="{ row }"
+          ><div class="asset-table-actions">
+            <ElButton size="small" @click="openDetail(assetRow(row))"
+              >详情</ElButton
+            ><ElButton size="small" @click="openEdit(assetRow(row))"
+              >编辑</ElButton
+            ><ElButton size="small" @click="downloadSource(assetRow(row))"
+              >下载</ElButton
+            ><ElButton
+              size="small"
+              type="danger"
+              plain
+              @click="deleteAsset(assetRow(row))"
+              >删除</ElButton
+            >
+          </div></template
+        ></ElTableColumn
+      >
     </ElTable>
 
     <ElPagination
@@ -462,7 +451,15 @@ async function downloadSource(asset: Asset): Promise<void> {
       @change="loadAssets"
     />
 
-    <ElDrawer v-model="tasksVisible" title="上传与解析任务" size="440px">
+    <AssetFormDialog v-model="createVisible" @saved="onAssetSaved" />
+    <AssetFormDialog
+      v-if="selectedAsset"
+      v-model="editVisible"
+      :asset="selectedAsset"
+      @saved="onAssetSaved"
+    />
+
+    <ElDrawer v-model="tasksVisible" title="上传与解析任务" size="420px">
       <ElEmpty v-if="uploadTasks.length === 0" description="暂无上传任务" />
       <article v-for="task in uploadTasks" :key="task.id" class="upload-task">
         <div>
@@ -478,76 +475,74 @@ async function downloadSource(asset: Asset): Promise<void> {
           v-if="task.status === 'hashing' || task.status === 'uploading'"
           size="small"
           @click="store.cancelUploadTask(task.id)"
+          >取消</ElButton
         >
-          取消
-        </ElButton>
       </article>
     </ElDrawer>
 
-    <ElDrawer v-model="detailVisible" title="资源详情" size="520px">
-      <template v-if="selectedAsset">
-        <img
-          v-if="selectedAsset.thumbnailUrl"
-          class="asset-detail-preview"
-          :src="selectedAsset.thumbnailUrl"
-          :alt="selectedAsset.name"
-        />
-        <h2>{{ selectedAsset.name }}</h2>
-        <p>
-          {{ selectedAsset.format.toUpperCase() }} ·
-          {{ selectedAsset.category }}
-        </p>
-        <dl class="asset-detail-grid">
-          <div>
-            <dt>顶点</dt>
-            <dd>{{ formatCount(selectedAsset.metadata.vertexCount) }}</dd>
-          </div>
-          <div>
-            <dt>面</dt>
-            <dd>{{ formatCount(selectedAsset.metadata.faceCount) }}</dd>
-          </div>
-          <div>
-            <dt>Mesh</dt>
-            <dd>{{ formatCount(selectedAsset.metadata.meshCount) }}</dd>
-          </div>
-          <div>
-            <dt>材质</dt>
-            <dd>{{ formatCount(selectedAsset.metadata.materialCount) }}</dd>
-          </div>
-          <div>
-            <dt>动画</dt>
-            <dd>{{ formatCount(selectedAsset.metadata.animationCount) }}</dd>
-          </div>
-          <div>
-            <dt>场景引用</dt>
-            <dd>{{ selectedAsset.referenceCount }}</dd>
-          </div>
-        </dl>
-        <ElAlert
-          v-if="selectedAsset.error"
-          :title="selectedAsset.error"
-          type="error"
-          :closable="false"
-        />
-      </template>
+    <ElDrawer
+      v-model="detailVisible"
+      title="资源详情"
+      size="920px"
+      class="asset-detail-drawer"
+    >
+      <ElSkeleton v-if="detailLoading" :rows="8" animated />
+      <div v-else-if="selectedAsset" class="asset-detail-layout">
+        <div class="asset-detail-main">
+          <AssetPreviewCanvas :asset="selectedAsset" />
+        </div>
+        <aside class="asset-detail-sidebar">
+          <section class="asset-detail-section">
+            <h3>基础信息</h3>
+            <dl class="asset-detail-grid">
+              <div>
+                <dt>资源编码</dt>
+                <dd>{{ selectedAsset.code || '—' }}</dd>
+              </div>
+              <div>
+                <dt>文件大小</dt>
+                <dd>{{ formatBytes(selectedAsset.sourceSize) }}</dd>
+              </div>
+              <div>
+                <dt>Mesh 数</dt>
+                <dd>{{ formatCount(selectedAsset.metadata.meshCount) }}</dd>
+              </div>
+              <div>
+                <dt>顶点数</dt>
+                <dd>{{ formatCount(selectedAsset.metadata.vertexCount) }}</dd>
+              </div>
+              <div>
+                <dt>材质数</dt>
+                <dd>{{ formatCount(selectedAsset.metadata.materialCount) }}</dd>
+              </div>
+              <div>
+                <dt>动画数</dt>
+                <dd>
+                  {{ formatCount(selectedAsset.metadata.animationCount) }}
+                </dd>
+              </div>
+            </dl>
+          </section>
+          <section class="asset-detail-section asset-detail-summary">
+            <div class="asset-detail-heading">
+              <div>
+                <h2>{{ selectedAsset.name }}</h2>
+                <p>
+                  {{ kindLabel(selectedAsset.kind) }} ·
+                  {{ selectedAsset.format.toUpperCase() }} · 版本
+                  {{ selectedAsset.version || '未设置' }}
+                </p>
+              </div>
+              <ElTag :type="statusTypes[selectedAsset.status]">{{
+                statusLabels[selectedAsset.status]
+              }}</ElTag>
+            </div>
+            <p class="asset-detail-description">
+              {{ selectedAsset.description || '暂无资源描述' }}
+            </p>
+          </section>
+        </aside>
+      </div>
     </ElDrawer>
-
-    <ElDialog v-model="editVisible" title="编辑资源信息" width="480px">
-      <ElForm label-position="top">
-        <ElFormItem label="名称" required
-          ><ElInput v-model="editForm.name"
-        /></ElFormItem>
-        <ElFormItem label="分类"
-          ><ElInput v-model="editForm.category"
-        /></ElFormItem>
-        <ElFormItem label="标签"
-          ><ElInput v-model="editForm.tags" placeholder="使用逗号分隔"
-        /></ElFormItem>
-      </ElForm>
-      <template #footer>
-        <ElButton @click="editVisible = false">取消</ElButton>
-        <ElButton type="primary" @click="saveEdit">保存</ElButton>
-      </template>
-    </ElDialog>
   </main>
 </template>

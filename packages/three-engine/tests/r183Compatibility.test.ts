@@ -32,14 +32,25 @@ describe('Three.js r183 兼容边界', () => {
     // 编辑器不再用白色 Outline 覆盖模型；运行时交互高亮仍保留 OutlinePass。
     expect(editorEngine).not.toContain('new OutlinePass');
     expect(runtimeEngine).toContain('new OutlinePass');
-    // RenderPass 使用线性中间缓冲，r183 必须由末尾 OutputPass 输出到 sRGB。
-    expect(editorEngine).toContain('OutputPass');
-    expect(editorEngine).toContain('addPass(this.output)');
+
+    // 原站编辑器直接写入默认 framebuffer，才能使 WebGLRenderer 的 MSAA 生效。
+    // 只有运行时 OutlinePass 需要 Composer，不能把这条链路误用到编辑器。
+    expect(editorEngine).not.toContain('EffectComposer');
+    expect(editorEngine).not.toContain('RenderPass');
+    expect(editorEngine).not.toContain('OutputPass');
+    expect(editorEngine).toContain(
+      'this.renderer?.render(this.scene, this.camera)',
+    );
+    expect(editorEngine).toContain('stencil: false');
+    expect(editorEngine).toContain('depth: true');
+    expect(editorEngine).toContain('logarithmicDepthBuffer: false');
+    expect(editorEngine).toContain('renderer.autoClear = false');
+
+    // 运行时的后期管线仍必须由末尾 OutputPass 输出到 sRGB。
     expect(runtimeEngine).toContain('OutputPass');
     expect(runtimeEngine.indexOf('addPass(outline)')).toBeLessThan(
       runtimeEngine.indexOf('addPass(output)'),
     );
-    for (const sourceCode of [editorEngine, runtimeEngine])
-      expect(sourceCode).toContain('output?.dispose()');
+    expect(runtimeEngine).toContain('output?.dispose()');
   });
 });

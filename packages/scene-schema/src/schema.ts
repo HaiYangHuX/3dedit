@@ -17,7 +17,12 @@ export const transformSchema = z.object({
 });
 
 const componentSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('model'), assetId: identifierSchema }),
+  z.object({
+    kind: z.literal('model'),
+    assetId: identifierSchema,
+    /** 用户从场景树移除的 Mesh 路径；按模型层级索引保存，避免 UUID 重载后失效。 */
+    excludedPartPaths: z.array(z.string().min(1)).optional(),
+  }),
   z.object({
     kind: z.literal('geometry'),
     primitive: z.enum(['box', 'sphere', 'plane', 'cylinder']),
@@ -296,7 +301,7 @@ export const socketTaskDefinitionSchema = z.object({
 });
 
 /**
- * 项目级渲染配置与 ThreeFlowX r183 的实际初始化参数保持一致。
+ * 项目级渲染配置与 数字孪生 r183 的实际初始化参数保持一致。
  * 每个新字段都自带默认值，使旧 schemaVersion 1 文档无需升版即可解析。
  */
 export const sceneSettingsSchema = z.object({

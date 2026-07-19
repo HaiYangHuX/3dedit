@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 将当前编辑器升级为接近 ThreeFlowX 密度的 33/180/340 工作台，并交付可保存、撤销、预览和发布的节点级 PBR 材质覆盖系统。
+**Goal:** 将当前编辑器升级为接近 数字孪生 密度的 33/180/340 工作台，并交付可保存、撤销、预览和发布的节点级 PBR 材质覆盖系统。
 
 **Architecture:** `scene-schema` 定义稳定材质协议和统一资源引用收集器；`three-engine` 的 `MaterialSystem` 独占覆盖材质、贴图 clone 和异步代次，编辑器与运行时共享同一投影逻辑；Vue 通过 `EditorCanvas` DTO 桥接相机、截图和统计，不持有 Three.js 对象。视觉层拆为小型工具栏、统计与方向方块组件，`EditorWorkspace` 只编排状态和命令。
 
@@ -401,7 +401,7 @@ git commit -m "🌷 UI(材质面板): 支持PBR参数贴图与恢复"
 
 ---
 
-### Task 6: 重组 ThreeFlowX 风格编辑器工作台
+### Task 6: 重组 数字孪生 风格编辑器工作台
 
 **Files:**
 - Create: `apps/editor-web/src/components/editor/EditorTopBar.vue`
@@ -468,7 +468,7 @@ Expected: PASS。
 
 ```bash
 git add apps/editor-web/src/components/editor apps/editor-web/src/views/EditorWorkspace.vue apps/editor-web/src/styles/editor.scss apps/editor-web/tests
-git commit -m "🌷 UI(编辑器工作台): 对标ThreeFlowX高密度布局"
+git commit -m "🌷 UI(编辑器工作台): 对标数字孪生高密度布局"
 ```
 
 ---

@@ -64,12 +64,12 @@ test('编辑器工作台创建真实 WebGL Canvas', async ({ page }) => {
   );
   expect(Number(await page.getByLabel('位置 Y').inputValue())).toBe(0.5);
 
-  await page.getByTestId('undo-scene').click();
+  await page.keyboard.press('ControlOrMeta+z');
   await expect(canvasHost).toHaveAttribute(
     'data-scene-object-count',
     String(initialObjectCount + 1),
   );
-  await page.getByTestId('redo-scene').click();
+  await page.keyboard.press('ControlOrMeta+Shift+z');
   await expect(canvasHost).toHaveAttribute(
     'data-scene-object-count',
     String(initialObjectCount + 2),
@@ -243,10 +243,9 @@ test('Camera 配置和漫游路径支持撤销、保存并刷新恢复', async (
 
   await cameraX.fill('2.5');
   await cameraX.press('Tab');
-  await expect(page.getByTestId('undo-scene')).toBeEnabled();
-  await page.getByTestId('undo-scene').click();
+  await page.keyboard.press('ControlOrMeta+z');
   await expect(cameraX).toHaveValue('0.607');
-  await page.getByTestId('redo-scene').click();
+  await page.keyboard.press('ControlOrMeta+Shift+z');
   await expect(cameraX).toHaveValue('2.5');
 
   await page.getByRole('tab', { name: '相机漫游' }).click();

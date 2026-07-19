@@ -1,5 +1,6 @@
 import {
   createDefaultSceneDocument,
+  type SceneCamera,
   type SceneDocument,
 } from '@digital-twin/scene-schema';
 import {
@@ -14,8 +15,6 @@ import { projectApi } from '../api/projects';
 
 export type SaveState =
   'idle' | 'loading' | 'saved' | 'dirty' | 'saving' | 'conflict' | 'error';
-
-const AUTO_SAVE_DELAY = 1_500;
 
 /**
  * 保存可序列化文档和明确的保存状态机；Three.js Scene 和 Object3D 由 EditorEngine 独立持有。
@@ -36,18 +35,22 @@ export const useDocumentStore = defineStore('document', () => {
   const documentChangeVersion = ref(0);
   let loadGeneration = 0;
   let changeGeneration = 0;
-  let autoSaveTimer: ReturnType<typeof setTimeout> | undefined;
   let activeSave: Promise<void> | undefined;
   let changedDuringSave = false;
+  // OrbitControls 导航需要进入保存快照，但按原站规则不进入 CommandHistory。
+  let hasNonHistoryChanges = false;
   let history: CommandHistory<EditorDocumentContext>;
 
   function syncHistoryState(): void {
     canUndo.value = history.canUndo;
     canRedo.value = history.canRedo;
     isHistoryDirty.value = history.isDirty;
-    // 撤销回最后一次保存游标时，无需再发起一次内容相同的自动保存。
-    if (!history.isDirty && saveState.value === 'dirty') {
-      clearAutoSaveTimer();
+    // 撤销回最后一次保存游标时，当前文档已与服务端一致，不再显示未保存状态。
+    if (
+      !history.isDirty &&
+      !hasNonHistoryChanges &&
+      saveState.value === 'dirty'
+    ) {
       saveState.value = 'saved';
     }
   }
@@ -61,15 +64,8 @@ export const useDocumentStore = defineStore('document', () => {
     syncHistoryState();
   }
 
-  function clearAutoSaveTimer(): void {
-    if (!autoSaveTimer) return;
-    clearTimeout(autoSaveTimer);
-    autoSaveTimer = undefined;
-  }
-
   async function loadScene(sceneId: string): Promise<void> {
     const generation = ++loadGeneration;
-    clearAutoSaveTimer();
     activeSceneId.value = sceneId;
     saveState.value = 'loading';
     error.value = '';
@@ -81,6 +77,7 @@ export const useDocumentStore = defineStore('document', () => {
       resetHistory();
       changeGeneration = 0;
       changedDuringSave = false;
+      hasNonHistoryChanges = false;
       saveState.value = 'saved';
     } catch (reason) {
       if (generation !== loadGeneration) return;
@@ -89,17 +86,6 @@ export const useDocumentStore = defineStore('document', () => {
         reason instanceof ApiError ? reason.message : '场景加载失败';
       throw reason;
     }
-  }
-
-  function scheduleAutoSave(delay = AUTO_SAVE_DELAY): void {
-    clearAutoSaveTimer();
-    if (!activeSceneId.value || saveState.value === 'conflict') return;
-    autoSaveTimer = setTimeout(() => {
-      autoSaveTimer = undefined;
-      void save().catch(() => {
-        // 自动保存错误已进入 Store 状态，这里防止产生未处理 Promise。
-      });
-    }, delay);
   }
 
   function markDirty(): void {
@@ -112,7 +98,6 @@ export const useDocumentStore = defineStore('document', () => {
     } else {
       saveState.value = 'dirty';
     }
-    scheduleAutoSave();
   }
 
   async function execute(
@@ -141,7 +126,21 @@ export const useDocumentStore = defineStore('document', () => {
     }
   }
 
+  /**
+   * 鼠标导航只同步下次保存所需的 Camera 快照，不占用撤销步骤。
+   * 显式修改 Camera 属性仍通过 UpdateCameraCommand 进入历史。
+   */
+  function syncCameraSnapshot(camera: SceneCamera): void {
+    if (JSON.stringify(document.value.camera) === JSON.stringify(camera)) {
+      return;
+    }
+    Object.assign(document.value.camera, structuredClone(camera));
+    hasNonHistoryChanges = true;
+    markDirty();
+  }
+
   function markSaved(): void {
+    hasNonHistoryChanges = false;
     history.markSaved();
     syncHistoryState();
   }
@@ -150,7 +149,6 @@ export const useDocumentStore = defineStore('document', () => {
     const sceneId = activeSceneId.value;
     if (!sceneId)
       throw new ApiError(0, 'NO_ACTIVE_SCENE', '当前没有可保存的场景');
-    clearAutoSaveTimer();
     const generation = changeGeneration;
     // Vue 深度响应式对象是 Proxy，必须取回原始 JSON 对象后才能 structuredClone。
     const snapshot = structuredClone(toRaw(document.value));
@@ -188,12 +186,12 @@ export const useDocumentStore = defineStore('document', () => {
       throw reason;
     } finally {
       activeSave = undefined;
+      // 保存期间的编辑只能等待用户再次点击“保存”，不能在后台自动提交。
       if (
         saveState.value === 'dirty' ||
         (changedDuringSave && saveState.value !== 'conflict')
       ) {
         saveState.value = 'dirty';
-        scheduleAutoSave(0);
       }
     }
   }
@@ -204,8 +202,7 @@ export const useDocumentStore = defineStore('document', () => {
     return activeSave;
   }
 
-  function disposeAutoSave(): void {
-    clearAutoSaveTimer();
+  function dispose(): void {
     // 不能中止 fetch 时通过代次使迟到加载结果失效。
     loadGeneration += 1;
   }
@@ -226,9 +223,9 @@ export const useDocumentStore = defineStore('document', () => {
     execute,
     undo,
     redo,
+    syncCameraSnapshot,
     markSaved,
-    scheduleAutoSave,
     save,
-    disposeAutoSave,
+    dispose,
   };
 });

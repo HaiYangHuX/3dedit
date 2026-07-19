@@ -33,10 +33,7 @@ const models = computed(() => {
       asset.kind === 'model' &&
       asset.status === 'ready' &&
       (!normalized ||
-        asset.name.toLocaleLowerCase('zh-CN').includes(normalized) ||
-        asset.tags.some((tag) =>
-          tag.toLocaleLowerCase('zh-CN').includes(normalized),
-        )),
+        asset.name.toLocaleLowerCase('zh-CN').includes(normalized)),
   );
 });
 
@@ -86,8 +83,8 @@ function beginDrag(event: DragEvent, asset: Asset): void {
         @dblclick="emit('activate', asset)"
       >
         <img
-          v-if="asset.thumbnailUrl"
-          :src="asset.thumbnailUrl"
+          v-if="asset.coverUrl || asset.thumbnailUrl"
+          :src="asset.coverUrl || asset.thumbnailUrl || undefined"
           :alt="asset.name"
         />
         <span v-else class="editor-asset-placeholder">{{

@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   AddNodeCommand,
   CommandHistory,
+  ResetSceneCommand,
   RemoveNodesCommand,
   ReparentNodeCommand,
   TransformNodesCommand,
@@ -43,6 +44,30 @@ function context(): EditorDocumentContext {
 }
 
 describe('文档命令', () => {
+  it('重置场景恢复默认文档并可通过历史撤销', async () => {
+    const editor = context();
+    const target = node('machine-1');
+    editor.document.nodes[target.id] = target;
+    editor.document.rootNodeIds = [target.id];
+    editor.document.settings.background = '#123456';
+    editor.document.revision = 7;
+    const history = new CommandHistory(editor);
+
+    await history.execute(new ResetSceneCommand());
+
+    expect(editor.document.rootNodeIds).toEqual([]);
+    expect(editor.document.nodes).toEqual({});
+    expect(editor.document.settings.background).toBe('#3b3b3b');
+    expect(editor.document.revision).toBe(7);
+    expect(history.isDirty).toBe(true);
+
+    await history.undo();
+    expect(editor.document.nodes[target.id]).toEqual(target);
+    expect(editor.document.settings.background).toBe('#123456');
+    // revision 是服务端并发控制字段，撤销本地内容不能回退它。
+    expect(editor.document.revision).toBe(7);
+  });
+
   it('删除子树时清理交互、Socket 和资源引用并可完整撤销', async () => {
     const editor = context();
     const parent = node('parent');
@@ -109,7 +134,7 @@ describe('文档命令', () => {
     ]);
   });
 
-  it('连续变换合并为一条历史并撤销到拖动前', async () => {
+  it('两次独立变换各自保留历史步骤，撤销只回退最后一次拖动', async () => {
     const editor = context();
     const target = node('node-1');
     editor.document.nodes[target.id] = target;
@@ -136,10 +161,19 @@ describe('文档命令', () => {
     );
     await history.undo();
 
+    expect(editor.document.nodes[target.id]?.transform).toEqual(first);
+    expect(history.canUndo).toBe(true);
+
+    await history.undo();
     expect(editor.document.nodes[target.id]?.transform).toEqual(
       identityTransform,
     );
     expect(history.canUndo).toBe(false);
+
+    await history.redo();
+    expect(editor.document.nodes[target.id]?.transform).toEqual(first);
+    await history.redo();
+    expect(editor.document.nodes[target.id]?.transform).toEqual(second);
   });
 
   it('更新节点可撤销并自动重建模型资源引用', async () => {

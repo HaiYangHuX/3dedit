@@ -48,6 +48,10 @@ pnpm dev
 
 ## 模型与素材库
 
+- `/projects` 与 `/assets` 共用后台管理壳层；项目支持编码、状态、标签、负责人、行业、地点、备注、场景/资源统计和最近发布时间。
+- 资源通过“添加资源”弹窗录入名称、编码、分类、描述、作者、厂商、许可证、单位、缩放、可见范围及语义版本；列表页不再直接提交无元数据文件。
+- 封面图片可选传；自定义封面会作为独立图片素材管理，未上传时自动回退 Worker 生成的模型缩略图。编辑器模型面板同样优先展示自定义封面。
+- 资源详情提供真实 Three.js r183 交互预览、包围盒自动取景、网格开关、解析统计、源文件下载和版本时间线；可直接上传下一个补丁版本，旧源文件不会删除。
 - 支持 GLB、GLTF、FBX、OBJ、STL、USDZ、HDR、PNG/JPG/WEBP/SVG、MP4/WEBM。
 - 文件至少按 5 MiB 分片，API 不接收完整文件字节；MinIO 预签名 PUT 响应通过服务级 CORS 暴露 `ETag`。
 - GLB/GLTF 会统计顶点、面、Mesh、材质、贴图、动画、相机、包围盒及 Draco/Meshopt/KTX2 扩展。
@@ -57,13 +61,13 @@ pnpm dev
 
 ## 场景编辑器
 
-- 工作台按 ThreeFlowX 的高密度比例组织为 33px 顶栏、180px 竖向资源区、中央视口和 340px 检查器；统计浮层与方向方块不占用画布布局空间。
-- 新建场景默认对齐 ThreeFlowX r183 的 Neutral tone mapping、PCF 阴影、曝光 `1.2`、`#3b3b3b` 背景、Venice HDR、Y 轴 90° 环境旋转、`FogExp2(0.01)` 和 2000/200 分段双层网格。
+- 工作台按 数字孪生 的高密度比例组织为 33px 顶栏、180px 竖向资源区、中央视口和 340px 检查器；统计浮层与方向方块不占用画布布局空间。
+- 新建场景默认对齐 数字孪生 r183 的 Neutral tone mapping、PCF 阴影、曝光 `1.2`、`#3b3b3b` 背景、Venice HDR、Y 轴 90° 环境旋转、`FogExp2(0.01)` 和 2000/200 分段双层网格。
 - 同一场景可实例化多个模型，并支持立方体、球体、平面、圆柱体和五种灯光。
 - 场景树、视口射线选择、黄色 BoxHelper 和属性面板通过 SceneNode ID 双向同步；编辑器选中不再用白色 OutlinePass 覆盖复杂模型表面，发布运行时的交互 Outline 保持独立。
-- TransformControls 提供移动、旋转、缩放、local/world 空间、网格吸附；`W/E/R/F`、`Delete`、`Cmd/Ctrl+Z` 可用。视口工具条还支持六向视图、相机重置、PNG 截图和视口全屏。
+- TransformControls 提供移动、旋转、缩放、local/world 空间、网格吸附；`W/E/R/F`、`Delete`、`Cmd/Ctrl+Z` 可用。顶部提供确认式“重置场景”，右侧帮助页展示快捷键和第一人称移动键；视口工具条还支持六向视图、相机重置、PNG 截图和视口全屏。
 - 模型、几何体和灯光的拖放位置都由 canvas 相对射线与 `y=0` 平面求交，不受左右面板宽度影响；几何体和灯光的默认中心高度最低为 `0.5`。
-- 节点增删、变换、属性、层级与完整项目配置均纳入命令历史和自动保存。
+- 节点增删、变换、属性、层级与完整项目配置均纳入命令历史；只有点击“保存”才会提交服务端。
 
 ### 项目配置
 
@@ -125,7 +129,7 @@ WebSocket 任务消息使用 `taskCode` 匹配编辑器配置，消息中的 `ta
 - Three.js 运行时和类型声明精确锁定为 `0.183.0` / `0.183.1`，Decoder 不从 CDN 漂移加载。
 - `scripts/copy-three-decoders.mjs` 只从 `three/examples/jsm/libs/draco/gltf` 和 `three/examples/jsm/libs/basis` 复制白名单 JS/WASM；任意文件缺失都会让构建立即失败。
 - 生成的 Decoder 文件被 `.gitignore` 排除，仓库仅保留目录与复制规则；线上部署必须保留 `/decoders/draco/` 和 `/decoders/basis/` 静态路径。
-- 默认环境、地面纹理/GLB 和雨雪精灵位于 `packages/three-engine/src/settings/assets/`，由 Vite 从 package URL 同时打包到编辑器与发布端，不依赖 ThreeFlowX 远程站点。Venice HDR 的 SHA-256 与 Three.js r183 官方示例一致；`RoomEnvironment` 只在加载失败时兜底。自定义环境由 r183 Loader + PMREMGenerator 转换，新环境成功前保留旧环境，路由切换或销毁后的迟到纹理会被立即释放。
+- 默认环境、地面纹理/GLB 和雨雪精灵位于 `packages/three-engine/src/settings/assets/`，由 Vite 从 package URL 同时打包到编辑器与发布端，不依赖 数字孪生 远程站点。Venice HDR 的 SHA-256 与 Three.js r183 官方示例一致；`RoomEnvironment` 只在加载失败时兜底。自定义环境由 r183 Loader + PMREMGenerator 转换，新环境成功前保留旧环境，路由切换或销毁后的迟到纹理会被立即释放。
 
 ## 验证
 

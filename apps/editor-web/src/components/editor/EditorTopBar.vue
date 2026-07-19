@@ -1,27 +1,25 @@
 <script setup lang="ts">
+import { ArrowLeft, RefreshLeft } from '@element-plus/icons-vue';
+
 const props = withDefaults(
   defineProps<{
     sceneName: string;
     saveStateLabel: string;
     saveStateError?: boolean;
-    canUndo?: boolean;
-    canRedo?: boolean;
     saving?: boolean;
     publishing?: boolean;
     showReload?: boolean;
   }>(),
   {
     saveStateError: false,
-    canUndo: false,
-    canRedo: false,
     saving: false,
     publishing: false,
     showReload: false,
   },
 );
 const emit = defineEmits<{
-  undo: [];
-  redo: [];
+  'back-to-project': [];
+  reset: [];
   save: [];
   reload: [];
   preview: [];
@@ -31,13 +29,25 @@ const emit = defineEmits<{
 
 <template>
   <header class="top-toolbar" data-testid="top-toolbar">
-    <div class="brand-block">
-      <span class="brand-mark">DT</span>
-      <strong>数字孪生编辑器</strong>
-      <span class="scene-name" :title="props.sceneName">{{
-        props.sceneName
-      }}</span>
-      <span class="three-version">Three r183</span>
+    <div class="top-toolbar-leading">
+      <button
+        type="button"
+        class="top-back-button"
+        data-testid="back-to-project"
+        title="返回项目"
+        @click="emit('back-to-project')"
+      >
+        <ArrowLeft class="top-action-icon" aria-hidden="true" />
+        <span>返回项目</span>
+      </button>
+      <div class="brand-block">
+        <span class="brand-mark">DT</span>
+        <strong>数字孪生编辑器</strong>
+        <span class="scene-name" :title="props.sceneName">{{
+          props.sceneName
+        }}</span>
+        <span class="three-version">Three r183</span>
+      </div>
     </div>
     <div class="top-toolbar-actions">
       <span
@@ -48,21 +58,12 @@ const emit = defineEmits<{
       </span>
       <button
         type="button"
-        data-testid="undo-scene"
-        title="撤销 Ctrl/⌘+Z"
-        :disabled="!props.canUndo"
-        @click="emit('undo')"
+        data-testid="reset-scene"
+        title="重置场景"
+        @click="emit('reset')"
       >
-        ↶ <span>撤销</span>
-      </button>
-      <button
-        type="button"
-        data-testid="redo-scene"
-        title="重做 Ctrl/⌘+Shift+Z"
-        :disabled="!props.canRedo"
-        @click="emit('redo')"
-      >
-        ↷ <span>重做</span>
+        <RefreshLeft class="top-action-icon" aria-hidden="true" />
+        <span>重置场景</span>
       </button>
       <button
         type="button"

@@ -240,7 +240,7 @@ expect(store.document.nodes[modelNode.id]).toBeUndefined();
 
 - [ ] **Step 2: 实现历史与保存状态集成**
 
-每次 load 创建新 CommandHistory；保存成功 `markSaved`；历史命令修改当前文档后重建 assetReferences 并触发自动保存。保存期间 undo/redo 仍使用 changeGeneration 防覆盖。
+每次 load 创建新 CommandHistory；保存成功 `markSaved`；历史命令修改当前文档后重建 assetReferences 并标记 dirty，等待用户显式保存。保存期间 undo/redo 仍使用 changeGeneration 防覆盖。
 
 - [ ] **Step 3: 实现快捷键和节点工厂**
 

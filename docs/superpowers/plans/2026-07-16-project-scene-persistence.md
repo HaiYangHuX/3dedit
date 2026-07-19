@@ -285,7 +285,7 @@ git commit -m "🌷 UI(项目): 完成项目与多场景管理页面"
 
 ---
 
-### Task 6: 编辑器加载、手动保存与防抖自动保存
+### Task 6: 编辑器加载与显式手动保存
 
 **Files:**
 - Modify: `apps/editor-web/src/stores/document.ts`
@@ -295,11 +295,11 @@ git commit -m "🌷 UI(项目): 完成项目与多场景管理页面"
 
 **Interfaces:**
 - Consumes: `projectApi.getScene()`、`projectApi.saveScene()`。
-- Produces: `loadScene(sceneId)`、`markDirty()`、`save()`、`scheduleAutoSave()`、`disposeAutoSave()` 以及 `saveState`。
+- Produces: `loadScene(sceneId)`、`markDirty()`、`save()`、`dispose()` 以及 `saveState`。
 
 - [ ] **Step 1: 写场景加载、保存和 409 冲突失败测试**
 
-使用 fake timers 和 mock API，断言加载替换文档；`markDirty` 后 1500ms 自动保存；成功时使用服务端新 revision 并变为 saved；409 时保留本地文档并变为 conflict。
+使用 fake timers 和 mock API，断言加载替换文档；`markDirty` 后不会发起保存，只有显式调用 `save()` 才提交；成功时使用服务端新 revision 并变为 saved；409 时保留本地文档并变为 conflict。
 
 - [ ] **Step 2: 运行测试确认现有 Store 不支持持久化**
 
@@ -312,12 +312,12 @@ Expected: FAIL，缺少持久化动作。
 
 - [ ] **Step 4: 接入 EditorWorkspace**
 
-从路由读取项目/场景 ID，进入时加载，离开时取消自动保存计时器。工具栏显示真实场景名与保存状态；保存按钮触发 `save()`，冲突状态提供“重新加载”按钮。
+从路由读取项目/场景 ID，进入时加载，离开时使迟到的加载响应失效。工具栏显示真实场景名与保存状态；保存按钮触发 `save()`，冲突状态提供“重新加载”按钮。
 
 - [ ] **Step 5: 运行 Store、工作台测试与构建**
 
 Run: `pnpm --filter @digital-twin/editor-web test && pnpm --filter @digital-twin/editor-web typecheck && pnpm --filter @digital-twin/editor-web build`
-Expected: 自动保存和冲突测试 PASS。
+Expected: 显式保存和冲突测试 PASS。
 
 - [ ] **Step 6: 提交编辑器持久化**
 
@@ -389,5 +389,5 @@ git commit -m "✅ tests(项目场景): 补充持久化纵向浏览器验收"
 3. 场景支持创建、复制、排序和删除保护。
 4. 场景保存前后端 Zod 校验，服务端重算资源引用与稳定哈希。
 5. 两个标签页以相同 revision 保存时，后到请求返回 409。
-6. 编辑器从 API 加载文档，支持手动保存、防抖自动保存与冲突状态。
+6. 编辑器从 API 加载文档，支持显式手动保存与冲突状态。
 7. 单元、类型、构建、Lint、WebGL 冒烟和真实数据库纵向测试全部通过。

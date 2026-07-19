@@ -18,6 +18,7 @@ const commandMocks = vi.hoisted(() => {
     groupNodes: operation(),
     handleKeydown: vi.fn(),
     redo: operation(),
+    resetScene: operation(),
     removeNodes: operation(),
     reparentNode: operation(),
     resetCamera: vi.fn(),
@@ -70,8 +71,9 @@ describe('EditorWorkspace', () => {
     });
 
     expect(wrapper.get('[data-testid="top-toolbar"]').text()).toContain('保存');
-    expect(wrapper.get('[data-testid="undo-scene"]')).toBeTruthy();
-    expect(wrapper.get('[data-testid="redo-scene"]')).toBeTruthy();
+    expect(wrapper.find('[data-testid="undo-scene"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="redo-scene"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="reset-scene"]')).toBeTruthy();
     expect(
       wrapper.get('[data-tool="translate"]').attributes('aria-label'),
     ).toContain('拖拽');
@@ -159,6 +161,58 @@ describe('EditorWorkspace', () => {
     expect(wrapper.findComponent({ name: 'SocketTaskPanel' }).exists()).toBe(
       true,
     );
+    await wrapper
+      .findAll('.inspector-tabs button')
+      .find((tab) => tab.text() === '帮助')!
+      .trigger('click');
+    expect(wrapper.get('[data-testid="editor-help-panel"]').text()).toContain(
+      '快捷键',
+    );
+  });
+
+  it('重置场景需要确认并只调用本地重置命令', async () => {
+    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue({
+      action: 'confirm',
+      value: '',
+    } as never);
+    const wrapper = mount(EditorWorkspace, {
+      global: {
+        plugins: [createTestingPinia({ createSpy: vi.fn })],
+        stubs: {
+          EditorCanvas: { template: '<div data-testid="editor-canvas" />' },
+          RouterLink: { template: '<a><slot /></a>' },
+        },
+      },
+    });
+
+    await wrapper.get('[data-testid="reset-scene"]').trigger('click');
+    await flushPromises();
+
+    expect(commandMocks.resetScene).toHaveBeenCalledOnce();
+  });
+
+  it('预览和发布不会隐式保存，必须先点击保存完成服务端同步', async () => {
+    const pinia = createTestingPinia({ createSpy: vi.fn });
+    const store = useDocumentStore(pinia);
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    const wrapper = mount(EditorWorkspace, {
+      global: {
+        plugins: [pinia],
+        stubs: {
+          EditorCanvas: { template: '<div data-testid="editor-canvas" />' },
+          RouterLink: { template: '<a><slot /></a>' },
+        },
+      },
+    });
+
+    store.saveState = 'saving';
+    await wrapper.get('[data-testid="preview-scene"]').trigger('click');
+    await wrapper.get('[data-testid="publish-scene"]').trigger('click');
+    await flushPromises();
+
+    expect(store.save).not.toHaveBeenCalled();
+    expect(openSpy).not.toHaveBeenCalled();
+    openSpy.mockRestore();
   });
 
   it('按统一 scene-drop 类型分派现有命令并抬高几何体与灯光', async () => {

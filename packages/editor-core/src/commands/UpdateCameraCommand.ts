@@ -7,7 +7,7 @@ import type { EditorCommand } from './types.js';
 
 export type EditableCameraPatch = Partial<SceneCamera>;
 
-/** 活动 Camera 不是 SceneNode，但仍必须进入同一撤销、脏状态和自动保存边界。 */
+/** Camera 属性面板的显式修改进入历史；OrbitControls 鼠标导航不使用该命令。 */
 export class UpdateCameraCommand implements EditorCommand<EditorDocumentContext> {
   readonly label = '更新相机';
   private before?: SceneCamera;

@@ -2,7 +2,7 @@
 
 ## 目标
 
-继续还原 ThreeFlowX 4.0.4 编辑器与预览端的核心体验：Camera 可选择并编辑完整透视相机参数；可在编辑器绘制、保存、播放和删除漫游路径；预览端提供重置、第一/第三人称切换和路径播放；模型点击选择、右下角视角控制器、面板滚动及模型筛选区达到源站同类行为。
+继续还原 数字孪生 4.0.4 编辑器与预览端的核心体验：Camera 可选择并编辑完整透视相机参数；可在编辑器绘制、保存、播放和删除漫游路径；预览端提供重置、第一/第三人称切换和路径播放；模型点击选择、右下角视角控制器、面板滚动及模型筛选区达到源站同类行为。
 
 本阶段不重新引入源站以 IndexedDB 固定键保存 Three JSON/ZIP 的实现。当前项目继续以服务端 `SceneDocument`、草稿预览和不可变发布 Manifest 为唯一数据边界，避免多场景覆盖、缓存损坏和正式发布引用可变素材的问题。
 
@@ -76,7 +76,7 @@ Camera 和路径随现有保存、复制、hash、草稿预览和发布 Manifest
 ### Scene Schema 与命令
 
 - `packages/scene-schema/src/camera.ts`：Camera/路径 schema、类型和默认值。
-- `UpdateCameraCommand`：Camera 属性快照命令，进入 undo/redo、dirty 和 autosave。
+- `UpdateCameraCommand`：Camera 属性快照命令，进入 undo/redo、dirty 和显式保存。
 - `UpdateCameraRoamingListCommand`：路径列表快照命令，新增和删除均可撤销。
 
 ### CameraRoamingSystem

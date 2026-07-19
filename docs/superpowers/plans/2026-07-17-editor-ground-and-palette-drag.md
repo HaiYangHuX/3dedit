@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 复现 ThreeFlowX r183 的灰色背景、默认 IBL 和双层网格，并让模型、几何体和灯光共享可撤销的视口拖放链。
+**Goal:** 复现 数字孪生 r183 的灰色背景、默认 IBL 和双层网格，并让模型、几何体和灯光共享可撤销的视口拖放链。
 
 **Architecture:** `SceneSettingsSystem` 继续拥有背景、雾、网格和用户 HDR 切换；`EditorEngine` 创建并拥有 `RoomEnvironment` 产生的默认 PMREM。Vue 层新增判别联合拖放协议，`EditorCanvas` 只计算世界坐标，`EditorWorkspace` 将 DTO 分派到现有命令 API。
 
@@ -140,7 +140,7 @@ Expected: 修改实现前拖放失败；实现后 PASS。
 
 - [ ] **Step 3: 浏览器视觉验收**
 
-在 1280×720 下截图，对照 ThreeFlowX 检查灰色背景、网格远近层次、物体可见性、工具条遮挡和右侧面板溢出；检查 console error 为 0。
+在 1280×720 下截图，对照 数字孪生 检查灰色背景、网格远近层次、物体可见性、工具条遮挡和右侧面板溢出；检查 console error 为 0。
 
 - [ ] **Step 4: 全量验证**
 

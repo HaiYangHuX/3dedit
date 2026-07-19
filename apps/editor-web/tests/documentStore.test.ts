@@ -48,7 +48,7 @@ describe('useDocumentStore', () => {
     expect(store.saveState).toBe('saved');
   });
 
-  it('标记变更后在 1500ms 自动保存', async () => {
+  it('标记变更后不会自动保存，只有显式保存才提交服务端', async () => {
     vi.useFakeTimers();
     vi.mocked(projectApi.getScene).mockResolvedValue(createSceneDetail(0));
     vi.mocked(projectApi.saveScene).mockResolvedValue(createSceneDetail(1));
@@ -59,6 +59,10 @@ describe('useDocumentStore', () => {
     store.markDirty();
     await vi.advanceTimersByTimeAsync(1500);
 
+    expect(projectApi.saveScene).not.toHaveBeenCalled();
+    expect(store.saveState).toBe('dirty');
+
+    await store.save();
     expect(projectApi.saveScene).toHaveBeenCalledWith(
       'scene-1',
       expect.objectContaining({ baseRevision: 0 }),
@@ -116,6 +120,25 @@ describe('useDocumentStore', () => {
     await store.undo();
     expect(store.document.nodes['model-1']).toBeUndefined();
     expect(store.canRedo).toBe(true);
+  });
+
+  it('鼠标相机导航标记待保存但不创建撤销步骤', async () => {
+    vi.mocked(projectApi.getScene).mockResolvedValue(createSceneDetail());
+    const store = useDocumentStore();
+    await store.loadScene('scene-1');
+    const movedCamera = {
+      ...structuredClone(store.document.camera),
+      position: [6, 4, 2] as [number, number, number],
+      target: [1, 0, 1] as [number, number, number],
+    };
+
+    store.syncCameraSnapshot(movedCamera);
+
+    expect(store.document.camera.position).toEqual(movedCamera.position);
+    expect(store.saveState).toBe('dirty');
+    expect(store.canUndo).toBe(false);
+    await store.undo();
+    expect(store.document.camera.position).toEqual(movedCamera.position);
   });
 
   it('成功保存后将当前历史游标标记为 clean', async () => {

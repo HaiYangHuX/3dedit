@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 用 Three.js r183 官方 Venice HDR 和黄色 BoxHelper 复现 ThreeFlowX 的默认模型质感，同时完整管理异步纹理、PMREM 与选择辅助资源。
+**Goal:** 用 Three.js r183 官方 Venice HDR 和黄色 BoxHelper 复现 数字孪生 的默认模型质感，同时完整管理异步纹理、PMREM 与选择辅助资源。
 
 **Architecture:** `EditorEngine` 负责默认编辑环境的初始化与兜底 target，`SceneSettingsSystem` 继续负责默认/用户 HDR 切换；新增小型 `SelectionBoxSystem` 将选中反馈从后处理通道移出。Vue、SceneDocument 和 RuntimeThreeEngine 的发布语义保持不变。
 

@@ -14,6 +14,7 @@ interface CacheEntry {
 
 interface InstanceEntry {
   ownedResources: boolean;
+  generation: number;
 }
 
 export class StaleAssetLoadError extends Error {
@@ -27,7 +28,8 @@ export class StaleAssetLoadError extends Error {
 export class AssetInstanceSystem {
   private generation = 0;
   private disposed = false;
-  private readonly cache = new Map<string, CacheEntry>();
+  // 重载期间旧代次的模板仍被可见实例共享，不能被新代次提前清理。
+  private readonly cache = new Map<string, Map<number, CacheEntry>>();
   private readonly instances = new Map<Object3D, InstanceEntry>();
 
   constructor(
@@ -35,9 +37,14 @@ export class AssetInstanceSystem {
     private readonly loader: AssetLoaderLike,
   ) {}
 
-  beginGeneration(): number {
+  beginGeneration(options: { preserveExisting?: boolean } = {}): number {
     this.generation += 1;
-    this.clearGeneration();
+    if (options.preserveExisting) {
+      // 旧实例继续渲染，新代次只中止旧的未完成请求。
+      this.invalidatePendingGenerations();
+    } else {
+      this.clearGeneration();
+    }
     return this.generation;
   }
 
@@ -46,13 +53,13 @@ export class AssetInstanceSystem {
     try {
       const loaded = await this.getTemplate(assetId, generation);
       this.assertCurrent(generation);
-      // 在线 ThreeFlowX 会在每次拖入时按模型包围盒计算初始比例；克隆后再包装可保持共享 GPU 资源。
+      // 在线 数字孪生 会在每次拖入时按模型包围盒计算初始比例；克隆后再包装可保持共享 GPU 资源。
       const instance = createNormalizedModelInstance(clone(loaded.root));
       instance.userData.assetId = assetId;
       instance.userData.animations = loaded.animations.map((clip) =>
         clip.clone(),
       );
-      this.instances.set(instance, { ownedResources: false });
+      this.instances.set(instance, { ownedResources: false, generation });
       return instance;
     } catch (error) {
       if (error instanceof StaleAssetLoadError) throw error;
@@ -60,7 +67,7 @@ export class AssetInstanceSystem {
       const message =
         error instanceof Error ? error.message : '未知模型加载错误';
       const placeholder = createAssetPlaceholder(assetId, message);
-      this.instances.set(placeholder, { ownedResources: true });
+      this.instances.set(placeholder, { ownedResources: true, generation });
       return placeholder;
     }
   }
@@ -71,6 +78,12 @@ export class AssetInstanceSystem {
     root.removeFromParent();
     if (entry.ownedResources) disposeObject3D(root);
     this.instances.delete(root);
+    if (
+      entry.generation !== this.generation &&
+      !this.hasInstances(entry.generation)
+    ) {
+      this.disposeGenerationCache(entry.generation);
+    }
     return true;
   }
 
@@ -86,8 +99,13 @@ export class AssetInstanceSystem {
     assetId: string,
     generation: number,
   ): Promise<LoadedAsset> {
-    const existing = this.cache.get(assetId);
-    if (existing?.generation === generation) return existing.promise;
+    let entries = this.cache.get(assetId);
+    const existing = entries?.get(generation);
+    if (existing) return existing.promise;
+    if (!entries) {
+      entries = new Map<number, CacheEntry>();
+      this.cache.set(assetId, entries);
+    }
 
     const controller = new AbortController();
     const entry = {
@@ -96,7 +114,7 @@ export class AssetInstanceSystem {
       promise: Promise.resolve(undefined as never),
     } as CacheEntry;
     entry.promise = this.loadEntry(assetId, entry);
-    this.cache.set(assetId, entry);
+    entries.set(generation, entry);
     return entry.promise;
   }
 
@@ -113,7 +131,7 @@ export class AssetInstanceSystem {
       if (
         this.disposed ||
         entry.generation !== this.generation ||
-        this.cache.get(assetId) !== entry
+        this.cache.get(assetId)?.get(entry.generation) !== entry
       ) {
         disposeObject3D(loaded.root);
         throw new StaleAssetLoadError();
@@ -121,7 +139,11 @@ export class AssetInstanceSystem {
       entry.loaded = loaded;
       return loaded;
     } catch (error) {
-      if (this.cache.get(assetId) === entry) this.cache.delete(assetId);
+      const entries = this.cache.get(assetId);
+      if (entries?.get(entry.generation) === entry) {
+        entries.delete(entry.generation);
+        if (entries.size === 0) this.cache.delete(assetId);
+      }
       if (
         error instanceof StaleAssetLoadError ||
         this.disposed ||
@@ -135,9 +157,45 @@ export class AssetInstanceSystem {
 
   private clearGeneration(): void {
     for (const root of [...this.instances.keys()]) this.release(root);
-    for (const entry of this.cache.values()) {
+    this.disposeAllCaches();
+  }
+
+  /** 只中止旧代次的未完成加载，已完成模板由旧实例继续持有。 */
+  private invalidatePendingGenerations(): void {
+    for (const [assetId, entries] of this.cache) {
+      for (const [generation, entry] of entries) {
+        if (generation === this.generation || entry.loaded) continue;
+        entry.controller.abort();
+        entries.delete(generation);
+      }
+      if (entries.size === 0) this.cache.delete(assetId);
+    }
+  }
+
+  private hasInstances(generation: number): boolean {
+    for (const entry of this.instances.values()) {
+      if (entry.generation === generation) return true;
+    }
+    return false;
+  }
+
+  private disposeGenerationCache(generation: number): void {
+    for (const [assetId, entries] of this.cache) {
+      const entry = entries.get(generation);
+      if (!entry) continue;
       entry.controller.abort();
       if (entry.loaded) disposeObject3D(entry.loaded.root);
+      entries.delete(generation);
+      if (entries.size === 0) this.cache.delete(assetId);
+    }
+  }
+
+  private disposeAllCaches(): void {
+    for (const entries of this.cache.values()) {
+      for (const entry of entries.values()) {
+        entry.controller.abort();
+        if (entry.loaded) disposeObject3D(entry.loaded.root);
+      }
     }
     this.cache.clear();
   }

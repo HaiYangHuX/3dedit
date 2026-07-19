@@ -35,7 +35,25 @@ describe('ProjectsView', () => {
 
     expect(wrapper.text()).toContain('化工厂数字孪生');
     expect(wrapper.text()).toContain('2 个场景');
+    // 项目列表不再重复展示页面大标题，创建入口与检索工具栏保持同一行。
+    expect(wrapper.find('.management-page__hero').exists()).toBe(false);
+    expect(wrapper.find('h1').exists()).toBe(false);
+    expect(
+      wrapper.get('.management-toolbar [data-testid="create-project"]'),
+    ).toBeDefined();
+    expect(wrapper.get('.project-card-grid').classes()).toContain(
+      'project-card-grid',
+    );
+    expect(wrapper.find('.project-card__description').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('运营信息');
+    expect(wrapper.text()).not.toContain('负责人');
     await wrapper.get('[data-testid="create-project"]').trigger('click');
     expect(wrapper.find('[data-testid="project-dialog"]').exists()).toBe(true);
+    expect(wrapper.get('[data-testid="project-dialog"]').text()).not.toContain(
+      '运营信息',
+    );
+    expect(wrapper.get('[data-testid="project-dialog"]').text()).not.toContain(
+      '负责人',
+    );
   });
 });
