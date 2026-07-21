@@ -632,6 +632,12 @@ button {
   --el-text-color-regular: #b7c5d8;
   --el-text-color-placeholder: #64748b;
   --el-color-primary: #21d4e8;
+  --el-slider-main-bg-color: #21d4e8;
+  --el-slider-runway-bg-color: #263047;
+  --el-slider-stop-bg-color: #263047;
+  --el-slider-button-size: 14px;
+  --el-slider-button-wrapper-size: 28px;
+  --el-slider-button-wrapper-offset: -11px;
 }
 
 .project-settings-title {
@@ -795,6 +801,36 @@ button {
 .scene-settings-inspector .el-input-number__increase {
   background: #0b1220;
   box-shadow: 0 0 0 1px #2a3850 inset;
+}
+
+/* Slider 的默认轨道和按钮是亮色，覆盖为与项目配置面板一致的深色控件。 */
+.scene-settings-inspector .el-slider__runway {
+  background: var(--el-slider-runway-bg-color);
+}
+
+.scene-settings-inspector .el-slider__bar {
+  background: var(--el-slider-main-bg-color);
+}
+
+.scene-settings-inspector .el-slider__button {
+  background: #0f172a;
+  border-color: var(--el-slider-main-bg-color);
+}
+
+.scene-settings-inspector .el-slider__input {
+  width: 72px;
+}
+
+.scene-settings-inspector .el-input-number .el-input__wrapper {
+  background: #0b1220;
+  box-shadow: 0 0 0 1px #2a3850 inset;
+}
+
+.scene-settings-inspector .el-input-number__increase,
+.scene-settings-inspector .el-input-number__decrease {
+  background: #111e34;
+  border-color: #2a3850;
+  box-shadow: none;
 }
 
 .scene-settings-inspector .el-color-picker__trigger {

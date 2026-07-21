@@ -113,6 +113,20 @@ describe('SceneSettingsInspector', () => {
     expect(input.attributes('accept')).toBe('.jpg,.png,.hdr');
   });
 
+  it('受控滑块先同步拖拽值，再用 change 提交最终值，不会回弹到旧值', async () => {
+    const wrapper = mount(SceneSettingsInspector, {
+      props: { settings: defaultSettings(), assets: [] },
+    });
+    const exposure = wrapper.findAllComponents(ElSlider)[0]!;
+
+    // Element Plus 拖拽时先发 update:model-value，随后 change 读取受控 modelValue。
+    exposure.vm.$emit('update:model-value', 2.2);
+    exposure.vm.$emit('change', defaultSettings().exposure);
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.emitted('update')).toEqual([[{ exposure: 2.2 }]]);
+  });
+
   it('展示六张内置环境图并以环境资源 ID 提交选择', async () => {
     const wrapper = mount(SceneSettingsInspector, {
       props: { settings: defaultSettings(), assets: [] },

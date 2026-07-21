@@ -10,7 +10,7 @@ import {
   ElSelect,
   ElSlider,
 } from 'element-plus';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 const props = withDefaults(
   defineProps<{
@@ -36,6 +36,46 @@ const emit = defineEmits<{
 
 const backgroundFile = ref<HTMLInputElement>();
 const environmentFile = ref<HTMLInputElement>();
+
+type SliderSettingKey =
+  | 'exposure'
+  | 'backgroundBlurriness'
+  | 'backgroundIntensity'
+  | 'weatherCount'
+  | 'weatherSpeed'
+  | 'weatherOpacity'
+  | 'weatherSize'
+  | 'weatherArea'
+  | 'weatherHeight';
+
+// Element Plus 的 Slider 是受控组件：拖拽先发 update:model-value，松手时 change
+// 会读取当前受控值。这里暂存拖拽中的值，避免父级命令尚未完成时滑块回到旧值。
+const sliderDrafts = ref<Partial<Record<SliderSettingKey, number>>>({});
+
+function sliderValue<K extends SliderSettingKey>(key: K): number {
+  const draft = sliderDrafts.value[key];
+  return draft ?? (props.settings[key] as number);
+}
+
+function setSliderDraft<K extends SliderSettingKey>(
+  key: K,
+  value: number | number[],
+): void {
+  if (!Array.isArray(value) && Number.isFinite(value)) {
+    sliderDrafts.value[key] = value;
+  }
+}
+
+watch(
+  () => props.changeVersion,
+  () => {
+    // 命令完成后 settings 已经接收新值，释放草稿；撤销或外部更新不一致时也应回到文档值。
+    for (const key of Object.keys(sliderDrafts.value) as SliderSettingKey[]) {
+      delete sliderDrafts.value[key];
+    }
+  },
+  { flush: 'post' },
+);
 
 const toneMappingOptions: Array<{
   value: SceneSettings['toneMapping'];
@@ -151,7 +191,9 @@ function commitSlider<K extends keyof SceneSettings>(
   key: K,
   value: number | number[],
 ): void {
-  if (!Array.isArray(value)) commitNumber(key, value);
+  if (Array.isArray(value)) return;
+  const draft = (sliderDrafts.value as Partial<Record<K, number>>)[key];
+  commitNumber(key, draft ?? value);
 }
 
 function commitColor(
@@ -234,11 +276,12 @@ function selectBuiltinEnvironment(
         data-testid="exposure"
         aria-valuemin="0"
         aria-valuemax="5"
-        :model-value="settings.exposure"
+        :model-value="sliderValue('exposure')"
         :min="0"
         :max="5"
         :step="0.1"
         show-input
+        @update:model-value="setSliderDraft('exposure', $event)"
         @change="commitSlider('exposure', $event)"
       />
     </div>
@@ -304,11 +347,12 @@ function selectBuiltinEnvironment(
         <label>模糊度</label>
         <ElSlider
           data-testid="background-blurriness"
-          :model-value="settings.backgroundBlurriness"
+          :model-value="sliderValue('backgroundBlurriness')"
           :min="0"
           :max="1"
           :step="0.1"
           show-input
+          @update:model-value="setSliderDraft('backgroundBlurriness', $event)"
           @change="commitSlider('backgroundBlurriness', $event)"
         />
       </div>
@@ -316,11 +360,12 @@ function selectBuiltinEnvironment(
         <label>强度</label>
         <ElSlider
           data-testid="background-intensity"
-          :model-value="settings.backgroundIntensity"
+          :model-value="sliderValue('backgroundIntensity')"
           :min="0"
           :max="6"
           :step="0.1"
           show-input
+          @update:model-value="setSliderDraft('backgroundIntensity', $event)"
           @change="commitSlider('backgroundIntensity', $event)"
         />
       </div>
@@ -513,66 +558,72 @@ function selectBuiltinEnvironment(
           data-testid="weather-count"
           aria-valuemin="0"
           aria-valuemax="100000"
-          :model-value="settings.weatherCount"
+          :model-value="sliderValue('weatherCount')"
           :min="0"
           :max="100000"
           :step="10"
           show-input
+          @update:model-value="setSliderDraft('weatherCount', $event)"
           @change="commitSlider('weatherCount', $event)"
         />
       </div>
       <div class="project-settings-row project-settings-row--slider">
         <label>速度</label>
         <ElSlider
-          :model-value="settings.weatherSpeed"
+          :model-value="sliderValue('weatherSpeed')"
           :min="0.1"
           :max="1.5"
           :step="0.1"
           show-input
+          @update:model-value="setSliderDraft('weatherSpeed', $event)"
           @change="commitSlider('weatherSpeed', $event)"
         />
       </div>
       <div class="project-settings-row project-settings-row--slider">
         <label>透明度</label>
         <ElSlider
-          :model-value="settings.weatherOpacity"
+          :model-value="sliderValue('weatherOpacity')"
           :min="0"
           :max="1"
           :step="0.1"
           show-input
+          @update:model-value="setSliderDraft('weatherOpacity', $event)"
           @change="commitSlider('weatherOpacity', $event)"
         />
       </div>
       <div class="project-settings-row project-settings-row--slider">
         <label>大小</label>
         <ElSlider
-          :model-value="settings.weatherSize"
+          :model-value="sliderValue('weatherSize')"
           :min="0.1"
           :max="2"
           :step="0.1"
           show-input
+          @update:model-value="setSliderDraft('weatherSize', $event)"
           @change="commitSlider('weatherSize', $event)"
         />
       </div>
       <div class="project-settings-row project-settings-row--slider">
         <label>范围</label>
         <ElSlider
-          :model-value="settings.weatherArea"
+          :model-value="sliderValue('weatherArea')"
           :min="0"
           :max="500"
           :step="10"
           show-input
+          @update:model-value="setSliderDraft('weatherArea', $event)"
           @change="commitSlider('weatherArea', $event)"
         />
       </div>
       <div class="project-settings-row project-settings-row--slider">
         <label>高度</label>
         <ElSlider
-          :model-value="settings.weatherHeight"
+          :model-value="sliderValue('weatherHeight')"
           :min="0"
           :max="300"
           :step="5"
           show-input
+          @update:model-value="setSliderDraft('weatherHeight', $event)"
           @change="commitSlider('weatherHeight', $event)"
         />
       </div>
