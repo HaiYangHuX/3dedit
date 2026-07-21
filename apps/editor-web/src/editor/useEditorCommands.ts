@@ -22,6 +22,7 @@ import type {
   SceneNode,
   Transform,
 } from '@digital-twin/scene-schema';
+import { createUuid } from '../utils/createUuid';
 import type {
   CameraView,
   SelectionState,
@@ -223,7 +224,7 @@ export function useEditorCommands(
     if (!source) throw new Error(`节点不存在: ${nodeId}`);
     // 属性协议是 JSON，显式换新 ID 并移除子级，避免复制单节点时引入悬空 childIds。
     const copy = JSON.parse(JSON.stringify(source)) as SceneNode;
-    copy.id = globalThis.crypto.randomUUID();
+    copy.id = createUuid();
     copy.name = `${source.name} 副本`;
     copy.childIds = [];
     return addNode(copy);

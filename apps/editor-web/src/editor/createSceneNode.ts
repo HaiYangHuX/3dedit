@@ -4,6 +4,7 @@ import {
   type SceneNode,
   type Transform,
 } from '@digital-twin/scene-schema';
+import { createUuid } from '../utils/createUuid';
 
 type SceneComponent = SceneNode['components'][number];
 export type GeometryPrimitive = Extract<
@@ -71,7 +72,7 @@ export function createSceneNode(
   options: CreateSceneNodeOptions = {},
 ): SceneNode {
   return {
-    id: options.id ?? globalThis.crypto.randomUUID(),
+    id: options.id ?? createUuid(),
     parentId: options.parentId ?? null,
     childIds: [],
     name,

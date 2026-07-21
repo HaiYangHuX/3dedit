@@ -16,6 +16,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { storeToRefs } from 'pinia';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
+import { createUuid } from '../utils/createUuid';
 import EditorCanvas from '../components/EditorCanvas.vue';
 import AssetLibraryPanel from '../components/AssetLibraryPanel.vue';
 import AssetPalette from '../components/editor/AssetPalette.vue';
@@ -414,7 +415,7 @@ function createCameraRoamingPath(
     commands.replaceCameraRoamingList([
       ...paths,
       {
-        id: crypto.randomUUID(),
+        id: createUuid(),
         name: `漫游路径 ${paths.length + 1}`,
         pathPoints,
       },

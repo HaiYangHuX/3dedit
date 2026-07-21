@@ -8,6 +8,7 @@ import {
   type SocketTaskDefinition,
 } from '@digital-twin/scene-schema';
 import { computed, ref, shallowRef, watch } from 'vue';
+import { createUuid } from '../../utils/createUuid';
 
 const props = defineProps<{
   nodes: SceneNode[];
@@ -52,7 +53,7 @@ const selectedTask = computed(() =>
 );
 
 function createId(prefix: string): string {
-  return `${prefix}-${globalThis.crypto.randomUUID()}`;
+  return `${prefix}-${createUuid()}`;
 }
 
 function syncProps(): void {

@@ -8,6 +8,7 @@ import {
 } from '@digital-twin/scene-schema';
 import { computed, ref, shallowRef, watch } from 'vue';
 import type { RuntimeConfigPatch } from '@digital-twin/editor-core';
+import { createUuid } from '../../utils/createUuid';
 
 const props = defineProps<{
   nodes: SceneNode[];
@@ -37,7 +38,7 @@ const selected = computed(() =>
 );
 
 function createId(prefix: string): string {
-  return `${prefix}-${globalThis.crypto.randomUUID()}`;
+  return `${prefix}-${createUuid()}`;
 }
 
 function syncDraft(): void {
