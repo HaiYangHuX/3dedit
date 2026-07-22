@@ -1,6 +1,8 @@
 import {
   DoubleSide,
   Group,
+  InstancedMesh,
+  Matrix4,
   Mesh,
   MeshBasicMaterial,
   PerspectiveCamera,
@@ -206,6 +208,39 @@ describe('CameraRoamingSystem', () => {
 
     expect(points[0]![1]).toBeCloseTo(0.55);
     harness.system.dispose();
+  });
+
+  it('uses an InstancedMesh transform to classify upward and vertical surfaces', () => {
+    const upwardHarness = createSurfaceHarness();
+    const upwardSurface = new InstancedMesh(
+      new PlaneGeometry(20, 20),
+      new MeshBasicMaterial({ side: DoubleSide }),
+      1,
+    );
+    upwardSurface.setMatrixAt(
+      0,
+      new Matrix4().makeRotationX(-Math.PI / 2).setPosition(0, 4, 0),
+    );
+    upwardHarness.root.add(upwardSurface);
+
+    const upwardPoints = upwardHarness.drawCenterPoints();
+
+    expect(upwardPoints[0]![1]).toBeCloseTo(4.55);
+    upwardHarness.system.dispose();
+
+    const wallHarness = createSurfaceHarness();
+    const verticalSurface = new InstancedMesh(
+      new PlaneGeometry(20, 20),
+      new MeshBasicMaterial({ side: DoubleSide }),
+      1,
+    );
+    verticalSurface.setMatrixAt(0, new Matrix4().makeTranslation(0, 4, 0));
+    wallHarness.root.add(verticalSurface);
+
+    const wallPoints = wallHarness.drawCenterPoints();
+
+    expect(wallPoints[0]![1]).toBeCloseTo(0.55);
+    wallHarness.system.dispose();
   });
 
   it('Ctrl/Command + 250ms/5px 点击定点，松开修饰键后提交至少两点路径', () => {

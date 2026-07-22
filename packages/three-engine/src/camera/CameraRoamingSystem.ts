@@ -5,6 +5,7 @@ import {
   ConeGeometry,
   CylinderGeometry,
   Group,
+  InstancedMesh,
   Line,
   LineDashedMaterial,
   Matrix3,
@@ -92,6 +93,7 @@ export class CameraRoamingSystem {
   private readonly pointer = new Vector2();
   private readonly groundPlane = new Plane(new Vector3(0, 1, 0), 0);
   private readonly normalMatrix = new Matrix3();
+  private readonly instanceMatrix = new Matrix4();
   private readonly surfaceNormal = new Vector3();
   private readonly lookMatrix = new Matrix4();
   private readonly currentQuaternion = new Quaternion();
@@ -445,7 +447,20 @@ export class CameraRoamingSystem {
     }
     const faceNormal = intersection.face?.normal;
     if (!reachedRoot || !faceNormal) return false;
-    this.normalMatrix.getNormalMatrix(intersection.object.matrixWorld);
+    const object = intersection.object;
+    if (
+      object instanceof InstancedMesh &&
+      intersection.instanceId !== undefined
+    ) {
+      object.getMatrixAt(intersection.instanceId, this.instanceMatrix);
+      this.instanceMatrix.multiplyMatrices(
+        object.matrixWorld,
+        this.instanceMatrix,
+      );
+      this.normalMatrix.getNormalMatrix(this.instanceMatrix);
+    } else {
+      this.normalMatrix.getNormalMatrix(object.matrixWorld);
+    }
     this.surfaceNormal.copy(faceNormal).applyNormalMatrix(this.normalMatrix);
     return this.surfaceNormal.y >= MIN_WALKABLE_NORMAL_Y;
   }
