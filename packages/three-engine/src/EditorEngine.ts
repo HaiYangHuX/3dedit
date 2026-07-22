@@ -263,6 +263,7 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
       camera: this.camera,
       canvas: renderer.domElement,
       controls: this.controls,
+      getSurfaceRoot: () => this.documentSystem?.root,
       invalidate: this.invalidate,
       onStateChange: (state) => {
         this.selectionSystem?.setEnabled(

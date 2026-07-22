@@ -7,6 +7,7 @@ import {
   Group,
   Line,
   LineDashedMaterial,
+  Matrix3,
   Matrix4,
   Mesh,
   MeshBasicMaterial,
@@ -20,6 +21,7 @@ import {
   Vector2,
   Vector3,
   type Material,
+  type Intersection,
   type Object3D,
   type PerspectiveCamera,
   type Scene,
@@ -33,6 +35,8 @@ const CAMERA_HEIGHT = 2;
 const MIN_SEGMENT_DURATION = 0.4;
 const TURN_START = 0.8;
 const EPSILON = 1e-6;
+const PATH_POINT_CLEARANCE = 0.55;
+const MIN_WALKABLE_NORMAL_Y = 0.5;
 
 export type CameraRoamingMode = 'idle' | 'drawing' | 'previewing';
 
@@ -52,6 +56,7 @@ export interface CameraRoamingSystemOptions {
   canvas: HTMLElement;
   controls: CameraRoamingControls;
   invalidate(): void;
+  getSurfaceRoot?(): Object3D | undefined;
   onStateChange?(state: CameraRoamingState): void;
   onPathCreated?(pathPoints: Array<[number, number, number]>): void;
   keyboardTarget?: EventTarget;
@@ -85,6 +90,8 @@ export class CameraRoamingSystem {
   private readonly raycaster = new Raycaster();
   private readonly pointer = new Vector2();
   private readonly groundPlane = new Plane(new Vector3(0, 1, 0), 0);
+  private readonly normalMatrix = new Matrix3();
+  private readonly surfaceNormal = new Vector3();
   private readonly lookMatrix = new Matrix4();
   private readonly currentQuaternion = new Quaternion();
   private readonly nextQuaternion = new Quaternion();
@@ -377,16 +384,69 @@ export class CameraRoamingSystem {
       -((clientY - rect.top) / rect.height) * 2 + 1,
     );
     this.raycaster.setFromCamera(this.pointer, this.options.camera);
+    const maxDistance = Math.max(this.options.camera.position.length() * 2, 50);
+    const surfaceRoot = this.options.getSurfaceRoot?.();
+    const surfacePoint = surfaceRoot
+      ? this.projectOntoSurface(surfaceRoot, maxDistance)
+      : undefined;
+    if (surfacePoint) return surfacePoint;
+
     const result = new Vector3();
     if (!this.raycaster.ray.intersectPlane(this.groundPlane, result)) {
       return undefined;
     }
-    const maxDistance = Math.max(this.options.camera.position.length() * 2, 50);
     if (result.distanceTo(this.options.camera.position) > maxDistance) {
       return undefined;
     }
-    result.y = Math.max(result.y, 0.5) + 0.05;
+    result.y = PATH_POINT_CLEARANCE;
     return result;
+  }
+
+  private projectOntoSurface(
+    surfaceRoot: Object3D,
+    maxDistance: number,
+  ): Vector3 | undefined {
+    surfaceRoot.updateWorldMatrix(true, true);
+    for (const intersection of this.raycaster.intersectObject(
+      surfaceRoot,
+      true,
+    )) {
+      if (intersection.distance > maxDistance) break;
+      if (!this.isWalkableIntersection(intersection, surfaceRoot)) continue;
+      const point = intersection.point.clone();
+      point.y += PATH_POINT_CLEARANCE;
+      return point;
+    }
+    return undefined;
+  }
+
+  private isWalkableIntersection(
+    intersection: Intersection<Object3D>,
+    surfaceRoot: Object3D,
+  ): boolean {
+    let reachedRoot = false;
+    for (
+      let object: Object3D | null = intersection.object;
+      object;
+      object = object.parent
+    ) {
+      if (
+        !object.visible ||
+        object.userData.editorHelper === true ||
+        object.userData.isEditorHelper === true
+      ) {
+        return false;
+      }
+      if (object === surfaceRoot) {
+        reachedRoot = true;
+        break;
+      }
+    }
+    const faceNormal = intersection.face?.normal;
+    if (!reachedRoot || !faceNormal) return false;
+    this.normalMatrix.getNormalMatrix(intersection.object.matrixWorld);
+    this.surfaceNormal.copy(faceNormal).applyNormalMatrix(this.normalMatrix);
+    return this.surfaceNormal.y >= MIN_WALKABLE_NORMAL_Y;
   }
 
   private clearDrawingPoints(): void {

@@ -1,4 +1,14 @@
-import { PerspectiveCamera, Scene, Vector3 } from 'three';
+import {
+  DoubleSide,
+  Group,
+  Mesh,
+  MeshBasicMaterial,
+  PerspectiveCamera,
+  PlaneGeometry,
+  Scene,
+  Vector3,
+  type Object3D,
+} from 'three';
 import type { CameraRoamingPath } from '@digital-twin/scene-schema';
 import { describe, expect, it, vi } from 'vitest';
 import { CameraRoamingSystem } from '../src/camera/CameraRoamingSystem.js';
@@ -81,6 +91,61 @@ function createHarness() {
   };
 }
 
+function addHorizontalSurface(parent: Object3D, y: number): Mesh {
+  const surface = new Mesh(
+    new PlaneGeometry(20, 20),
+    new MeshBasicMaterial({ side: DoubleSide }),
+  );
+  surface.rotation.x = -Math.PI / 2;
+  surface.position.y = y;
+  parent.add(surface);
+  return surface;
+}
+
+function createSurfaceHarness() {
+  const scene = new Scene();
+  const root = new Group();
+  scene.add(root);
+  let surfaceRoot: Object3D | undefined = root;
+  const camera = new PerspectiveCamera(60, 2, 0.1, 100);
+  camera.position.set(0, 8, 8);
+  camera.lookAt(0, 4, 0);
+  camera.updateProjectionMatrix();
+  camera.updateMatrixWorld(true);
+  const canvas = new CanvasStub();
+  const keyboardTarget = new EventTarget();
+  const onPathCreated = vi.fn();
+  const system = new CameraRoamingSystem({
+    scene,
+    camera,
+    canvas: canvas as unknown as HTMLElement,
+    controls: { enabled: true },
+    keyboardTarget,
+    getSurfaceRoot: () => surfaceRoot,
+    onPathCreated,
+    invalidate: vi.fn(),
+  });
+
+  return {
+    scene,
+    root,
+    system,
+    setSurfaceRoot(root: Object3D | undefined) {
+      surfaceRoot = root;
+    },
+    drawCenterPoints(): Array<[number, number, number]> {
+      system.startDrawing();
+      keyboardTarget.dispatchEvent(keyboardEvent('keydown', 'Control'));
+      for (let index = 0; index < 2; index += 1) {
+        canvas.dispatchEvent(pointerEvent('pointerdown', 300, 150));
+        canvas.dispatchEvent(pointerEvent('pointerup', 300, 150));
+      }
+      keyboardTarget.dispatchEvent(keyboardEvent('keyup', 'Control'));
+      return onPathCreated.mock.calls[0]![0];
+    },
+  };
+}
+
 const path: CameraRoamingPath = {
   id: 'path-1',
   name: '漫游路径 1',
@@ -92,6 +157,57 @@ const path: CameraRoamingPath = {
 };
 
 describe('CameraRoamingSystem', () => {
+  it('selects the nearest upward surface from the current business root at click time', () => {
+    const harness = createSurfaceHarness();
+    addHorizontalSurface(harness.root, 6);
+    const replacementRoot = new Group();
+    harness.scene.add(replacementRoot);
+    addHorizontalSurface(replacementRoot, 2);
+    addHorizontalSurface(replacementRoot, 4);
+    harness.setSurfaceRoot(replacementRoot);
+
+    const points = harness.drawCenterPoints();
+
+    expect(points).toHaveLength(2);
+    expect(points[0]![0]).toBeCloseTo(0);
+    expect(points[0]![1]).toBeCloseTo(4.55);
+    expect(points[0]![2]).toBeCloseTo(0);
+    harness.system.dispose();
+  });
+
+  it('skips hidden and editor-helper surfaces', () => {
+    const harness = createSurfaceHarness();
+    const hidden = new Group();
+    hidden.visible = false;
+    addHorizontalSurface(hidden, 6);
+    harness.root.add(hidden);
+    const helper = new Group();
+    helper.userData.editorHelper = true;
+    addHorizontalSurface(helper, 5);
+    harness.root.add(helper);
+    addHorizontalSurface(harness.root, 3);
+
+    const points = harness.drawCenterPoints();
+
+    expect(points[0]![1]).toBeCloseTo(3.55);
+    harness.system.dispose();
+  });
+
+  it('falls back to the world ground when no qualifying business surface exists', () => {
+    const harness = createSurfaceHarness();
+    const wall = new Mesh(
+      new PlaneGeometry(20, 20),
+      new MeshBasicMaterial({ side: DoubleSide }),
+    );
+    wall.position.y = 4;
+    harness.root.add(wall);
+
+    const points = harness.drawCenterPoints();
+
+    expect(points[0]![1]).toBeCloseTo(0.55);
+    harness.system.dispose();
+  });
+
   it('Ctrl/Command + 250ms/5px 点击定点，松开修饰键后提交至少两点路径', () => {
     const harness = createHarness();
     harness.system.startDrawing();
