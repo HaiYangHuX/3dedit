@@ -272,6 +272,24 @@ describe('CameraRoamingSystem', () => {
     expect(harness.scene.children).toHaveLength(0);
   });
 
+  it('按路径点高度增加 1.45 播放高台路径', () => {
+    const harness = createHarness();
+    const elevatedPath: CameraRoamingPath = {
+      ...path,
+      id: 'elevated-path',
+      pathPoints: [
+        [0, 4.55, 0],
+        [4, 4.55, 0],
+      ],
+    };
+
+    expect(harness.system.preview(elevatedPath)).toBe(true);
+    expect(harness.camera.position.toArray()).toEqual([0, 6, 0]);
+    harness.system.update(2);
+    expect(harness.camera.position.toArray()).toEqual([4, 6, 0]);
+    harness.system.dispose();
+  });
+
   it('跳过重复点并保证绘制、播放和销毁互斥', () => {
     const harness = createHarness();
     const duplicatePath: CameraRoamingPath = {

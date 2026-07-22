@@ -31,11 +31,12 @@ import {
 const MAX_CLICK_TIME = 250;
 const MAX_CLICK_DISTANCE = 5;
 const ROAM_SPEED = 4;
-const CAMERA_HEIGHT = 2;
+const CAMERA_EYE_HEIGHT = 2;
 const MIN_SEGMENT_DURATION = 0.4;
 const TURN_START = 0.8;
 const EPSILON = 1e-6;
 const PATH_POINT_CLEARANCE = 0.55;
+const CAMERA_OFFSET_FROM_PATH_POINT = CAMERA_EYE_HEIGHT - PATH_POINT_CLEARANCE;
 const MIN_WALKABLE_NORMAL_Y = 0.5;
 
 export type CameraRoamingMode = 'idle' | 'drawing' | 'previewing';
@@ -139,7 +140,7 @@ export class CameraRoamingSystem {
     if (this.mode === 'previewing') this.stopPreview();
 
     const points = path.pathPoints.map(
-      ([x, , z]) => new Vector3(x, CAMERA_HEIGHT, z),
+      ([x, y, z]) => new Vector3(x, y + CAMERA_OFFSET_FROM_PATH_POINT, z),
     );
     // 重复点会生成零向量和 NaN quaternion，播放前先按水平距离过滤。
     this.playbackPoints = points.filter(
