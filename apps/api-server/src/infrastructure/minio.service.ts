@@ -10,12 +10,30 @@ export interface CompletedMultipartPart {
 @Injectable()
 export class MinioService {
   private readonly bucket = process.env.MINIO_BUCKET ?? 'assets';
+  private readonly accessKey = process.env.MINIO_ACCESS_KEY ?? 'digital-twin';
+  private readonly secretKey =
+    process.env.MINIO_SECRET_KEY ?? 'digital-twin-secret';
+  private readonly region = process.env.MINIO_REGION ?? 'us-east-1';
   private readonly client = new Client({
     endPoint: process.env.MINIO_ENDPOINT ?? '127.0.0.1',
     port: Number(process.env.MINIO_PORT ?? 9000),
     useSSL: process.env.MINIO_USE_SSL === 'true',
-    accessKey: process.env.MINIO_ACCESS_KEY ?? 'digital-twin',
-    secretKey: process.env.MINIO_SECRET_KEY ?? 'digital-twin-secret',
+    accessKey: this.accessKey,
+    secretKey: this.secretKey,
+    region: this.region,
+  });
+  private readonly publicClient = new Client({
+    endPoint:
+      process.env.MINIO_PUBLIC_ENDPOINT ??
+      process.env.MINIO_ENDPOINT ??
+      '127.0.0.1',
+    port: Number(process.env.MINIO_PUBLIC_PORT ?? process.env.MINIO_PORT ?? 9000),
+    useSSL:
+      (process.env.MINIO_PUBLIC_USE_SSL ?? process.env.MINIO_USE_SSL) ===
+      'true',
+    accessKey: this.accessKey,
+    secretKey: this.secretKey,
+    region: this.region,
   });
 
   async ping(): Promise<void> {
@@ -40,7 +58,7 @@ export class MinioService {
     partNumber: number,
     expiresSeconds = 24 * 60 * 60,
   ): Promise<string> {
-    return this.client.presignedUrl(
+    return this.publicClient.presignedUrl(
       'PUT',
       this.bucket,
       objectKey,
@@ -69,7 +87,7 @@ export class MinioService {
 
   /** 返回短时效下载地址，数据库和 API 永远只保存稳定 objectKey。 */
   presignGet(objectKey: string, expiresSeconds = 3_600): Promise<string> {
-    return this.client.presignedGetObject(
+    return this.publicClient.presignedGetObject(
       this.bucket,
       objectKey,
       expiresSeconds,
