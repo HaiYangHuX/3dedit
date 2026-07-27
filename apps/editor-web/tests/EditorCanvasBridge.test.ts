@@ -73,6 +73,34 @@ vi.mock('@digital-twin/three-engine', () => ({
 import EditorCanvas from '../src/components/EditorCanvas.vue';
 
 describe('EditorCanvas bridge', () => {
+  it('只在模型加载时渲染画布内 HUD 遮罩', async () => {
+    const document = createDefaultSceneDocument(
+      'project-1',
+      'scene-1',
+      '主场景',
+    );
+    const wrapper = mount(EditorCanvas, {
+      props: { document, modelLoading: false },
+    });
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="model-loading-overlay"]').exists()).toBe(
+      false,
+    );
+
+    await wrapper.setProps({ modelLoading: true });
+    const overlay = wrapper.get('[data-testid="model-loading-overlay"]');
+    expect(overlay.attributes('role')).toBe('status');
+    expect(overlay.attributes('aria-live')).toBe('polite');
+    expect(overlay.text()).toContain('模型加载中...');
+    expect(overlay.get('img').attributes('src')).toBe(
+      '/loading/hud-spinner.svg',
+    );
+    expect(overlay.get('img').attributes('aria-hidden')).toBe('true');
+    wrapper.unmount();
+    vi.clearAllMocks();
+  });
+
   it('加载文档、转发引擎事件并在卸载时对称释放', async () => {
     const document = createDefaultSceneDocument(
       'project-1',

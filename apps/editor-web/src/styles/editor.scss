@@ -1113,6 +1113,25 @@ button {
   overflow: hidden;
 }
 
+.editor-model-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  gap: 10px;
+  place-content: center;
+  justify-items: center;
+  color: #e2e8f0;
+  font-size: 12px;
+  background: rgb(7 10 19 / 72%);
+}
+
+.editor-model-loading__spinner {
+  display: block;
+  width: 80px;
+  height: 80px;
+}
+
 .canvas-error {
   position: absolute;
   inset: 0;

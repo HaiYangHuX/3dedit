@@ -27,8 +27,9 @@ const props = withDefaults(
   defineProps<{
     document: SceneDocument;
     gridSize?: number | null;
+    modelLoading?: boolean;
   }>(),
-  { gridSize: 0.5 },
+  { gridSize: 0.5, modelLoading: false },
 );
 const emit = defineEmits<{
   select: [selection: SelectionState];
@@ -372,5 +373,20 @@ defineExpose({
     @drop="dropSceneItem"
   >
     <div v-if="errorMessage" class="canvas-error">{{ errorMessage }}</div>
+    <div
+      v-if="modelLoading"
+      class="editor-model-loading"
+      data-testid="model-loading-overlay"
+      role="status"
+      aria-live="polite"
+    >
+      <img
+        class="editor-model-loading__spinner"
+        src="/loading/hud-spinner.svg"
+        alt=""
+        aria-hidden="true"
+      />
+      <strong>模型加载中...</strong>
+    </div>
   </div>
 </template>
