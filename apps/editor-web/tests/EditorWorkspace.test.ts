@@ -1,7 +1,8 @@
 import { createTestingPinia } from '@pinia/testing';
+import type { Asset } from '@digital-twin/api-contracts';
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ElMessageBox } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { useAssetStore } from '../src/stores/asset';
 import { useDocumentStore } from '../src/stores/document';
 
@@ -43,6 +44,16 @@ const commandMocks = vi.hoisted(() => {
   };
 });
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 vi.mock('../src/editor/useEditorCommands', () => ({
   useEditorCommands: vi.fn(() => commandMocks),
 }));
@@ -52,6 +63,7 @@ import EditorWorkspace from '../src/views/EditorWorkspace.vue';
 describe('EditorWorkspace', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    commandMocks.addAssetNode.mockResolvedValue(undefined);
   });
 
   it('呈现资源区、视口、场景区和状态栏', async () => {
@@ -222,8 +234,9 @@ describe('EditorWorkspace', () => {
         stubs: {
           EditorCanvas: {
             name: 'EditorCanvas',
-            props: ['document'],
-            template: '<div data-testid="editor-canvas" />',
+            props: ['document', 'modelLoading'],
+            template:
+              '<div data-testid="editor-canvas" :data-model-loading="String(modelLoading)" />',
           },
           RouterLink: { template: '<a><slot /></a>' },
         },
@@ -241,6 +254,8 @@ describe('EditorWorkspace', () => {
       lightType: 'point',
       position: [-2, 0.25, 3],
     });
+    await wrapper.vm.$nextTick();
+    expect(canvas.attributes('data-model-loading')).toBe('false');
     canvas.vm.$emit('scene-drop', {
       kind: 'asset',
       assetId: 'asset-1',
@@ -256,6 +271,138 @@ describe('EditorWorkspace', () => {
       { id: 'asset-1', name: '水泵', format: 'glb' },
       [1, 0, 2],
     );
+  });
+
+  it('模型添加完成前显示 loading，并等待所有并发操作结束', async () => {
+    const first = deferred<void>();
+    const second = deferred<void>();
+    commandMocks.addAssetNode
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(() => second.promise);
+    const wrapper = mount(EditorWorkspace, {
+      global: {
+        plugins: [createTestingPinia({ createSpy: vi.fn })],
+        stubs: {
+          EditorCanvas: {
+            name: 'EditorCanvas',
+            props: ['document', 'modelLoading'],
+            template:
+              '<div data-testid="editor-canvas" :data-model-loading="String(modelLoading)" />',
+          },
+          RouterLink: { template: '<a><slot /></a>' },
+        },
+      },
+    });
+    const canvas = wrapper.findComponent({ name: 'EditorCanvas' });
+    const payload = {
+      kind: 'asset',
+      assetId: 'asset-1',
+      name: '水泵',
+      format: 'glb',
+      position: [1, 0, 2],
+    } as const;
+
+    canvas.vm.$emit('scene-drop', payload);
+    canvas.vm.$emit('scene-drop', { ...payload, assetId: 'asset-2' });
+    await wrapper.vm.$nextTick();
+    expect(canvas.attributes('data-model-loading')).toBe('true');
+
+    first.resolve();
+    await flushPromises();
+    expect(canvas.attributes('data-model-loading')).toBe('true');
+
+    second.resolve();
+    await flushPromises();
+    expect(canvas.attributes('data-model-loading')).toBe('false');
+  });
+
+  it('模型添加失败后关闭 loading 并沿用错误提示', async () => {
+    const operation = deferred<void>();
+    commandMocks.addAssetNode.mockImplementationOnce(() => operation.promise);
+    const errorSpy = vi
+      .spyOn(ElMessage, 'error')
+      .mockImplementation(() => ({}) as never);
+    const wrapper = mount(EditorWorkspace, {
+      global: {
+        plugins: [createTestingPinia({ createSpy: vi.fn })],
+        stubs: {
+          EditorCanvas: {
+            name: 'EditorCanvas',
+            props: ['document', 'modelLoading'],
+            template:
+              '<div data-testid="editor-canvas" :data-model-loading="String(modelLoading)" />',
+          },
+          RouterLink: { template: '<a><slot /></a>' },
+        },
+      },
+    });
+    const canvas = wrapper.findComponent({ name: 'EditorCanvas' });
+
+    canvas.vm.$emit('scene-drop', {
+      kind: 'asset',
+      assetId: 'asset-1',
+      name: '水泵',
+      format: 'glb',
+      position: [1, 0, 2],
+    });
+    await wrapper.vm.$nextTick();
+    expect(canvas.attributes('data-model-loading')).toBe('true');
+
+    operation.reject(new Error('模型解析失败'));
+    await flushPromises();
+    expect(canvas.attributes('data-model-loading')).toBe('false');
+    expect(errorSpy).toHaveBeenCalledWith('模型解析失败');
+    errorSpy.mockRestore();
+  });
+
+  it('双击模型卡复用相同的 loading 生命周期', async () => {
+    const operation = deferred<void>();
+    commandMocks.addAssetNode.mockImplementationOnce(() => operation.promise);
+    const pinia = createTestingPinia({ createSpy: vi.fn });
+    const assetStore = useAssetStore(pinia);
+    const model: Asset = {
+      id: 'asset-1',
+      name: '水泵',
+      kind: 'model',
+      format: 'glb',
+      status: 'ready',
+      category: '设备',
+      tags: [],
+      favorite: false,
+      sourceHash: 'a'.repeat(64),
+      metadata: {},
+      error: null,
+      retryCount: 0,
+      thumbnailUrl: null,
+      sourceSize: 1024,
+      referenceCount: 0,
+      createdAt: '2026-07-16T08:00:00.000Z',
+      updatedAt: '2026-07-16T08:00:00.000Z',
+    };
+    assetStore.assets = [model];
+    const wrapper = mount(EditorWorkspace, {
+      global: {
+        plugins: [pinia],
+        stubs: {
+          EditorCanvas: {
+            name: 'EditorCanvas',
+            props: ['document', 'modelLoading'],
+            template:
+              '<div data-testid="editor-canvas" :data-model-loading="String(modelLoading)" />',
+          },
+          RouterLink: { template: '<a><slot /></a>' },
+        },
+      },
+    });
+    const canvas = wrapper.findComponent({ name: 'EditorCanvas' });
+
+    await wrapper.get('[data-asset-id="asset-1"]').trigger('dblclick');
+    expect(canvas.attributes('data-model-loading')).toBe('true');
+    expect(commandMocks.addAssetNode).toHaveBeenCalledWith(model, [0, 0, 0]);
+
+    operation.resolve();
+    await flushPromises();
+    expect(canvas.attributes('data-model-loading')).toBe('false');
   });
 
   it('把二级项选择交给 Canvas，并在模型 UUID 失效后清理 current', async () => {

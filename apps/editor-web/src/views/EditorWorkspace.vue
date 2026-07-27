@@ -70,6 +70,8 @@ const runtimeDiagnostics = ref<string[]>([]);
 const publication = ref<PublicationDetail>();
 const publishing = ref(false);
 const settingsUploading = ref(false);
+const pendingModelAdditions = ref(0);
+const modelLoading = computed(() => pendingModelAdditions.value > 0);
 const transformMode = ref<'translate' | 'rotate' | 'scale'>('translate');
 const renderStats = ref<RenderStats>({ fps: 0, drawCalls: 0 });
 const isPointerLock = ref(false);
@@ -224,10 +226,23 @@ function reloadScene(): void {
   void store.loadScene(props.sceneId).catch(() => undefined);
 }
 
+async function addModelAsset(
+  asset: Pick<Asset, 'id' | 'name' | 'format'>,
+  position: [number, number, number],
+): Promise<void> {
+  pendingModelAdditions.value += 1;
+  try {
+    await commands.addAssetNode(asset, position);
+  } finally {
+    // 每个请求独占一个计数，避免并发模型加载互相提前关闭状态。
+    pendingModelAdditions.value = Math.max(0, pendingModelAdditions.value - 1);
+  }
+}
+
 function activateAsset(asset: Asset): void {
-  void commands
-    .addAssetNode(asset, [0, 0, 0])
-    .catch((reason) => showEditorError(reason, '添加模型失败'));
+  void addModelAsset(asset, [0, 0, 0]).catch((reason) =>
+    showEditorError(reason, '添加模型失败'),
+  );
 }
 
 function beginPaletteDrag(
@@ -239,16 +254,14 @@ function beginPaletteDrag(
 
 function dropSceneItem(payload: ScenePaletteDropPayload): void {
   if (payload.kind === 'asset') {
-    void commands
-      .addAssetNode(
-        {
-          id: payload.assetId,
-          name: payload.name,
-          format: payload.format,
-        },
-        payload.position,
-      )
-      .catch((reason) => showEditorError(reason, '添加模型失败'));
+    void addModelAsset(
+      {
+        id: payload.assetId,
+        name: payload.name,
+        format: payload.format,
+      },
+      payload.position,
+    ).catch((reason) => showEditorError(reason, '添加模型失败'));
     return;
   }
 
@@ -675,6 +688,7 @@ async function copyText(value: string): Promise<void> {
       <EditorCanvas
         ref="canvas"
         :document="document"
+        :model-loading="modelLoading"
         @select="changeCanvasSelection"
         @transform-commit="commitTransform"
         @scene-drop="dropSceneItem"
