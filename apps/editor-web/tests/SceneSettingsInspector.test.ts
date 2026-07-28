@@ -1,7 +1,7 @@
 import { createDefaultSceneDocument } from '@digital-twin/scene-schema';
 import { BUILTIN_ENVIRONMENT_ASSETS } from '@digital-twin/three-engine';
 import { mount } from '@vue/test-utils';
-import { ElOption, ElSelect, ElSlider } from 'element-plus';
+import { ElInputNumber, ElOption, ElSelect, ElSlider } from 'element-plus';
 import { describe, expect, it } from 'vitest';
 import SceneSettingsInspector from '../src/components/editor/SceneSettingsInspector.vue';
 
@@ -52,6 +52,18 @@ describe('SceneSettingsInspector', () => {
     expect(
       wrapper.get('[data-testid="exposure"]').attributes('aria-valuemin'),
     ).toBe('0');
+    expect(
+      wrapper
+        .get('[data-testid="exposure"]')
+        .findComponent(ElSlider)
+        .props('showInputControls'),
+    ).toBe(false);
+    expect(
+      wrapper
+        .get('[data-testid="fog-density"]')
+        .findComponent(ElInputNumber)
+        .props('controls'),
+    ).toBe(false);
   });
 
   it('只在匹配类型下显示背景、雾和天气条件字段', async () => {

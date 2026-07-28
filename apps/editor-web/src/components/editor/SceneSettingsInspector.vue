@@ -281,6 +281,7 @@ function selectBuiltinEnvironment(
         :max="5"
         :step="0.1"
         show-input
+        :show-input-controls="false"
         @update:model-value="setSliderDraft('exposure', $event)"
         @change="commitSlider('exposure', $event)"
       />
@@ -352,6 +353,7 @@ function selectBuiltinEnvironment(
           :max="1"
           :step="0.1"
           show-input
+          :show-input-controls="false"
           @update:model-value="setSliderDraft('backgroundBlurriness', $event)"
           @change="commitSlider('backgroundBlurriness', $event)"
         />
@@ -365,6 +367,7 @@ function selectBuiltinEnvironment(
           :max="6"
           :step="0.1"
           show-input
+          :show-input-controls="false"
           @update:model-value="setSliderDraft('backgroundIntensity', $event)"
           @change="commitSlider('backgroundIntensity', $event)"
         />
@@ -478,7 +481,7 @@ function selectBuiltinEnvironment(
           :max="1000"
           :step="2"
           :precision="2"
-          controls-position="right"
+          :controls="false"
           @change="commitNumber('fogNear', $event)"
         />
         <ElInputNumber
@@ -488,7 +491,7 @@ function selectBuiltinEnvironment(
           :max="1000"
           :step="2"
           :precision="2"
-          controls-position="right"
+          :controls="false"
           @change="commitNumber('fogFar', $event)"
         />
       </div>
@@ -505,7 +508,7 @@ function selectBuiltinEnvironment(
         :max="5"
         :step="0.01"
         :precision="3"
-        controls-position="right"
+        :controls="false"
         @change="commitNumber('fogDensity', $event)"
       />
     </div>
@@ -563,6 +566,7 @@ function selectBuiltinEnvironment(
           :max="100000"
           :step="10"
           show-input
+          :show-input-controls="false"
           @update:model-value="setSliderDraft('weatherCount', $event)"
           @change="commitSlider('weatherCount', $event)"
         />
@@ -575,6 +579,7 @@ function selectBuiltinEnvironment(
           :max="1.5"
           :step="0.1"
           show-input
+          :show-input-controls="false"
           @update:model-value="setSliderDraft('weatherSpeed', $event)"
           @change="commitSlider('weatherSpeed', $event)"
         />
@@ -587,6 +592,7 @@ function selectBuiltinEnvironment(
           :max="1"
           :step="0.1"
           show-input
+          :show-input-controls="false"
           @update:model-value="setSliderDraft('weatherOpacity', $event)"
           @change="commitSlider('weatherOpacity', $event)"
         />
@@ -599,6 +605,7 @@ function selectBuiltinEnvironment(
           :max="2"
           :step="0.1"
           show-input
+          :show-input-controls="false"
           @update:model-value="setSliderDraft('weatherSize', $event)"
           @change="commitSlider('weatherSize', $event)"
         />
@@ -611,6 +618,7 @@ function selectBuiltinEnvironment(
           :max="500"
           :step="10"
           show-input
+          :show-input-controls="false"
           @update:model-value="setSliderDraft('weatherArea', $event)"
           @change="commitSlider('weatherArea', $event)"
         />
@@ -623,6 +631,7 @@ function selectBuiltinEnvironment(
           :max="300"
           :step="5"
           show-input
+          :show-input-controls="false"
           @update:model-value="setSliderDraft('weatherHeight', $event)"
           @change="commitSlider('weatherHeight', $event)"
         />
