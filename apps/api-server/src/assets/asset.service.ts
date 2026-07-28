@@ -23,6 +23,7 @@ type AssetRow = Prisma.AssetGetPayload<{
   include: {
     files: true;
     activeFile: true;
+    activeCoverFile: true;
     coverAsset: { include: { files: true; activeFile: true } };
   };
 }>;
@@ -99,6 +100,7 @@ export class AssetService {
         include: {
           files: true,
           activeFile: true,
+          activeCoverFile: true,
           coverAsset: { include: { files: true, activeFile: true } },
         },
         orderBy: { updatedAt: 'desc' },
@@ -127,6 +129,7 @@ export class AssetService {
         include: {
           files: true,
           activeFile: true,
+          activeCoverFile: true,
           coverAsset: { include: { files: true, activeFile: true } },
         },
       }),
@@ -185,6 +188,12 @@ export class AssetService {
   ): Promise<Asset> {
     const files = asset.files ?? [];
     const thumbnail = files.find((file) => file.role === 'thumbnail');
+    const ownCover = files
+      .filter((file) => file.role === 'cover')
+      .sort(
+        (first, second) =>
+          second.createdAt.getTime() - first.createdAt.getTime(),
+      )[0];
     // 自定义封面优先返回原图源文件；未配置封面时才回退模型解析出的缩略图。
     const coverFiles =
       asset.coverAsset &&
@@ -192,6 +201,8 @@ export class AssetService {
         ? asset.coverAsset.files
         : undefined;
     const coverThumbnail =
+      asset.activeCoverFile ??
+      ownCover ??
       asset.coverAsset?.activeFile ??
       coverFiles?.find((file) => file.role === 'source') ??
       coverFiles?.find((file) => file.role === 'thumbnail');

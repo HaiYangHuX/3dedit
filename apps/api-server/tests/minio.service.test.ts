@@ -3,14 +3,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const { ClientMock, clients } = vi.hoisted(() => {
   const clients: Array<{
     bucketExists: ReturnType<typeof vi.fn>;
+    abortMultipartUpload: ReturnType<typeof vi.fn>;
     presignedUrl: ReturnType<typeof vi.fn>;
     presignedGetObject: ReturnType<typeof vi.fn>;
+    statObject: ReturnType<typeof vi.fn>;
   }> = [];
   const ClientMock = vi.fn(function () {
     const client = {
       bucketExists: vi.fn().mockResolvedValue(true),
+      abortMultipartUpload: vi.fn().mockResolvedValue(undefined),
       presignedUrl: vi.fn().mockResolvedValue('signed-put-url'),
       presignedGetObject: vi.fn().mockResolvedValue('signed-get-url'),
+      statObject: vi.fn().mockResolvedValue({}),
     };
     clients.push(client);
     return client;
@@ -46,9 +50,8 @@ describe('MinioService', () => {
   });
 
   it('uses the internal MinIO endpoint for storage and the public endpoint for presigned URLs', async () => {
-    const { MinioService } = await import(
-      '../src/infrastructure/minio.service.js'
-    );
+    const { MinioService } =
+      await import('../src/infrastructure/minio.service.js');
     const service = new MinioService();
 
     expect(ClientMock).toHaveBeenNthCalledWith(
@@ -79,6 +82,35 @@ describe('MinioService', () => {
       'assets/model.glb',
       60,
       { uploadId: 'upload-id', partNumber: '2' },
+    );
+  });
+
+  it('treats a missing multipart upload as already aborted', async () => {
+    const { MinioService } =
+      await import('../src/infrastructure/minio.service.js');
+    const service = new MinioService();
+    clients[0]!.abortMultipartUpload.mockRejectedValue({
+      code: 'NoSuchUpload',
+    });
+
+    await expect(
+      service.abortMultipartUpload('assets/model.glb', 'upload-id'),
+    ).resolves.toBeUndefined();
+  });
+
+  it('distinguishes an existing object from a missing object', async () => {
+    const { MinioService } =
+      await import('../src/infrastructure/minio.service.js');
+    const service = new MinioService();
+
+    await expect(service.objectExists('assets/model.glb')).resolves.toBe(true);
+    clients[0]!.statObject.mockRejectedValueOnce({ code: 'NoSuchKey' });
+    await expect(service.objectExists('assets/missing.glb')).resolves.toBe(
+      false,
+    );
+    clients[0]!.statObject.mockRejectedValueOnce(new Error('minio offline'));
+    await expect(service.objectExists('assets/unknown.glb')).rejects.toThrow(
+      'minio offline',
     );
   });
 });

@@ -52,6 +52,10 @@ describe('ProjectDetailView', () => {
     });
     await Promise.resolve();
 
+    const sceneActions = wrapper.get('.scene-card__actions');
+    expect(sceneActions.text()).toContain('搭建场景');
+    expect(sceneActions.text()).not.toContain('进入编辑器');
+    expect(sceneActions.findAll('.el-icon')).toHaveLength(0);
     expect(wrapper.text()).toContain('主厂房');
     expect(wrapper.text()).toContain('主厂房设备总览');
     expect(wrapper.find('.project-detail-stats').exists()).toBe(false);

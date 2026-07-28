@@ -43,52 +43,55 @@ model Scene {
 }
 
 model Asset {
-  id            String            @id @default(cuid())
-  name          String
-  code          String            @default("")
-  description   String            @default("")
-  kind          String
-  format        String
-  status        String            @default("uploading")
-  sourceHash    String            @unique
-  category      String            @default("未分类")
-  tags          String[]          @default([])
-  favorite      Boolean           @default(false)
-  version       String            @default("1.0.0")
-  author        String            @default("")
-  manufacturer  String            @default("")
-  license       String            @default("内部资产")
-  unit          String            @default("m")
-  scale         Float             @default(1)
-  visibility    String            @default("private")
-  coverAssetId  String?
-  coverAsset    Asset?            @relation("AssetCover", fields: [coverAssetId], references: [id], onDelete: SetNull)
-  coveredAssets Asset[]           @relation("AssetCover")
-  error         String?
-  retryCount    Int               @default(0)
-  activeFileId  String?           @unique
-  activeFile    AssetFile?        @relation("ActiveAssetFile", fields: [activeFileId], references: [id], onDelete: SetNull)
-  metadata      Json              @default("{}")
-  files         AssetFile[]       @relation("AssetFiles")
-  uploads       UploadSession[]
-  dependencies  AssetDependency[] @relation("AssetDependencies")
-  dependents    AssetDependency[] @relation("AssetDependents")
-  jobs          ProcessingJob[]
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
+  id                String            @id @default(cuid())
+  name              String
+  code              String            @default("")
+  description       String            @default("")
+  kind              String
+  format            String
+  status            String            @default("uploading")
+  sourceHash        String            @unique
+  category          String            @default("未分类")
+  tags              String[]          @default([])
+  favorite          Boolean           @default(false)
+  version           String            @default("1.0.0")
+  author            String            @default("")
+  manufacturer      String            @default("")
+  license           String            @default("内部资产")
+  unit              String            @default("m")
+  scale             Float             @default(1)
+  visibility        String            @default("private")
+  coverAssetId      String?
+  coverAsset        Asset?            @relation("AssetCover", fields: [coverAssetId], references: [id], onDelete: SetNull)
+  coveredAssets     Asset[]           @relation("AssetCover")
+  error             String?
+  retryCount        Int               @default(0)
+  activeFileId      String?           @unique
+  activeFile        AssetFile?        @relation("ActiveAssetFile", fields: [activeFileId], references: [id], onDelete: SetNull)
+  activeCoverFileId String?           @unique
+  activeCoverFile   AssetFile?        @relation("ActiveAssetCoverFile", fields: [activeCoverFileId], references: [id], onDelete: SetNull)
+  metadata          Json              @default("{}")
+  files             AssetFile[]       @relation("AssetFiles")
+  uploads           UploadSession[]
+  dependencies      AssetDependency[] @relation("AssetDependencies")
+  dependents        AssetDependency[] @relation("AssetDependents")
+  jobs              ProcessingJob[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 }
 
 model AssetFile {
-  id        String   @id @default(cuid())
-  assetId   String
-  asset     Asset    @relation("AssetFiles", fields: [assetId], references: [id], onDelete: Cascade)
-  activeFor Asset?   @relation("ActiveAssetFile")
-  role      String
-  objectKey String   @unique
-  mimeType  String
-  size      BigInt
-  checksum  String
-  createdAt DateTime @default(now())
+  id             String   @id @default(cuid())
+  assetId        String
+  asset          Asset    @relation("AssetFiles", fields: [assetId], references: [id], onDelete: Cascade)
+  activeFor      Asset?   @relation("ActiveAssetFile")
+  activeCoverFor Asset?   @relation("ActiveAssetCoverFile")
+  role           String
+  objectKey      String   @unique
+  mimeType       String
+  size           BigInt
+  checksum       String
+  createdAt      DateTime @default(now())
 
   @@index([assetId, role])
 }
@@ -102,6 +105,7 @@ model UploadSession {
   size      BigInt
   sha256    String
   format    String
+  purpose   String   @default("source")
   metadata  Json     @default("{}")
   objectKey String   @unique
   uploadId  String

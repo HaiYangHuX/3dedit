@@ -53,6 +53,7 @@ export interface UploadFileOptions {
   category?: string;
   tags?: string[];
   assetId?: string;
+  purpose?: 'source' | 'cover';
   pollInterval?: number;
 }
 
@@ -100,6 +101,32 @@ export const useAssetStore = defineStore('asset', () => {
     pageSize: 24,
   });
   const controllers = new Map<string, AbortController>();
+  const cancellationRequests = new Map<string, Promise<void>>();
+
+  function cancelRemoteUpload(task: UploadTask): Promise<void> {
+    const pending = cancellationRequests.get(task.id);
+    if (pending) return pending;
+    if (!task.uploadId) return Promise.resolve();
+
+    task.error = '';
+    const request = assetApi
+      .cancelUpload(task.uploadId)
+      .then(() => {
+        task.status = 'cancelled';
+        task.error = '上传已取消';
+      })
+      .catch((reason: unknown) => {
+        task.status = 'uploading';
+        const message = reason instanceof Error ? reason.message : '未知错误';
+        task.error = `取消失败：${message}`;
+        throw reason;
+      })
+      .finally(() => {
+        cancellationRequests.delete(task.id);
+      });
+    cancellationRequests.set(task.id, request);
+    return request;
+  }
 
   async function loadAssets(): Promise<void> {
     loading.value = true;
@@ -224,6 +251,7 @@ export const useAssetStore = defineStore('asset', () => {
         category: options.category,
         tags: options.tags,
         assetId: options.assetId,
+        purpose: options.purpose,
       });
       task.uploadId = session.id;
       task.assetId = session.assetId;
@@ -235,14 +263,19 @@ export const useAssetStore = defineStore('asset', () => {
           task.progress = 10 + Math.round(percent * 0.85);
         },
       });
-      await assetApi.completeUpload(session.id, { parts });
-      task.status = 'processing';
+      const completion = await assetApi.completeUpload(session.id, { parts });
       task.progress = 96;
-      const detail = await pollUntilSettled(
-        session.assetId,
-        options.pollInterval ?? 1_200,
-        controller.signal,
-      );
+      const detail =
+        completion.status === 'ready'
+          ? await assetApi.get(session.assetId)
+          : await (async () => {
+              task.status = 'processing';
+              return pollUntilSettled(
+                session.assetId,
+                options.pollInterval ?? 1_200,
+                controller.signal,
+              );
+            })();
       task.status = 'ready';
       task.progress = 100;
       upsertAsset(summaryOf(detail));
@@ -250,14 +283,15 @@ export const useAssetStore = defineStore('asset', () => {
       return task;
     } catch (reason) {
       if (reason instanceof DOMException && reason.name === 'AbortError') {
-        task.status = 'cancelled';
-        task.error = '上传已取消';
+        if (task.uploadId) {
+          await cancelRemoteUpload(task);
+        } else {
+          task.status = 'cancelled';
+          task.error = '上传已取消';
+        }
       } else {
         task.status = 'failed';
         task.error = reason instanceof Error ? reason.message : '资源上传失败';
-      }
-      if (task.uploadId && task.status === 'cancelled') {
-        await assetApi.cancelUpload(task.uploadId).catch(() => undefined);
       }
       throw reason;
     } finally {
@@ -266,7 +300,15 @@ export const useAssetStore = defineStore('asset', () => {
   }
 
   function cancelUploadTask(taskId: string): void {
-    controllers.get(taskId)?.abort();
+    const controller = controllers.get(taskId);
+    if (controller) {
+      controller.abort();
+      return;
+    }
+    const task = uploadTasks.value.find((candidate) => candidate.id === taskId);
+    if (task?.status === 'uploading' && task.uploadId) {
+      void cancelRemoteUpload(task).catch(() => undefined);
+    }
   }
 
   async function retryAsset(id: string): Promise<void> {

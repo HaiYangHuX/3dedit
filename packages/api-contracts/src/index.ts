@@ -16,6 +16,7 @@ export {
   updateAssetInputSchema,
   uploadSessionSchema,
   uploadCompletionSchema,
+  uploadPurposeSchema,
 } from './asset.js';
 export type {
   AnalyzeAssetJobData,
@@ -33,6 +34,7 @@ export type {
   UpdateAssetInput,
   UploadSession,
   UploadCompletion,
+  UploadPurpose,
 } from './asset.js';
 export {
   copyProjectInputSchema,

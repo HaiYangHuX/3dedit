@@ -1,9 +1,6 @@
 <script setup lang="ts">
 import type { Asset, AssetStatus } from '@digital-twin/api-contracts';
 import {
-  Delete,
-  Download,
-  EditPen,
   Grid,
   List,
   Plus,
@@ -12,7 +9,6 @@ import {
   Star,
   StarFilled,
   UploadFilled,
-  View,
 } from '@element-plus/icons-vue';
 import {
   ElAlert,
@@ -20,6 +16,7 @@ import {
   ElCard,
   ElDrawer,
   ElEmpty,
+  ElImage,
   ElInput,
   ElMessage,
   ElMessageBox,
@@ -312,10 +309,11 @@ function formatDate(value: string): string {
           @keydown.enter="openDetail(asset)"
           @keydown.space.prevent="openDetail(asset)"
         >
-          <img
+          <ElImage
             v-if="coverUrl(asset)"
             :src="coverUrl(asset) as string"
             :alt="asset.name"
+            fit="contain"
           />
           <span v-else>{{ asset.format.toUpperCase() }}</span>
           <ElTag class="asset-kind" effect="dark">{{
@@ -359,20 +357,14 @@ function formatDate(value: string): string {
             ><span>{{ asset.referenceCount }} 引用</span>
           </div>
           <div class="asset-actions">
-            <ElButton size="small" :icon="View" @click="openDetail(asset)"
-              >详情</ElButton
-            ><ElButton size="small" :icon="EditPen" @click="openEdit(asset)"
-              >编辑</ElButton
-            ><ElButton
-              size="small"
-              :icon="Download"
-              @click="downloadSource(asset)"
+            <ElButton size="small" @click="openDetail(asset)">详情</ElButton
+            ><ElButton size="small" @click="openEdit(asset)">编辑</ElButton
+            ><ElButton size="small" @click="downloadSource(asset)"
               >下载</ElButton
             ><ElButton
               size="small"
               type="danger"
               plain
-              :icon="Delete"
               @click="deleteAsset(asset)"
               >删除</ElButton
             >
@@ -389,10 +381,11 @@ function formatDate(value: string): string {
             type="button"
             @click="openDetail(assetRow(row))"
           >
-            <img
+            <ElImage
               v-if="coverUrl(assetRow(row))"
               :src="coverUrl(assetRow(row)) as string"
               alt=""
+              fit="contain"
             /><span
               ><strong>{{ assetRow(row).name }}</strong
               ><small>{{ assetRow(row).code || '未设置编码' }}</small></span

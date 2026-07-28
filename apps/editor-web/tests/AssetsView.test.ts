@@ -1,5 +1,6 @@
 import type { Asset, AssetDetail } from '@digital-twin/api-contracts';
 import { flushPromises, mount } from '@vue/test-utils';
+import { ElImage } from 'element-plus';
 import { createPinia, setActivePinia } from 'pinia';
 import { describe, expect, it, vi } from 'vitest';
 import { useAssetStore } from '../src/stores/asset';
@@ -26,6 +27,38 @@ const asset: Asset = {
 };
 
 describe('AssetsView', () => {
+  it('使用 Element 图片组件完整显示网格和表格封面', async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const store = useAssetStore();
+    const coverUrl = 'https://assets.test/pump-cover.png';
+    store.assets = [{ ...asset, coverUrl }];
+    store.total = 1;
+    vi.spyOn(store, 'loadAssets').mockResolvedValue();
+
+    const wrapper = mount(AssetsView, {
+      global: {
+        plugins: [pinia],
+        stubs: {
+          Teleport: true,
+          AssetPreviewCanvas: { template: '<div />' },
+          ElSelect: { template: '<select><slot /></select>' },
+          ElOption: { template: '<option />' },
+        },
+      },
+    });
+    await flushPromises();
+
+    const gridCover = wrapper.getComponent(ElImage);
+    expect(gridCover.props('src')).toBe(coverUrl);
+    expect(gridCover.props('fit')).toBe('contain');
+
+    await wrapper.findAll('.view-switch button')[1]!.trigger('click');
+    const tableCover = wrapper.getComponent(ElImage);
+    expect(tableCover.props('src')).toBe(coverUrl);
+    expect(tableCover.props('fit')).toBe('contain');
+  });
+
   it('渲染上传区、筛选工具和真实资源卡片', () => {
     const pinia = createPinia();
     setActivePinia(pinia);
@@ -54,6 +87,9 @@ describe('AssetsView', () => {
     expect(wrapper.text()).toContain('离心泵');
     expect(wrapper.text()).toContain('1,200 顶点');
     expect(wrapper.get('[aria-label="搜索资源"]')).toBeTruthy();
+    const assetActions = wrapper.get('.asset-actions');
+    expect(assetActions.findAll('.el-button')).toHaveLength(4);
+    expect(assetActions.findAll('.el-icon')).toHaveLength(0);
   });
 
   it('详情只读，编辑入口打开与添加相同的资源表单', async () => {

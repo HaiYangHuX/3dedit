@@ -112,6 +112,43 @@ describe('资源上传 API 契约', () => {
     ).toThrow();
   });
 
+  it('封面上传必须绑定已有资源且只能使用图片格式', () => {
+    expect(() =>
+      createUploadInputSchema.parse({
+        fileName: 'cover.png',
+        size: 1_024,
+        sha256,
+        mimeType: 'image/png',
+        purpose: 'cover',
+      }),
+    ).toThrow();
+    expect(() =>
+      createUploadInputSchema.parse({
+        fileName: 'cover.glb',
+        size: 1_024,
+        sha256,
+        mimeType: 'model/gltf-binary',
+        purpose: 'cover',
+        assetId: 'asset-1',
+      }),
+    ).toThrow();
+    expect(
+      createUploadInputSchema.parse({
+        fileName: 'cover.webp',
+        size: 1_024,
+        sha256,
+        mimeType: 'image/webp',
+        purpose: 'cover',
+        assetId: 'asset-1',
+      }),
+    ).toMatchObject({
+      purpose: 'cover',
+      assetId: 'asset-1',
+      format: 'webp',
+      kind: 'image',
+    });
+  });
+
   it('约束上传完成后的任务回执', () => {
     expect(
       uploadCompletionSchema.parse({
@@ -121,6 +158,17 @@ describe('资源上传 API 契约', () => {
         status: 'queued',
       }),
     ).toMatchObject({ assetId: 'asset-1', status: 'queued' });
+    expect(
+      uploadCompletionSchema.parse({
+        assetId: 'asset-1',
+        fileId: 'cover-file-1',
+        status: 'ready',
+      }),
+    ).toEqual({
+      assetId: 'asset-1',
+      fileId: 'cover-file-1',
+      status: 'ready',
+    });
     expect(
       analyzeAssetJobDataSchema.parse({
         assetId: 'asset-1',

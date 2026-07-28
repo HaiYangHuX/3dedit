@@ -27,7 +27,9 @@ export class MinioService {
       process.env.MINIO_PUBLIC_ENDPOINT ??
       process.env.MINIO_ENDPOINT ??
       '127.0.0.1',
-    port: Number(process.env.MINIO_PUBLIC_PORT ?? process.env.MINIO_PORT ?? 9000),
+    port: Number(
+      process.env.MINIO_PUBLIC_PORT ?? process.env.MINIO_PORT ?? 9000,
+    ),
     useSSL:
       (process.env.MINIO_PUBLIC_USE_SSL ?? process.env.MINIO_USE_SSL) ===
       'true',
@@ -81,8 +83,34 @@ export class MinioService {
     );
   }
 
-  abortMultipartUpload(objectKey: string, uploadId: string): Promise<void> {
-    return this.client.abortMultipartUpload(this.bucket, objectKey, uploadId);
+  async abortMultipartUpload(
+    objectKey: string,
+    uploadId: string,
+  ): Promise<void> {
+    try {
+      await this.client.abortMultipartUpload(this.bucket, objectKey, uploadId);
+    } catch (error) {
+      const code =
+        error && typeof error === 'object' && 'code' in error
+          ? String(error.code)
+          : '';
+      if (code === 'NoSuchUpload') return;
+      throw error;
+    }
+  }
+
+  async objectExists(objectKey: string): Promise<boolean> {
+    try {
+      await this.client.statObject(this.bucket, objectKey);
+      return true;
+    } catch (error) {
+      const code =
+        error && typeof error === 'object' && 'code' in error
+          ? String(error.code)
+          : '';
+      if (code === 'NotFound' || code === 'NoSuchKey') return false;
+      throw error;
+    }
   }
 
   /** 返回短时效下载地址，数据库和 API 永远只保存稳定 objectKey。 */

@@ -33,6 +33,9 @@ const store = useAssetStore();
 const submitting = ref(false);
 const sourceFile = ref<File | null>(null);
 const coverFile = ref<File | null>(null);
+const createdAssetId = ref<string | null>(null);
+const uploadedSourceFile = ref<File | null>(null);
+const createdMetadataSnapshot = ref<string | null>(null);
 const isEdit = computed(() => Boolean(props.asset?.id));
 
 const form = reactive({
@@ -70,6 +73,9 @@ const coverName = computed(() => {
 function resetForm(asset: Asset | null): void {
   sourceFile.value = null;
   coverFile.value = null;
+  createdAssetId.value = null;
+  uploadedSourceFile.value = null;
+  createdMetadataSnapshot.value = null;
   form.name = asset?.name ?? '';
   form.code = asset?.code ?? '';
   form.category = asset?.category ?? '设备模型';
@@ -107,7 +113,7 @@ function close(): void {
   if (!submitting.value) visible.value = false;
 }
 
-function metadataInput(coverAssetId?: string | null) {
+function metadataInput() {
   return {
     name: form.name.trim(),
     code: form.code.trim(),
@@ -121,20 +127,14 @@ function metadataInput(coverAssetId?: string | null) {
     visibility: form.visibility,
     category: form.category.trim() || '未分类',
     tags: [],
-    ...(coverAssetId !== undefined ? { coverAssetId } : {}),
   };
 }
 
-async function uploadCover(): Promise<string | null> {
-  if (!coverFile.value) return null;
-  const coverTask = await store.uploadFile(coverFile.value, {
-    name: `${form.name.trim()}-封面`,
-    category: '资源封面',
-    version: '1.0.0',
+async function uploadCover(file: File, assetId: string): Promise<void> {
+  await store.uploadFile(file, {
+    assetId,
+    purpose: 'cover',
   });
-  const coverAssetId = coverTask.assetId ?? null;
-  if (!coverAssetId) throw new Error('封面上传完成但未返回资源编号');
-  return coverAssetId;
 }
 
 async function submit(): Promise<void> {
@@ -148,24 +148,52 @@ async function submit(): Promise<void> {
   }
   submitting.value = true;
   try {
-    const coverAssetId = await uploadCover();
-    if (sourceFile.value) {
-      await store.uploadFile(sourceFile.value, {
-        ...metadataInput(coverAssetId ?? (isEdit.value ? undefined : null)),
-        assetId: isEdit.value ? props.asset?.id : undefined,
+    const metadata = metadataInput();
+    const metadataSnapshot = JSON.stringify(metadata);
+    const selectedSource = sourceFile.value;
+    const selectedCover = coverFile.value;
+    let targetAssetId = props.asset?.id ?? createdAssetId.value ?? undefined;
+    const sourceNeedsUpload =
+      selectedSource &&
+      (isEdit.value ||
+        !createdAssetId.value ||
+        selectedSource !== uploadedSourceFile.value);
+    if (sourceNeedsUpload) {
+      const sourceTask = await store.uploadFile(selectedSource, {
+        ...metadata,
+        assetId: isEdit.value
+          ? props.asset?.id
+          : (createdAssetId.value ?? undefined),
       });
+      targetAssetId = sourceTask.assetId;
+      if (!targetAssetId) throw new Error('模型上传完成但未返回资源编号');
+      if (!isEdit.value) {
+        createdAssetId.value = targetAssetId;
+        uploadedSourceFile.value = selectedSource;
+        createdMetadataSnapshot.value = metadataSnapshot;
+      }
     } else if (isEdit.value && props.asset) {
       // 编辑元数据时不创建上传任务；只有选了文件才走替换解析流程。
-      await store.updateAsset(props.asset.id, metadataInput(coverAssetId));
+      await store.updateAsset(props.asset.id, metadata);
+    } else if (
+      createdAssetId.value &&
+      createdMetadataSnapshot.value !== metadataSnapshot
+    ) {
+      await store.updateAsset(createdAssetId.value, metadata);
+      createdMetadataSnapshot.value = metadataSnapshot;
+    }
+    if (selectedCover) {
+      if (!targetAssetId) throw new Error('模型上传完成但未返回资源编号');
+      await uploadCover(selectedCover, targetAssetId);
     }
     ElMessage.success(
-      sourceFile.value
+      selectedSource
         ? isEdit.value
           ? '模型文件已提交替换'
           : '资源已加入解析队列'
         : '资源信息已更新',
     );
-    emit('saved', Boolean(sourceFile.value || coverFile.value));
+    emit('saved', Boolean(selectedSource || selectedCover));
     visible.value = false;
   } catch (reason) {
     ElMessage.error(reason instanceof Error ? reason.message : '资源保存失败');

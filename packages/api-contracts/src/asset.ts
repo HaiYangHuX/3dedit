@@ -32,11 +32,13 @@ export const assetStatusSchema = z.enum([
   'failed',
 ]);
 export const assetVisibilitySchema = z.enum(['private', 'team', 'public']);
+export const uploadPurposeSchema = z.enum(['source', 'cover']);
 
 export type AssetFormat = z.infer<typeof assetFormatSchema>;
 export type AssetKind = z.infer<typeof assetKindSchema>;
 export type AssetStatus = z.infer<typeof assetStatusSchema>;
 export type AssetVisibility = z.infer<typeof assetVisibilitySchema>;
+export type UploadPurpose = z.infer<typeof uploadPurposeSchema>;
 
 const modelFormats = new Set<AssetFormat>([
   'glb',
@@ -88,6 +90,7 @@ const uploadInputBaseSchema = z.object({
     .optional()
     .default([]),
   assetId: z.string().min(1).optional(),
+  purpose: uploadPurposeSchema.optional().default('source'),
 });
 
 export const createUploadInputSchema = uploadInputBaseSchema.transform(
@@ -96,6 +99,14 @@ export const createUploadInputSchema = uploadInputBaseSchema.transform(
     const parsedFormat = assetFormatSchema.safeParse(extension);
     if (!parsedFormat.success) {
       context.addIssue({ code: 'custom', message: '不支持的资源文件格式' });
+      return z.NEVER;
+    }
+    if (input.purpose === 'cover' && !input.assetId) {
+      context.addIssue({ code: 'custom', message: '封面上传必须绑定资源编号' });
+      return z.NEVER;
+    }
+    if (input.purpose === 'cover' && !imageFormats.has(parsedFormat.data)) {
+      context.addIssue({ code: 'custom', message: '封面仅支持图片格式' });
       return z.NEVER;
     }
     const baseName = input.fileName.replace(/\.[^.]+$/, '');
@@ -248,12 +259,19 @@ export const uploadSessionSchema = z.object({
   expiresAt: z.string().datetime({ offset: true }),
 });
 
-export const uploadCompletionSchema = z.object({
-  assetId: z.string().min(1),
-  fileId: z.string().min(1),
-  jobId: z.string().min(1),
-  status: z.literal('queued'),
-});
+export const uploadCompletionSchema = z.discriminatedUnion('status', [
+  z.object({
+    assetId: z.string().min(1),
+    fileId: z.string().min(1),
+    jobId: z.string().min(1),
+    status: z.literal('queued'),
+  }),
+  z.object({
+    assetId: z.string().min(1),
+    fileId: z.string().min(1),
+    status: z.literal('ready'),
+  }),
+]);
 
 /** API 与 Worker 共享同一队列负载，防止异步边界发生静默字段漂移。 */
 export const analyzeAssetJobDataSchema = z.object({

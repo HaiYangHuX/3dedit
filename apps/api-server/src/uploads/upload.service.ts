@@ -14,6 +14,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import type { Prisma, UploadSession as UploadSessionRow } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
 import { MinioService } from '../infrastructure/minio.service.js';
 import { QueueService } from '../infrastructure/queue.service.js';
 import { PrismaService } from '../infrastructure/prisma.service.js';
@@ -22,6 +23,7 @@ const MEBIBYTE = 1024 * 1024;
 const MIN_PART_SIZE = 5 * MEBIBYTE;
 const MAX_PART_COUNT = 10_000;
 const SESSION_TTL_MS = 24 * 60 * 60 * 1_000;
+const COMPLETION_LEASE_MS = 5 * 60 * 1_000;
 
 export const UPLOAD_CLOCK = Symbol('UPLOAD_CLOCK');
 
@@ -132,6 +134,7 @@ export class UploadService {
   ) {}
 
   async create(input: CreateUploadInput): Promise<UploadSession> {
+    const isCover = input.purpose === 'cover';
     const isReplacement = Boolean(input.assetId);
     let asset: {
       id: string;
@@ -183,15 +186,17 @@ export class UploadService {
 
     const safeName = sanitizeFileName(input.fileName);
     // 替换上传不能覆盖仍在使用的源对象；仅同名冲突时追加时间戳形成候选文件。
-    const storedName =
-      asset.activeFile?.objectKey === `assets/${asset.id}/source/${safeName}`
+    const storedName = isCover
+      ? `${randomUUID()}-${safeName}`
+      : asset.activeFile?.objectKey === `assets/${asset.id}/source/${safeName}`
         ? `${this.now().getTime()}-${safeName}`
         : safeName;
-    const objectKey = `assets/${asset.id}/source/${storedName}`;
+    const objectKey = `assets/${asset.id}/${isCover ? 'cover' : 'source'}/${storedName}`;
     const partSize = calculatePartSize(input.size);
     const partCount = Math.ceil(input.size / partSize);
     const expiresAt = new Date(this.now().getTime() + SESSION_TTL_MS);
     let uploadId: string | undefined;
+    let sessionId: string | undefined;
 
     try {
       uploadId = await this.minio.createMultipartUpload(
@@ -206,10 +211,13 @@ export class UploadService {
           size: BigInt(input.size),
           sha256: input.sha256,
           format: input.format,
-          metadata: buildAssetMetadataSnapshot(
-            input,
-            isReplacement ? (asset.version ?? '1.0.0') : '1.0.0',
-          ),
+          purpose: input.purpose,
+          metadata: isCover
+            ? {}
+            : buildAssetMetadataSnapshot(
+                input,
+                isReplacement ? (asset.version ?? '1.0.0') : '1.0.0',
+              ),
           objectKey,
           uploadId,
           partSize,
@@ -217,7 +225,8 @@ export class UploadService {
           expiresAt,
         },
       });
-      if (isReplacement) {
+      sessionId = session.id;
+      if (isReplacement && !isCover) {
         await this.prisma.asset.update({
           where: { id: asset.id },
           data: { status: 'uploading', error: null },
@@ -248,6 +257,11 @@ export class UploadService {
           .abortMultipartUpload(objectKey, uploadId)
           .catch(() => undefined);
       }
+      if (sessionId) {
+        await this.prisma.uploadSession
+          .deleteMany({ where: { id: sessionId, status: 'uploading' } })
+          .catch(() => undefined);
+      }
       if (!isReplacement) {
         // 新资源尚未被场景引用，初始化失败时删除占位行，避免模型库长期出现幽灵记录。
         await this.prisma.asset
@@ -265,12 +279,26 @@ export class UploadService {
     const parts = [...input.parts].sort(
       (first, second) => first.partNumber - second.partNumber,
     );
+    const completionStartedAt = this.now();
     const claim = await this.prisma.$transaction(async (transaction) => {
       const session = await transaction.uploadSession.findUnique({
         where: { id },
       });
       if (!session) throw new NotFoundException('上传会话不存在');
-      if (session.status === 'completed') return { session, completed: true };
+      if (session.status === 'completed') {
+        return { session, phase: 'completed' as const };
+      }
+      if (session.status === 'uploaded') {
+        return { session, phase: 'uploaded' as const };
+      }
+      if (session.status === 'completing') {
+        const leaseExpired =
+          session.updatedAt.getTime() + COMPLETION_LEASE_MS <=
+          this.now().getTime();
+        if (leaseExpired) {
+          return { session, phase: 'recovering' as const };
+        }
+      }
       if (session.status !== 'uploading') {
         throw new ConflictException({
           code: 'UPLOAD_NOT_COMPLETABLE',
@@ -286,7 +314,7 @@ export class UploadService {
       validateParts(session, parts);
       const updated = await transaction.uploadSession.updateMany({
         where: { id, status: 'uploading' },
-        data: { status: 'completing' },
+        data: { status: 'completing', updatedAt: completionStartedAt },
       });
       if (updated.count !== 1) {
         throw new ConflictException({
@@ -294,27 +322,135 @@ export class UploadService {
           message: '上传会话正在由另一个请求完成',
         });
       }
-      return { session, completed: false };
+      return {
+        session,
+        phase: 'multipart' as const,
+        completionStartedAt,
+      };
     });
 
-    if (claim.completed) return this.resumeCompleted(claim.session);
+    if (claim.phase === 'completed') {
+      return this.resumeCompleted(claim.session);
+    }
 
-    try {
-      await this.minio.completeMultipartUpload(
+    if (claim.phase === 'recovering') {
+      const objectExists = await this.minio.objectExists(
         claim.session.objectKey,
-        claim.session.uploadId,
-        parts,
       );
-    } catch (error) {
-      // MinIO 完成失败通常可重试，将状态恢复为 uploading，客户端可重复提交同一 ETag 集合。
-      await this.prisma.uploadSession.updateMany({
-        where: { id, status: 'completing' },
-        data: { status: 'uploading' },
+      const recovered = await this.prisma.uploadSession.updateMany({
+        where: {
+          id,
+          status: 'completing',
+          updatedAt: claim.session.updatedAt,
+        },
+        data: { status: objectExists ? 'uploaded' : 'uploading' },
       });
-      throw error;
+      if (recovered.count !== 1) {
+        throw new ConflictException({
+          code: 'UPLOAD_STATE_CHANGED',
+          message: '上传会话已由另一个请求恢复，请重试',
+        });
+      }
+      if (!objectExists) return this.complete(id, input);
+    }
+
+    if (claim.phase === 'multipart') {
+      try {
+        await this.minio.completeMultipartUpload(
+          claim.session.objectKey,
+          claim.session.uploadId,
+          parts,
+        );
+      } catch (error) {
+        let objectExists: boolean;
+        try {
+          objectExists = await this.minio.objectExists(claim.session.objectKey);
+        } catch {
+          // 无法确认 MinIO 最终状态时保留 completing，租约到期后再恢复。
+          throw error;
+        }
+        if (!objectExists) {
+          const restored = await this.prisma.uploadSession.updateMany({
+            where: {
+              id,
+              status: 'completing',
+              updatedAt: claim.completionStartedAt,
+            },
+            data: { status: 'uploading' },
+          });
+          if (restored.count !== 1) {
+            throw new ConflictException({
+              code: 'UPLOAD_STATE_CHANGED',
+              message: '上传会话已由另一个请求恢复，请重试',
+            });
+          }
+          throw error;
+        }
+      }
+
+      const persisted = await this.prisma.uploadSession.updateMany({
+        where: {
+          id,
+          status: 'completing',
+          updatedAt: claim.completionStartedAt,
+        },
+        data: { status: 'uploaded' },
+      });
+      if (persisted.count !== 1) {
+        throw new ConflictException({
+          code: 'UPLOAD_STATE_CHANGED',
+          message: '上传对象已完成，但会话状态发生变化，请重试完成请求',
+        });
+      }
+    }
+
+    if (claim.session.purpose === 'cover') {
+      const completion = await this.prisma.$transaction(async (transaction) => {
+        const acquired = await transaction.uploadSession.updateMany({
+          where: { id, status: 'uploaded' },
+          data: { status: 'finalizing' },
+        });
+        if (acquired.count !== 1) return null;
+        const file = await transaction.assetFile.create({
+          data: {
+            assetId: claim.session.assetId,
+            role: 'cover',
+            objectKey: claim.session.objectKey,
+            mimeType: claim.session.mimeType,
+            size: claim.session.size,
+            checksum: claim.session.sha256,
+          },
+        });
+        await transaction.asset.update({
+          where: { id: claim.session.assetId },
+          data: {
+            activeCoverFileId: file.id,
+            coverAssetId: null,
+          },
+        });
+        const completed = await transaction.uploadSession.updateMany({
+          where: { id, status: 'finalizing' },
+          data: { status: 'completed' },
+        });
+        if (completed.count !== 1) {
+          throw new ConflictException('上传会话状态已变化，请重试');
+        }
+        return { file };
+      });
+      if (!completion) return this.resumeFinalizationRace(id);
+      return {
+        assetId: claim.session.assetId,
+        fileId: completion.file.id,
+        status: 'ready',
+      };
     }
 
     const completion = await this.prisma.$transaction(async (transaction) => {
+      const acquired = await transaction.uploadSession.updateMany({
+        where: { id, status: 'uploaded' },
+        data: { status: 'finalizing' },
+      });
+      if (acquired.count !== 1) return null;
       const file = await transaction.assetFile.create({
         data: {
           assetId: claim.session.assetId,
@@ -347,12 +483,17 @@ export class UploadService {
           payload: { ...jobData, uploadSessionId: id },
         },
       });
-      await transaction.uploadSession.updateMany({
-        where: { id, status: 'completing' },
+      const completed = await transaction.uploadSession.updateMany({
+        where: { id, status: 'finalizing' },
         data: { status: 'completed' },
       });
+      if (completed.count !== 1) {
+        throw new ConflictException('上传会话状态已变化，请重试');
+      }
       return { file, job, jobData };
     });
+
+    if (!completion) return this.resumeFinalizationRace(id);
 
     await this.enqueueOrMarkFailed(
       claim.session.assetId,
@@ -375,14 +516,60 @@ export class UploadService {
     if (session.status === 'completed') {
       throw new ConflictException('已完成的上传不能取消');
     }
-    const claimed = await this.prisma.uploadSession.updateMany({
-      where: { id, status: { in: ['uploading', 'completing'] } },
-      data: { status: 'cancelling' },
-    });
-    if (claimed.count === 0) return;
-    await this.minio.abortMultipartUpload(session.objectKey, session.uploadId);
+    const cancellationStartedAt = this.now();
+    const claimed =
+      session.status === 'uploading'
+        ? await this.prisma.uploadSession.updateMany({
+            where: { id, status: 'uploading' },
+            data: {
+              status: 'cancelling',
+              updatedAt: cancellationStartedAt,
+            },
+          })
+        : session.status === 'cancelling' &&
+            session.updatedAt.getTime() + COMPLETION_LEASE_MS <=
+              cancellationStartedAt.getTime()
+          ? await this.prisma.uploadSession.updateMany({
+              where: {
+                id,
+                status: 'cancelling',
+                updatedAt: session.updatedAt,
+              },
+              data: { updatedAt: cancellationStartedAt },
+            })
+          : { count: 0 };
+    if (claimed.count === 0) {
+      throw new ConflictException({
+        code: 'UPLOAD_NOT_CANCELLABLE',
+        message: '上传会话正在完成、取消或状态已变化，请稍后重试',
+      });
+    }
+    try {
+      await this.minio.abortMultipartUpload(
+        session.objectKey,
+        session.uploadId,
+      );
+    } catch (error) {
+      await this.prisma.uploadSession.updateMany({
+        where: {
+          id,
+          status: 'cancelling',
+          updatedAt: cancellationStartedAt,
+        },
+        data: { status: 'uploading' },
+      });
+      throw error;
+    }
     await this.prisma.$transaction(async (transaction) => {
-      await transaction.uploadSession.delete({ where: { id } });
+      const deleted = await transaction.uploadSession.deleteMany({
+        where: {
+          id,
+          status: 'cancelling',
+          updatedAt: cancellationStartedAt,
+        },
+      });
+      if (deleted.count !== 1) return;
+      if (session.purpose === 'cover') return;
       const asset = await transaction.asset.findUnique({
         where: { id: session.assetId },
         include: { files: { take: 1 } },
@@ -452,6 +639,19 @@ export class UploadService {
   private async resumeCompleted(
     session: UploadSessionRow,
   ): Promise<UploadCompletion> {
+    if (session.purpose === 'cover') {
+      const file = await this.prisma.assetFile.findUnique({
+        where: { objectKey: session.objectKey },
+      });
+      if (!file) {
+        throw new ConflictException('封面上传完成记录不完整，请稍后重试');
+      }
+      return {
+        assetId: session.assetId,
+        fileId: file.id,
+        status: 'ready',
+      };
+    }
     const [file, job] = await Promise.all([
       this.prisma.assetFile.findUnique({
         where: { objectKey: session.objectKey },
@@ -480,6 +680,17 @@ export class UploadService {
       jobId: job.id,
       status: 'queued',
     };
+  }
+
+  private async resumeFinalizationRace(id: string): Promise<UploadCompletion> {
+    const session = await this.prisma.uploadSession.findUnique({
+      where: { id },
+    });
+    if (session?.status === 'completed') return this.resumeCompleted(session);
+    throw new ConflictException({
+      code: 'UPLOAD_ALREADY_FINALIZING',
+      message: '上传会话正在由另一个请求完成，请重试',
+    });
   }
 
   private async enqueueOrMarkFailed(

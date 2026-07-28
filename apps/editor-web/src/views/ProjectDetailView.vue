@@ -5,15 +5,7 @@ import type {
   UpdateSceneInput,
   UpdateProjectInput,
 } from '@digital-twin/api-contracts';
-import {
-  Calendar,
-  CopyDocument,
-  Delete,
-  Edit,
-  Plus,
-  Setting,
-  VideoPlay,
-} from '@element-plus/icons-vue';
+import { Calendar, Edit, Plus, Setting } from '@element-plus/icons-vue';
 import {
   ElAlert,
   ElButton,
@@ -243,16 +235,16 @@ async function deleteScene(id: string, name: string): Promise<void> {
               <div class="scene-card__actions">
                 <RouterLink :to="`/editor/${currentProject.id}/${scene.id}`"
                   ><ElButton type="primary" size="small"
-                    ><ElIcon><VideoPlay /></ElIcon> 进入编辑器</ElButton
+                    >搭建场景</ElButton
                   ></RouterLink
                 ><ElButton size="small" @click="copyScene(scene.id)"
-                  ><ElIcon><CopyDocument /></ElIcon> 复制</ElButton
+                  >复制</ElButton
                 ><ElButton
                   type="danger"
                   plain
                   size="small"
                   @click="deleteScene(scene.id, scene.name)"
-                  ><ElIcon><Delete /></ElIcon> 删除</ElButton
+                  >删除</ElButton
                 >
               </div>
             </div>

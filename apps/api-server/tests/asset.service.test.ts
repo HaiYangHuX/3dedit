@@ -69,6 +69,174 @@ describe('AssetService', () => {
     });
   });
 
+  it('优先返回模型自身最新的封面附件', async () => {
+    const olderCover = {
+      id: 'cover-file-old',
+      assetId: 'asset-1',
+      role: 'cover',
+      objectKey: 'assets/asset-1/cover/old.png',
+      mimeType: 'image/png',
+      size: 100n,
+      checksum: 'b'.repeat(64),
+      createdAt: new Date('2026-07-16T05:00:00.000Z'),
+    };
+    const latestCover = {
+      ...olderCover,
+      id: 'cover-file-new',
+      objectKey: 'assets/asset-1/cover/new.png',
+      checksum: 'c'.repeat(64),
+      createdAt: new Date('2026-07-16T05:30:00.000Z'),
+    };
+    const thumbnail = {
+      ...olderCover,
+      id: 'thumbnail-file',
+      role: 'thumbnail',
+      objectKey: 'assets/asset-1/thumbnail/model.svg',
+      mimeType: 'image/svg+xml',
+    };
+    const legacyCoverFile = {
+      ...olderCover,
+      id: 'legacy-cover-source',
+      assetId: 'legacy-cover-asset',
+      role: 'source',
+      objectKey: 'assets/legacy-cover-asset/source/cover.png',
+    };
+    const row = {
+      ...assetRow,
+      coverAssetId: 'legacy-cover-asset',
+      activeCoverFileId: olderCover.id,
+      activeCoverFile: olderCover,
+      files: [olderCover, thumbnail, latestCover],
+      coverAsset: {
+        id: 'legacy-cover-asset',
+        kind: 'image',
+        activeFile: legacyCoverFile,
+        files: [legacyCoverFile],
+      },
+    };
+    const prisma = {
+      asset: {
+        count: vi.fn().mockResolvedValue(1),
+        findMany: vi.fn().mockResolvedValue([row]),
+      },
+      scene: { findMany: vi.fn().mockResolvedValue([]) },
+    } as unknown as PrismaService;
+    const minio = {
+      presignGet: vi
+        .fn()
+        .mockImplementation((key: string) =>
+          Promise.resolve(`https://minio.test/${encodeURIComponent(key)}`),
+        ),
+    } as unknown as MinioService;
+    const service = new AssetService(prisma, minio);
+
+    const result = await service.list({
+      page: 1,
+      pageSize: 24,
+      keyword: '',
+    });
+
+    expect(result.items[0]?.coverUrl).toBe(
+      `https://minio.test/${encodeURIComponent(olderCover.objectKey)}`,
+    );
+    expect(minio.presignGet).toHaveBeenCalledWith(olderCover.objectKey);
+    expect(minio.presignGet).not.toHaveBeenCalledWith(
+      legacyCoverFile.objectKey,
+    );
+  });
+
+  it('没有附件封面时回退历史封面资源', async () => {
+    const legacyCoverFile = {
+      id: 'legacy-cover-source',
+      assetId: 'legacy-cover-asset',
+      role: 'source',
+      objectKey: 'assets/legacy-cover-asset/source/cover.png',
+      mimeType: 'image/png',
+      size: 100n,
+      checksum: 'b'.repeat(64),
+      createdAt: now,
+    };
+    const row = {
+      ...assetRow,
+      coverAssetId: 'legacy-cover-asset',
+      activeCoverFileId: null,
+      activeCoverFile: null,
+      coverAsset: {
+        id: 'legacy-cover-asset',
+        kind: 'image',
+        activeFile: legacyCoverFile,
+        files: [legacyCoverFile],
+      },
+    };
+    const prisma = {
+      asset: {
+        count: vi.fn().mockResolvedValue(1),
+        findMany: vi.fn().mockResolvedValue([row]),
+      },
+      scene: { findMany: vi.fn().mockResolvedValue([]) },
+    } as unknown as PrismaService;
+    const minio = {
+      presignGet: vi
+        .fn()
+        .mockResolvedValue('https://assets.test/legacy-cover.png'),
+    } as unknown as MinioService;
+
+    const result = await new AssetService(prisma, minio).list({
+      page: 1,
+      pageSize: 24,
+      keyword: '',
+    });
+
+    expect(result.items[0]?.coverUrl).toBe(
+      'https://assets.test/legacy-cover.png',
+    );
+    expect(minio.presignGet).toHaveBeenCalledWith(legacyCoverFile.objectKey);
+  });
+
+  it('没有自定义封面时回退模型缩略图', async () => {
+    const thumbnail = {
+      id: 'thumbnail-file',
+      assetId: 'asset-1',
+      role: 'thumbnail',
+      objectKey: 'assets/asset-1/thumbnail/model.svg',
+      mimeType: 'image/svg+xml',
+      size: 100n,
+      checksum: 'b'.repeat(64),
+      createdAt: now,
+    };
+    const row = {
+      ...assetRow,
+      coverAssetId: null,
+      activeCoverFileId: null,
+      activeCoverFile: null,
+      files: [thumbnail],
+      coverAsset: null,
+    };
+    const prisma = {
+      asset: {
+        count: vi.fn().mockResolvedValue(1),
+        findMany: vi.fn().mockResolvedValue([row]),
+      },
+      scene: { findMany: vi.fn().mockResolvedValue([]) },
+    } as unknown as PrismaService;
+    const minio = {
+      presignGet: vi
+        .fn()
+        .mockResolvedValue('https://assets.test/model-thumbnail.svg'),
+    } as unknown as MinioService;
+
+    const result = await new AssetService(prisma, minio).list({
+      page: 1,
+      pageSize: 24,
+      keyword: '',
+    });
+
+    expect(result.items[0]?.coverUrl).toBe(
+      'https://assets.test/model-thumbnail.svg',
+    );
+    expect(minio.presignGet).toHaveBeenCalledWith(thumbnail.objectKey);
+  });
+
   it('资源被场景引用时拒绝删除', async () => {
     const transaction = {
       asset: {
