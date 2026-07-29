@@ -5,6 +5,7 @@ import {
   sceneCameraSchema,
 } from './camera.js';
 import { materialComponentSchema } from './material.js';
+import { socketTaskTypeSchema } from './socketTaskTypes.js';
 
 const identifierSchema = z.string().min(1);
 const vector3Schema = z.tuple([z.number(), z.number(), z.number()]);
@@ -277,19 +278,6 @@ export const dataSourceDefinitionSchema = z.object({
   reconnectBaseDelayMs: z.number().int().positive().optional(),
 });
 
-export const socketTaskTypeSchema = z.enum([
-  'ModelPosition',
-  'ModelRotation',
-  'ModelScale',
-  'ModelVisible',
-  'ModelColor',
-  'TextUpdate',
-  'ChartUpdate',
-  'VideoControl',
-  'AnimationControl',
-  'CameraMove',
-]);
-
 export const socketTaskDefinitionSchema = z.object({
   id: identifierSchema,
   dataSourceId: identifierSchema,
@@ -513,7 +501,6 @@ export type ActionDefinition = z.infer<typeof actionDefinitionSchema>;
 export type InteractionDefinition = z.infer<typeof interactionDefinitionSchema>;
 export type DataSourceDefinition = z.infer<typeof dataSourceDefinitionSchema>;
 export type SocketTaskDefinition = z.infer<typeof socketTaskDefinitionSchema>;
-export type SocketTaskType = z.infer<typeof socketTaskTypeSchema>;
 export type SceneSettings = z.infer<typeof sceneSettingsSchema>;
 export type SceneDocument = z.infer<typeof sceneDocumentSchema>;
 export type SceneNode = z.infer<typeof sceneNodeSchema>;

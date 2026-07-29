@@ -4,6 +4,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
+$socketPort = if ($env:SOCKET_PORT) { [int]$env:SOCKET_PORT } else { 18080 }
 
 if (-not $LanIp) {
   $network = Get-NetIPConfiguration | Where-Object {
@@ -83,16 +84,18 @@ try {
 
   Write-Host '[4/5] Checking development ports...'
   $occupiedPorts = Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
-    Where-Object { $_.LocalPort -in 3100, 5173, 5174 }
+    Where-Object { $_.LocalPort -in 3100, 5173, 5174, $socketPort }
   if ($occupiedPorts) {
     $running = $false
     try {
       $editor = Invoke-WebRequest "http://${LanIp}:5173" -UseBasicParsing -TimeoutSec 5
       $runtime = Invoke-WebRequest "http://${LanIp}:5174" -UseBasicParsing -TimeoutSec 5
       $health = Invoke-RestMethod "http://${LanIp}:3100/api/health" -TimeoutSec 5
+      $socketHealth = Invoke-RestMethod "http://${LanIp}:${socketPort}/health" -TimeoutSec 5
       $running = $editor.StatusCode -eq 200 -and
         $runtime.StatusCode -eq 200 -and
-        $health.status -eq 'ok'
+        $health.status -eq 'ok' -and
+        $socketHealth.status -eq 'ok'
     } catch {
       $running = $false
     }
@@ -104,11 +107,13 @@ try {
       Write-Host '  Editor:   http://localhost:5173'
       Write-Host '  Runtime:  http://localhost:5174'
       Write-Host '  API docs: http://localhost:3100/api/docs'
+      Write-Host "  Socket:   ws://127.0.0.1:${socketPort}"
       Write-Host '  MinIO:    http://localhost:9001'
       Write-Host 'LAN addresses:' -ForegroundColor Cyan
       Write-Host "  Editor:   http://${LanIp}:5173"
       Write-Host "  Runtime:  http://${LanIp}:5174"
       Write-Host "  API docs: http://${LanIp}:3100/api/docs"
+      Write-Host "  Socket:   ws://${LanIp}:${socketPort}"
       Write-Host "  MinIO:    http://${LanIp}:9001"
       return
     }
@@ -139,17 +144,23 @@ try {
     Start-Sleep -Seconds 2
   }
 
-  Write-Host '[5/5] Starting API, worker and web apps...'
+  Write-Host '[5/5] Starting API, worker, Socket and web apps...'
   & (Join-Path $PSScriptRoot 'start-lan.ps1') -LanIp $LanIp
-  Write-Host 'Waiting for the API health check...'
+  Write-Host 'Waiting for API and Socket health checks...'
   $health = $null
+  $socketHealth = $null
   for ($attempt = 1; $attempt -le 30; $attempt++) {
     try {
       $health = Invoke-RestMethod 'http://127.0.0.1:3100/api/health' -TimeoutSec 2
-      if ($health.status -eq 'ok') { break }
     } catch {
       $health = $null
     }
+    try {
+      $socketHealth = Invoke-RestMethod "http://127.0.0.1:${socketPort}/health" -TimeoutSec 2
+    } catch {
+      $socketHealth = $null
+    }
+    if ($health.status -eq 'ok' -and $socketHealth.status -eq 'ok') { break }
     Start-Sleep -Seconds 2
   }
 
@@ -161,17 +172,27 @@ try {
     throw 'API did not become healthy within 60 seconds.'
   }
 
+  if (-not $socketHealth -or $socketHealth.status -ne 'ok') {
+    Write-Host ''
+    Write-Host 'Socket startup log:' -ForegroundColor Yellow
+    Get-Content (Join-Path $root 'socket.log') -Tail 20 -ErrorAction SilentlyContinue
+    Get-Content (Join-Path $root 'socket.err.log') -Tail 20 -ErrorAction SilentlyContinue
+    throw 'Socket simulator did not become healthy within 60 seconds.'
+  }
+
   Write-Host ''
   Write-Host 'Project started successfully.' -ForegroundColor Green
   Write-Host 'Local addresses:' -ForegroundColor Cyan
   Write-Host '  Editor:   http://localhost:5173'
   Write-Host '  Runtime:  http://localhost:5174'
   Write-Host '  API docs: http://localhost:3100/api/docs'
+  Write-Host "  Socket:   ws://127.0.0.1:${socketPort}"
   Write-Host '  MinIO:    http://localhost:9001'
   Write-Host 'LAN addresses:' -ForegroundColor Cyan
   Write-Host "  Editor:   http://${LanIp}:5173"
   Write-Host "  Runtime:  http://${LanIp}:5174"
   Write-Host "  API docs: http://${LanIp}:3100/api/docs"
+  Write-Host "  Socket:   ws://${LanIp}:${socketPort}"
   Write-Host "  MinIO:    http://${LanIp}:9001"
 } finally {
   Pop-Location

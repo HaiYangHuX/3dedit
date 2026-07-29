@@ -21,6 +21,7 @@ apps/
   runtime-web/      无 UI 库的发布运行时
   api-server/       NestJS/Fastify API
   asset-worker/     BullMQ 资源处理进程
+  socket-server/    WebSocket 数据模拟与广播服务
 packages/
   scene-schema/     版本化场景文档协议
   editor-core/      命令、撤销、重做与脏状态
@@ -40,7 +41,7 @@ pnpm --filter @digital-twin/api-server exec prisma migrate deploy
 pnpm dev
 ```
 
-默认端口：编辑器 `5173`、运行时 `5174`、API `3100`、PostgreSQL `5432`、Redis `6379`、MinIO `9000/9001`。当本机端口被占用时，可在 `.env` 中同步调整 `PORT`、`*_PORT`、`DATABASE_URL` 和 `REDIS_URL`；前端可通过 `VITE_API_BASE_URL` 覆盖 API 地址。
+默认端口：编辑器 `5173`、运行时 `5174`、API `3100`、Socket 模拟服务 `18080`、PostgreSQL `5432`、Redis `6379`、MinIO `9000/9001`。当本机端口被占用时，可在 `.env` 中同步调整 `PORT`、`*_PORT`、`DATABASE_URL` 和 `REDIS_URL`；前端可通过 `VITE_API_BASE_URL` 覆盖 API 地址。
 
 `pnpm dev` 会同时启动 `asset-worker`。上传流程为浏览器分块计算 SHA-256 → 3 路并发直传 MinIO → API 完成 Multipart → BullMQ Worker 校验并解析 → 原子切换可用源文件。请勿只启动 Web 与 API 而遗漏 Worker。
 
@@ -104,6 +105,27 @@ WebSocket 任务消息使用 `taskCode` 匹配编辑器配置，消息中的 `ta
 ```
 
 运行时也接受由上述对象组成的 JSON 数组，数组内任务依次进入强类型映射器。
+
+### 本地 Socket 模拟服务
+
+`apps/socket-server` 默认监听 `ws://127.0.0.1:18080`，统一启动脚本会自动启动该服务。画布中需要启用同一 URL 的 WebSocket 数据源，并配置 `taskCode=device-position`、`taskType=ModelPosition` 和需要移动的目标节点。
+
+启动或停止圆形位置轨迹模拟：
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:18080/api/demo/start
+Invoke-RestMethod -Method Post http://127.0.0.1:18080/api/demo/stop
+```
+
+手动向所有已连接的预览/发布页面广播任意合法任务：
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:18080/api/messages `
+  -ContentType 'application/json' `
+  -Body '{"taskCode":"device-position","taskData":{"x":1,"y":0,"z":2}}'
+```
+
+`GET http://127.0.0.1:18080/health` 返回当前画布客户端数量和模拟器状态。服务默认仅监听本机；局域网启动脚本会改为监听 `0.0.0.0`，远端画布数据源必须使用输出的 `ws://<LAN-IP>:18080`，不能使用远端设备自己的 `127.0.0.1`。
 
 ## 预览与发布
 

@@ -1,0 +1,24 @@
+{
+  "name": "@digital-twin/socket-server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "test": "pnpm build && vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@digital-twin/scene-schema": "workspace:*",
+    "ws": "8.18.3",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.0.0",
+    "@types/ws": "8.18.1",
+    "tsx": "4.21.0",
+    "vitest": "4.1.10"
+  }
+}

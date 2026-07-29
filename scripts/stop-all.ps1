@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 
-Write-Host '[1/2] Stopping API, worker and web apps...'
+Write-Host '[1/2] Stopping API, worker, Socket and web apps...'
 $projectNodes = Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object {
   $_.CommandLine -like "*$root*" -and (
     $_.CommandLine -like '*vite.js*' -or

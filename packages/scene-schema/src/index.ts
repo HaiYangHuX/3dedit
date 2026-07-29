@@ -42,7 +42,6 @@ export {
   sceneSettingsSchema,
   sceneNodeSchema,
   socketTaskDefinitionSchema,
-  socketTaskTypeSchema,
   transformSchema,
   triggerDefinitionSchema,
   type ActionDefinition,
@@ -56,7 +55,11 @@ export {
   type SceneSettings,
   type SceneNode,
   type SocketTaskDefinition,
-  type SocketTaskType,
   type Transform,
   type TriggerDefinition,
 } from './schema.js';
+export {
+  SOCKET_TASK_TYPES,
+  socketTaskTypeSchema,
+  type SocketTaskType,
+} from './socketTaskTypes.js';

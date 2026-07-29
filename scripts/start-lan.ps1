@@ -4,6 +4,7 @@ param(
 )
 
 $root = Split-Path -Parent $PSScriptRoot
+$socketPort = if ($env:SOCKET_PORT) { [int]$env:SOCKET_PORT } else { 18080 }
 $node = 'C:\Users\15515\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe'
 $tsx = Join-Path $root 'node_modules\.pnpm\tsx@4.21.0\node_modules\tsx\dist\cli.mjs'
 $vite = (Get-ChildItem (Join-Path $root 'node_modules\.pnpm\vite@7.3.6_*\node_modules\vite\bin\vite.js')).FullName
@@ -30,6 +31,12 @@ Start-Process -FilePath $node -ArgumentList @($tsx, 'watch', 'src/main.ts') `
   -RedirectStandardOutput (Join-Path $root 'worker.log') `
   -RedirectStandardError (Join-Path $root 'worker.err.log')
 
+$env:SOCKET_HOST = '0.0.0.0'
+Start-Process -FilePath $node -ArgumentList @($tsx, 'watch', 'src/main.ts') `
+  -WorkingDirectory (Join-Path $root 'apps\socket-server') -WindowStyle Hidden `
+  -RedirectStandardOutput (Join-Path $root 'socket.log') `
+  -RedirectStandardError (Join-Path $root 'socket.err.log')
+
 Start-Process -FilePath $node -ArgumentList @($vite, '--host', '0.0.0.0', '--port', '5173') `
   -WorkingDirectory (Join-Path $root 'apps\editor-web') -WindowStyle Hidden `
   -RedirectStandardOutput (Join-Path $root 'editor.log') `
@@ -43,4 +50,5 @@ Start-Process -FilePath $node -ArgumentList @($vite, '--host', '0.0.0.0', '--por
 Write-Host "Editor: http://${LanIp}:5173"
 Write-Host "Runtime: http://${LanIp}:5174"
 Write-Host "API docs: http://${LanIp}:3100/api/docs"
+Write-Host "Socket: ws://${LanIp}:${socketPort}"
 Write-Host "MinIO: http://${LanIp}:9001"
