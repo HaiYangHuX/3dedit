@@ -689,6 +689,7 @@ async function copyText(value: string): Promise<void> {
         ref="canvas"
         :document="document"
         :model-loading="modelLoading"
+        :scene-loading="saveState === 'loading'"
         @select="changeCanvasSelection"
         @transform-commit="commitTransform"
         @scene-drop="dropSceneItem"

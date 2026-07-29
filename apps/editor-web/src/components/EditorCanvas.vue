@@ -16,7 +16,7 @@ import type {
   SceneDocument,
   SceneNode,
 } from '@digital-twin/scene-schema';
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
   readScenePaletteDrag,
   type ScenePaletteDropPayload,
@@ -28,8 +28,9 @@ const props = withDefaults(
     document: SceneDocument;
     gridSize?: number | null;
     modelLoading?: boolean;
+    sceneLoading?: boolean;
   }>(),
-  { gridSize: 0.5, modelLoading: false },
+  { gridSize: 0.5, modelLoading: false, sceneLoading: false },
 );
 const emit = defineEmits<{
   select: [selection: SelectionState];
@@ -48,6 +49,15 @@ const emit = defineEmits<{
 
 const container = ref<HTMLDivElement>();
 const errorMessage = ref('');
+const documentLoading = ref(true);
+const canvasLoading = computed(
+  () => documentLoading.value || props.sceneLoading || props.modelLoading,
+);
+const loadingMessage = computed(() =>
+  documentLoading.value || props.sceneLoading
+    ? '场景加载中...'
+    : '模型加载中...',
+);
 const engine = new EditorEngine();
 let initialized = false;
 let disposed = false;
@@ -152,6 +162,7 @@ engine.addEventListener('renderstatschange', handleRenderStatsChange);
 async function loadDocument(document = props.document): Promise<void> {
   if (!initialized) return;
   const generation = ++loadGeneration;
+  documentLoading.value = true;
   errorMessage.value = '';
   try {
     await engine.loadDocument(document, editorAssetResolver);
@@ -162,6 +173,11 @@ async function loadDocument(document = props.document): Promise<void> {
     if (disposed || generation !== loadGeneration) return;
     errorMessage.value =
       error instanceof Error ? error.message : '场景文档加载失败';
+  } finally {
+    // 迟到的旧场景请求不能提前关闭当前场景的遮罩。
+    if (!disposed && generation === loadGeneration) {
+      documentLoading.value = false;
+    }
   }
 }
 
@@ -292,7 +308,10 @@ function dropSceneItem(event: DragEvent): void {
 }
 
 onMounted(async () => {
-  if (!container.value) return;
+  if (!container.value) {
+    documentLoading.value = false;
+    return;
+  }
   try {
     await engine.initialize(container.value);
     if (disposed) return;
@@ -301,6 +320,7 @@ onMounted(async () => {
   } catch (error) {
     errorMessage.value =
       error instanceof Error ? error.message : '三维视口初始化失败';
+    documentLoading.value = false;
   }
 });
 
@@ -374,7 +394,7 @@ defineExpose({
   >
     <div v-if="errorMessage" class="canvas-error">{{ errorMessage }}</div>
     <div
-      v-if="modelLoading"
+      v-if="canvasLoading"
       class="editor-model-loading"
       data-testid="model-loading-overlay"
       role="status"
@@ -386,7 +406,7 @@ defineExpose({
         alt=""
         aria-hidden="true"
       />
-      <strong>模型加载中...</strong>
+      <strong>{{ loadingMessage }}</strong>
     </div>
   </div>
 </template>

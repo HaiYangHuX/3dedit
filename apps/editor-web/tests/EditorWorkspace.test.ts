@@ -66,6 +66,32 @@ describe('EditorWorkspace', () => {
     commandMocks.addAssetNode.mockResolvedValue(undefined);
   });
 
+  it('将场景文档加载状态传给画布', async () => {
+    const pinia = createTestingPinia({ createSpy: vi.fn });
+    const store = useDocumentStore(pinia);
+    store.saveState = 'loading';
+    const wrapper = mount(EditorWorkspace, {
+      global: {
+        plugins: [pinia],
+        stubs: {
+          EditorCanvas: {
+            name: 'EditorCanvas',
+            props: ['document', 'sceneLoading'],
+            template:
+              '<div data-testid="editor-canvas" :data-scene-loading="String(sceneLoading)" />',
+          },
+          RouterLink: { template: '<a><slot /></a>' },
+        },
+      },
+    });
+    const canvas = wrapper.findComponent({ name: 'EditorCanvas' });
+
+    expect(canvas.attributes('data-scene-loading')).toBe('true');
+    store.saveState = 'saved';
+    await wrapper.vm.$nextTick();
+    expect(canvas.attributes('data-scene-loading')).toBe('false');
+  });
+
   it('呈现资源区、视口、场景区和状态栏', async () => {
     const wrapper = mount(EditorWorkspace, {
       global: {

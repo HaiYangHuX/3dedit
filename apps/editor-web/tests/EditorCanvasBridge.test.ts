@@ -3,7 +3,7 @@ import {
   type SceneNode,
 } from '@digital-twin/scene-schema';
 import { flushPromises, mount } from '@vue/test-utils';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
   const listeners = new Map<string, (event: Record<string, unknown>) => void>();
@@ -64,6 +64,16 @@ const mocks = vi.hoisted(() => {
   return { listeners, engine };
 });
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 vi.mock('@digital-twin/three-engine', () => ({
   EditorEngine: vi.fn(function EditorEngine() {
     return mocks.engine;
@@ -73,6 +83,15 @@ vi.mock('@digital-twin/three-engine', () => ({
 import EditorCanvas from '../src/components/EditorCanvas.vue';
 
 describe('EditorCanvas bridge', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.engine.loadDocument.mockResolvedValue({
+      loadedNodeIds: [],
+      placeholderNodeIds: [],
+      errors: [],
+    });
+  });
+
   it('只在模型加载时渲染画布内 HUD 遮罩', async () => {
     const document = createDefaultSceneDocument(
       'project-1',
@@ -98,7 +117,113 @@ describe('EditorCanvas bridge', () => {
     );
     expect(overlay.get('img').attributes('aria-hidden')).toBe('true');
     wrapper.unmount();
-    vi.clearAllMocks();
+  });
+
+  it('场景引擎加载期间复用 HUD 遮罩', async () => {
+    const operation = deferred<{
+      loadedNodeIds: string[];
+      placeholderNodeIds: string[];
+      errors: Error[];
+    }>();
+    mocks.engine.loadDocument.mockImplementationOnce(() => operation.promise);
+    const document = createDefaultSceneDocument(
+      'project-1',
+      'scene-1',
+      '主场景',
+    );
+    const wrapper = mount(EditorCanvas, { props: { document } });
+    await flushPromises();
+
+    const overlay = wrapper.get('[data-testid="model-loading-overlay"]');
+    expect(overlay.text()).toContain('场景加载中...');
+    expect(overlay.get('img').attributes('src')).toBe(
+      '/loading/hud-spinner.svg',
+    );
+
+    operation.resolve({
+      loadedNodeIds: [],
+      placeholderNodeIds: [],
+      errors: [],
+    });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="model-loading-overlay"]').exists()).toBe(
+      false,
+    );
+    wrapper.unmount();
+  });
+
+  it('根据外部场景请求状态开关 HUD 遮罩', async () => {
+    const document = createDefaultSceneDocument(
+      'project-1',
+      'scene-1',
+      '主场景',
+    );
+    const wrapper = mount(EditorCanvas, {
+      props: { document, sceneLoading: true },
+    });
+    await flushPromises();
+
+    const overlay = wrapper.get('[data-testid="model-loading-overlay"]');
+    expect(overlay.text()).toContain('场景加载中...');
+    expect(overlay.get('img').attributes('src')).toBe(
+      '/loading/hud-spinner.svg',
+    );
+
+    await wrapper.setProps({ sceneLoading: false });
+    expect(wrapper.find('[data-testid="model-loading-overlay"]').exists()).toBe(
+      false,
+    );
+    wrapper.unmount();
+  });
+
+  it('只允许最新场景加载代次关闭 HUD 遮罩', async () => {
+    const first = deferred<{
+      loadedNodeIds: string[];
+      placeholderNodeIds: string[];
+      errors: Error[];
+    }>();
+    const second = deferred<{
+      loadedNodeIds: string[];
+      placeholderNodeIds: string[];
+      errors: Error[];
+    }>();
+    mocks.engine.loadDocument
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(() => second.promise);
+    const firstDocument = createDefaultSceneDocument(
+      'project-1',
+      'scene-1',
+      '场景一',
+    );
+    const secondDocument = createDefaultSceneDocument(
+      'project-1',
+      'scene-2',
+      '场景二',
+    );
+    const wrapper = mount(EditorCanvas, {
+      props: { document: firstDocument },
+    });
+    await flushPromises();
+    await wrapper.setProps({ document: secondDocument });
+    await flushPromises();
+
+    first.resolve({
+      loadedNodeIds: [],
+      placeholderNodeIds: [],
+      errors: [],
+    });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="model-loading-overlay"]').exists()).toBe(
+      true,
+    );
+
+    second.reject(new Error('场景资源解析失败'));
+    await flushPromises();
+    expect(wrapper.find('[data-testid="model-loading-overlay"]').exists()).toBe(
+      false,
+    );
+    expect(wrapper.get('.canvas-error').text()).toContain('场景资源解析失败');
+    wrapper.unmount();
   });
 
   it('加载文档、转发引擎事件并在卸载时对称释放', async () => {
