@@ -1,13 +1,13 @@
-import type { AssetDetail, ProjectSummary } from '@digital-twin/api-contracts';
+import type { ProjectSummary } from '@digital-twin/api-contracts';
 import { flushPromises, mount } from '@vue/test-utils';
-import { ElUpload } from 'element-plus';
+import { ElImage, ElUpload } from 'element-plus';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { assetApi } from '../src/api/assets';
 import ProjectFormDialog from '../src/components/ProjectFormDialog.vue';
-import { useAssetStore } from '../src/stores/asset';
+import CoverImagePicker from '../src/components/CoverImagePicker.vue';
+import { uploadCoverFile } from '../src/uploads/coverUpload';
 
-vi.mock('../src/api/assets', () => ({ assetApi: { get: vi.fn() } }));
+vi.mock('../src/uploads/coverUpload', () => ({ uploadCoverFile: vi.fn() }));
 
 const project: ProjectSummary = {
   id: 'project-1',
@@ -40,43 +40,17 @@ describe('ProjectFormDialog', () => {
       expect(create.text()).toContain(label);
       expect(edit.text()).toContain(label);
     }
-    expect(edit.find('img').attributes('src')).toBe(project.coverKey);
+    expect(edit.findAllComponents(CoverImagePicker)).toHaveLength(1);
+    expect(edit.getComponent(ElImage).props('src')).toBe(project.coverKey);
   });
 
   it('创建项目时上传封面并把最终 URL 一起提交', async () => {
     const pinia = createPinia();
     setActivePinia(pinia);
-    const store = useAssetStore();
-    const upload = vi.spyOn(store, 'uploadFile').mockResolvedValue({
-      id: 'upload-1',
-      fileName: 'cover.png',
-      size: 5,
-      progress: 100,
-      status: 'ready',
-      error: '',
-      assetId: 'cover-asset',
-      createdAt: '2026-07-16T06:00:00.000Z',
+    vi.mocked(uploadCoverFile).mockResolvedValue({
+      objectKey: 'covers/projects/project-cover.png',
+      url: 'https://assets.test/project-cover.jpg',
     });
-    vi.mocked(assetApi.get).mockResolvedValue({
-      id: 'cover-asset',
-      name: '项目封面',
-      kind: 'image',
-      format: 'png',
-      status: 'ready',
-      category: '项目封面',
-      tags: [],
-      favorite: false,
-      sourceHash: 'a'.repeat(64),
-      metadata: {},
-      error: null,
-      retryCount: 0,
-      thumbnailUrl: 'https://assets.test/project-cover.jpg',
-      sourceSize: 5,
-      referenceCount: 0,
-      files: [],
-      createdAt: '2026-07-16T06:00:00.000Z',
-      updatedAt: '2026-07-16T06:00:00.000Z',
-    } satisfies AssetDetail);
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:project-cover');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
     const wrapper = mount(ProjectFormDialog, {
@@ -97,15 +71,15 @@ describe('ProjectFormDialog', () => {
       ?.trigger('click');
     await flushPromises();
 
-    expect(upload).toHaveBeenCalledWith(
+    expect(uploadCoverFile).toHaveBeenCalledWith(
       expect.any(File),
-      expect.objectContaining({ category: '项目封面' }),
+      'project-cover',
     );
     expect(wrapper.emitted('submit')?.[0]?.[0]).toEqual({
       name: '新工厂',
       description: '',
       code: '',
-      coverKey: 'https://assets.test/project-cover.jpg',
+      coverKey: 'covers/projects/project-cover.png',
     });
   });
 });

@@ -1,0 +1,2 @@
+ALTER TABLE "UploadSession"
+ALTER COLUMN "assetId" DROP NOT NULL;

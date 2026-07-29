@@ -3,6 +3,7 @@ import type {
   AssetDetail,
   AssetKind,
   AssetStatus,
+  UploadPurpose,
   UpdateAssetInput,
 } from '@digital-twin/api-contracts';
 import { defineStore } from 'pinia';
@@ -53,7 +54,7 @@ export interface UploadFileOptions {
   category?: string;
   tags?: string[];
   assetId?: string;
-  purpose?: 'source' | 'cover';
+  purpose?: Extract<UploadPurpose, 'source' | 'cover'>;
   pollInterval?: number;
 }
 
@@ -254,7 +255,11 @@ export const useAssetStore = defineStore('asset', () => {
         purpose: options.purpose,
       });
       task.uploadId = session.id;
-      task.assetId = session.assetId;
+      if (!session.assetId) {
+        throw new Error('资源上传会话缺少资源编号');
+      }
+      const assetId = session.assetId;
+      task.assetId = assetId;
       task.status = 'uploading';
       const parts = await uploadMultipart(file, session, {
         concurrency: 3,
@@ -264,14 +269,17 @@ export const useAssetStore = defineStore('asset', () => {
         },
       });
       const completion = await assetApi.completeUpload(session.id, { parts });
+      if (completion.status === 'stored') {
+        throw new Error('资源上传收到了错误的独立封面回执');
+      }
       task.progress = 96;
       const detail =
         completion.status === 'ready'
-          ? await assetApi.get(session.assetId)
+          ? await assetApi.get(assetId)
           : await (async () => {
               task.status = 'processing';
               return pollUntilSettled(
-                session.assetId,
+                assetId,
                 options.pollInterval ?? 1_200,
                 controller.signal,
               );

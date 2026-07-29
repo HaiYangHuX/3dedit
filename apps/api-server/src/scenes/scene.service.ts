@@ -20,10 +20,22 @@ import {
 } from '@nestjs/common';
 import { type Prisma, type Scene } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
+import { MinioService } from '../infrastructure/minio.service.js';
 import { PrismaService } from '../infrastructure/prisma.service.js';
 import { hashSceneDocument, normalizeSceneDocument } from './scene-document.js';
 
-function mapSceneSummary(scene: Scene): SceneSummary {
+async function resolveCoverUrl(
+  minio: MinioService,
+  coverKey: string | null,
+): Promise<string | null> {
+  if (!coverKey || /^https?:\/\//i.test(coverKey)) return coverKey;
+  return minio.presignGet(coverKey);
+}
+
+async function mapSceneSummary(
+  scene: Scene,
+  minio: MinioService,
+): Promise<SceneSummary> {
   return {
     id: scene.id,
     projectId: scene.projectId,
@@ -32,15 +44,18 @@ function mapSceneSummary(scene: Scene): SceneSummary {
     sortOrder: scene.sortOrder,
     revision: scene.revision,
     contentHash: scene.contentHash,
-    coverKey: scene.coverKey,
+    coverKey: await resolveCoverUrl(minio, scene.coverKey),
     createdAt: scene.createdAt.toISOString(),
     updatedAt: scene.updatedAt.toISOString(),
   };
 }
 
-function mapSceneDetail(scene: Scene): SceneDetail {
+async function mapSceneDetail(
+  scene: Scene,
+  minio: MinioService,
+): Promise<SceneDetail> {
   return {
-    ...mapSceneSummary(scene),
+    ...(await mapSceneSummary(scene, minio)),
     document: sceneDocumentSchema.parse(scene.document),
   };
 }
@@ -52,12 +67,15 @@ function toJson(document: ReturnType<typeof normalizeSceneDocument>) {
 /** 管理多场景顺序、文档身份与乐观并发保存。 */
 @Injectable()
 export class SceneService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(MinioService) private readonly minio: MinioService,
+  ) {}
 
   async get(id: string): Promise<SceneDetail> {
     const scene = await this.prisma.scene.findUnique({ where: { id } });
     if (!scene) throw new NotFoundException('场景不存在');
-    return mapSceneDetail(scene);
+    return mapSceneDetail(scene, this.minio);
   }
 
   async create(
@@ -91,7 +109,7 @@ export class SceneService {
         },
       });
     });
-    return mapSceneDetail(scene);
+    return mapSceneDetail(scene, this.minio);
   }
 
   async update(id: string, input: UpdateSceneInput): Promise<SceneDetail> {
@@ -111,7 +129,7 @@ export class SceneService {
         contentHash: hashSceneDocument(document),
       },
     });
-    return mapSceneDetail(scene);
+    return mapSceneDetail(scene, this.minio);
   }
 
   async copy(id: string, input: CopySceneInput): Promise<SceneDetail> {
@@ -142,14 +160,14 @@ export class SceneService {
         },
       });
     });
-    return mapSceneDetail(scene);
+    return mapSceneDetail(scene, this.minio);
   }
 
   async reorder(
     projectId: string,
     input: ReorderScenesInput,
   ): Promise<SceneSummary[]> {
-    return this.prisma.$transaction(async (transaction) => {
+    const scenes = await this.prisma.$transaction(async (transaction) => {
       const existing = await transaction.scene.findMany({
         where: { projectId },
         select: { id: true },
@@ -164,12 +182,14 @@ export class SceneService {
           transaction.scene.update({ where: { id }, data: { sortOrder } }),
         ),
       );
-      const scenes = await transaction.scene.findMany({
+      return transaction.scene.findMany({
         where: { projectId },
         orderBy: { sortOrder: 'asc' },
       });
-      return scenes.map(mapSceneSummary);
     });
+    return Promise.all(
+      scenes.map((scene) => mapSceneSummary(scene, this.minio)),
+    );
   }
 
   async save(id: string, input: SaveSceneInput): Promise<SceneDetail> {

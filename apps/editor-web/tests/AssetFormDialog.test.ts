@@ -1,9 +1,10 @@
 import type { Asset, AssetDetail } from '@digital-twin/api-contracts';
 import { flushPromises, mount } from '@vue/test-utils';
-import { ElUpload, type UploadFile } from 'element-plus';
+import { ElImage, ElUpload, type UploadFile } from 'element-plus';
 import { createPinia, setActivePinia } from 'pinia';
 import { describe, expect, it, vi } from 'vitest';
 import AssetFormDialog from '../src/components/AssetFormDialog.vue';
+import CoverImagePicker from '../src/components/CoverImagePicker.vue';
 import { useAssetStore } from '../src/stores/asset';
 
 const asset: Asset = {
@@ -23,6 +24,7 @@ const asset: Asset = {
   error: null,
   retryCount: 0,
   thumbnailUrl: null,
+  customCoverUrl: 'https://assets.test/pump-cover.png',
   sourceSize: 2048,
   referenceCount: 0,
   createdAt: '2026-07-16T08:00:00.000Z',
@@ -88,7 +90,34 @@ describe('AssetFormDialog', () => {
     expect(create.wrapper.text()).toContain('添加模型与素材');
     expect(edit.wrapper.text()).toContain('编辑模型与素材');
     expect(edit.wrapper.text()).toContain('未选择新文件，将保留当前源文件');
-    expect(edit.wrapper.text()).toContain('未选择新封面，将保留当前封面');
+    expect(edit.wrapper.getComponent(CoverImagePicker).props('src')).toBe(
+      'https://assets.test/pump-cover.png',
+    );
+    expect(edit.wrapper.getComponent(ElImage).props('src')).toBe(
+      'https://assets.test/pump-cover.png',
+    );
+    expect(edit.wrapper.text()).not.toContain('未选择新封面，将保留当前封面');
+    expect(edit.wrapper.text()).not.toContain('不选择新封面则保留当前封面');
+  });
+
+  it('删除编辑中的当前封面后提交清空封面', async () => {
+    const { store, wrapper } = mountDialog({ modelValue: true, asset });
+    const detail: AssetDetail = {
+      ...asset,
+      customCoverUrl: null,
+      files: [],
+    };
+    const update = vi.spyOn(store, 'updateAsset').mockResolvedValue(detail);
+    await flushPromises();
+
+    await wrapper.get('[aria-label="移除封面"]').trigger('click');
+    await wrapper.findAll('.el-dialog__footer button').at(-1)?.trigger('click');
+    await flushPromises();
+
+    expect(update).toHaveBeenCalledWith(
+      'asset-1',
+      expect.objectContaining({ coverAssetId: null }),
+    );
   });
 
   it('编辑时不选择文件也能保存同一表单里的元数据', async () => {

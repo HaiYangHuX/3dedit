@@ -12,13 +12,10 @@ import {
   ElFormItem,
   ElInput,
   ElMessage,
-  ElTag,
-  ElUpload,
-  type UploadFile,
 } from 'element-plus';
-import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
-import { assetApi } from '../api/assets';
-import { useAssetStore } from '../stores/asset';
+import { computed, reactive, ref, watch } from 'vue';
+import { uploadCoverFile } from '../uploads/coverUpload';
+import CoverImagePicker from './CoverImagePicker.vue';
 
 const props = withDefaults(
   defineProps<{
@@ -41,10 +38,8 @@ const emit = defineEmits<{
   submit: [value: CreateSceneInput | UpdateSceneInput];
 }>();
 
-const assetStore = useAssetStore();
 const uploadingCover = ref(false);
 const coverFile = ref<File | null>(null);
-const coverPreviewUrl = ref('');
 const coverChanged = ref(false);
 const form = reactive({ name: '', description: '', coverKey: '' });
 
@@ -56,23 +51,8 @@ const busy = computed(() => props.submitting || uploadingCover.value);
 const title = computed(() =>
   props.mode === 'create' ? '创建场景' : '编辑场景',
 );
-const coverSource = computed(() => {
-  if (coverPreviewUrl.value) return coverPreviewUrl.value;
-  return form.coverKey.startsWith('http') ? form.coverKey : '';
-});
-const hasCover = computed(() => Boolean(coverSource.value));
-const coverName = computed(
-  () => coverFile.value?.name ?? '未上传，使用默认封面',
-);
-
-function revokePreview(): void {
-  if (!coverPreviewUrl.value) return;
-  URL.revokeObjectURL(coverPreviewUrl.value);
-  coverPreviewUrl.value = '';
-}
 
 function resetForm(scene: SceneSummary | SceneDetail | null): void {
-  revokePreview();
   coverFile.value = null;
   coverChanged.value = false;
   form.name = scene?.name ?? '';
@@ -89,48 +69,21 @@ watch(
   { immediate: true },
 );
 
-onBeforeUnmount(revokePreview);
-
 function close(): void {
   if (!busy.value) visible.value = false;
 }
 
-function onCoverChange(file: UploadFile): void {
-  const raw = file.raw;
-  if (!raw) return;
-  const extension = raw.name.split('.').at(-1)?.toLowerCase();
-  if (!['jpg', 'jpeg', 'png', 'webp'].includes(extension ?? '')) {
-    ElMessage.error('场景封面仅支持 JPG、PNG、WebP 图片');
-    return;
-  }
-  if (raw.size > 8 * 1024 * 1024) {
-    ElMessage.error('场景封面不能超过 8MB');
-    return;
-  }
-  revokePreview();
-  coverFile.value = raw;
+function onCoverChange(file: File | null): void {
+  coverFile.value = file;
   coverChanged.value = true;
-  coverPreviewUrl.value = URL.createObjectURL(raw);
-}
-
-function clearCover(): void {
-  revokePreview();
-  coverFile.value = null;
-  form.coverKey = '';
-  coverChanged.value = true;
+  if (!file) form.coverKey = '';
 }
 
 async function uploadCover(): Promise<string | null | undefined> {
   if (!coverChanged.value) return undefined;
   if (!coverFile.value) return null;
-  const task = await assetStore.uploadFile(coverFile.value, {
-    name: `${form.name.trim()}-场景封面`,
-    category: '场景封面',
-    pollInterval: 1_000,
-  });
-  if (!task.assetId) throw new Error('场景封面上传完成但未返回资源编号');
-  const asset = await assetApi.get(task.assetId);
-  return asset.coverUrl ?? asset.thumbnailUrl ?? null;
+  const stored = await uploadCoverFile(coverFile.value, 'scene-cover');
+  return stored.objectKey;
 }
 
 async function submit(): Promise<void> {
@@ -189,39 +142,13 @@ async function submit(): Promise<void> {
         />
       </ElFormItem>
       <ElFormItem label="场景封面">
-        <div class="scene-cover-picker">
-          <div class="scene-cover-picker__preview">
-            <img v-if="coverSource" :src="coverSource" alt="场景封面预览" />
-            <span v-else>{{ form.name.slice(0, 1) || '场' }}</span>
-          </div>
-          <div class="scene-cover-picker__controls">
-            <div class="scene-cover-picker__buttons">
-              <ElUpload
-                :auto-upload="false"
-                :show-file-list="false"
-                accept=".jpg,.jpeg,.png,.webp"
-                :on-change="onCoverChange"
-              >
-                <ElButton :disabled="busy">
-                  {{ hasCover ? '更换封面' : '上传封面' }}
-                </ElButton>
-              </ElUpload>
-              <ElButton
-                v-if="hasCover"
-                text
-                type="danger"
-                :disabled="busy"
-                @click="clearCover"
-              >
-                移除
-              </ElButton>
-            </div>
-            <ElTag v-if="coverFile" type="success">{{ coverName }}</ElTag>
-            <span v-else class="scene-cover-picker__hint"
-              >支持 JPG、PNG、WebP，最大 8MB</span
-            >
-          </div>
-        </div>
+        <CoverImagePicker
+          v-model="coverFile"
+          :src="form.coverKey.startsWith('http') ? form.coverKey : ''"
+          :fallback="form.name.slice(0, 1) || '场'"
+          :disabled="busy"
+          @change="onCoverChange"
+        />
       </ElFormItem>
     </ElForm>
     <template #footer>

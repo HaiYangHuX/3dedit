@@ -32,7 +32,12 @@ export const assetStatusSchema = z.enum([
   'failed',
 ]);
 export const assetVisibilitySchema = z.enum(['private', 'team', 'public']);
-export const uploadPurposeSchema = z.enum(['source', 'cover']);
+export const uploadPurposeSchema = z.enum([
+  'source',
+  'cover',
+  'project-cover',
+  'scene-cover',
+]);
 
 export type AssetFormat = z.infer<typeof assetFormatSchema>;
 export type AssetKind = z.infer<typeof assetKindSchema>;
@@ -105,8 +110,27 @@ export const createUploadInputSchema = uploadInputBaseSchema.transform(
       context.addIssue({ code: 'custom', message: '封面上传必须绑定资源编号' });
       return z.NEVER;
     }
-    if (input.purpose === 'cover' && !imageFormats.has(parsedFormat.data)) {
+    const isStandaloneCover =
+      input.purpose === 'project-cover' || input.purpose === 'scene-cover';
+    if (isStandaloneCover && input.assetId) {
+      context.addIssue({
+        code: 'custom',
+        message: '项目和场景封面不能绑定素材资源',
+      });
+      return z.NEVER;
+    }
+    if (
+      (input.purpose === 'cover' || isStandaloneCover) &&
+      !imageFormats.has(parsedFormat.data)
+    ) {
       context.addIssue({ code: 'custom', message: '封面仅支持图片格式' });
+      return z.NEVER;
+    }
+    if (isStandaloneCover && input.size > 8 * 1024 * 1024) {
+      context.addIssue({
+        code: 'custom',
+        message: '项目和场景封面不能超过 8MB',
+      });
       return z.NEVER;
     }
     const baseName = input.fileName.replace(/\.[^.]+$/, '');
@@ -221,6 +245,7 @@ export const assetSchema = z.object({
   scale: z.number().positive().optional(),
   visibility: assetVisibilitySchema.optional(),
   coverAssetId: z.string().nullable().optional(),
+  customCoverUrl: z.string().url().nullable().optional(),
   coverUrl: z.string().url().nullable().optional(),
   sourceHash: z.string(),
   metadata: assetMetadataSchema,
@@ -246,7 +271,7 @@ export const assetListResponseSchema = z.object({
 
 export const uploadSessionSchema = z.object({
   id: z.string().min(1),
-  assetId: z.string().min(1),
+  assetId: z.string().min(1).nullable(),
   objectKey: z.string().min(1),
   partSize: z.number().int().positive(),
   partCount: z.number().int().positive(),
@@ -270,6 +295,11 @@ export const uploadCompletionSchema = z.discriminatedUnion('status', [
     assetId: z.string().min(1),
     fileId: z.string().min(1),
     status: z.literal('ready'),
+  }),
+  z.object({
+    objectKey: z.string().min(1),
+    url: z.string().url(),
+    status: z.literal('stored'),
   }),
 ]);
 

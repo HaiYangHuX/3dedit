@@ -1,6 +1,7 @@
 import { createDefaultSceneDocument } from '@digital-twin/scene-schema';
 import { ConflictException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
+import type { MinioService } from '../src/infrastructure/minio.service.js';
 import type { PrismaService } from '../src/infrastructure/prisma.service.js';
 import { SceneService } from '../src/scenes/scene.service.js';
 
@@ -38,7 +39,7 @@ describe('SceneService', () => {
           callback(transaction),
       ),
     } as unknown as PrismaService;
-    const service = new SceneService(prisma);
+    const service = new SceneService(prisma, {} as MinioService);
 
     await service.create('project-1', {
       name: '主厂房',
@@ -55,6 +56,27 @@ describe('SceneService', () => {
     });
   });
 
+  it('读取场景时将稳定封面对象键转换为访问地址', async () => {
+    const prisma = {
+      scene: {
+        findUnique: vi.fn().mockResolvedValue({
+          ...sceneRow,
+          coverKey: 'covers/scenes/scene-cover.png',
+        }),
+      },
+    } as unknown as PrismaService;
+    const minio = {
+      presignGet: vi.fn().mockResolvedValue('https://assets.test/scene.png'),
+    } as unknown as MinioService;
+
+    const result = await new SceneService(prisma, minio).get('scene-1');
+
+    expect(result.coverKey).toBe('https://assets.test/scene.png');
+    expect(minio.presignGet).toHaveBeenCalledWith(
+      'covers/scenes/scene-cover.png',
+    );
+  });
+
   it('使用 id 和 baseRevision 执行原子保存', async () => {
     const prisma = {
       scene: {
@@ -62,7 +84,7 @@ describe('SceneService', () => {
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
     } as unknown as PrismaService;
-    const service = new SceneService(prisma);
+    const service = new SceneService(prisma, {} as MinioService);
     const document = createDefaultSceneDocument(
       'project-1',
       'scene-1',
@@ -90,7 +112,7 @@ describe('SceneService', () => {
         updateMany: vi.fn().mockResolvedValue({ count: 0 }),
       },
     } as unknown as PrismaService;
-    const service = new SceneService(prisma);
+    const service = new SceneService(prisma, {} as MinioService);
     const staleDocument = createDefaultSceneDocument(
       'project-1',
       'scene-1',
@@ -119,7 +141,7 @@ describe('SceneService', () => {
           callback(transaction),
       ),
     } as unknown as PrismaService;
-    const service = new SceneService(prisma);
+    const service = new SceneService(prisma, {} as MinioService);
 
     await expect(service.remove('scene-1')).resolves.toBeUndefined();
     expect(transaction.scene.delete).toHaveBeenCalledWith({

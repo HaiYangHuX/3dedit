@@ -1,5 +1,6 @@
 import type { ProjectSummary } from '@digital-twin/api-contracts';
 import { mount } from '@vue/test-utils';
+import { ElImage } from 'element-plus';
 import { createPinia, setActivePinia } from 'pinia';
 import { describe, expect, it, vi } from 'vitest';
 import { useProjectStore } from '../src/stores/project';
@@ -9,7 +10,7 @@ const project: ProjectSummary = {
   id: 'project-1',
   name: '化工厂数字孪生',
   description: '三维厂区',
-  coverKey: null,
+  coverKey: 'https://assets.test/project-cover.png',
   sceneCount: 2,
   createdAt: '2026-07-16T06:00:00.000Z',
   updatedAt: '2026-07-16T06:00:00.000Z',
@@ -44,6 +45,9 @@ describe('ProjectsView', () => {
     expect(wrapper.get('.project-card-grid').classes()).toContain(
       'project-card-grid',
     );
+    expect(
+      wrapper.get('.project-card__cover').getComponent(ElImage).props('src'),
+    ).toBe(project.coverKey);
     expect(wrapper.find('.project-card__description').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('运营信息');
     expect(wrapper.text()).not.toContain('负责人');

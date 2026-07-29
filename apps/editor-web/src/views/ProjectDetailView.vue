@@ -12,6 +12,7 @@ import {
   ElCard,
   ElEmpty,
   ElIcon,
+  ElImage,
   ElMessage,
   ElMessageBox,
   ElSkeleton,
@@ -146,10 +147,11 @@ async function deleteScene(id: string, name: string): Promise<void> {
     <template v-else-if="currentProject">
       <section class="project-detail-hero">
         <div class="project-detail-hero__cover">
-          <img
+          <ElImage
             v-if="currentProject.coverKey?.startsWith('http')"
             :src="currentProject.coverKey"
-            :alt="currentProject.name"
+            fit="cover"
+            class="project-detail-hero__image"
           />
           <span v-else>{{ currentProject.name.slice(0, 1) }}</span>
         </div>
@@ -195,10 +197,11 @@ async function deleteScene(id: string, name: string): Promise<void> {
             shadow="hover"
           >
             <div class="scene-card__cover">
-              <img
+              <ElImage
                 v-if="scene.coverKey?.startsWith('http')"
                 :src="scene.coverKey"
-                :alt="scene.name"
+                fit="cover"
+                class="scene-card__image"
               /><span v-else class="scene-card__initial">{{
                 scene.name.slice(0, 1)
               }}</span

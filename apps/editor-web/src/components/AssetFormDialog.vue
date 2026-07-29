@@ -8,12 +8,12 @@ import {
   ElFormItem,
   ElInput,
   ElMessage,
-  ElTag,
   ElUpload,
   type UploadFile,
 } from 'element-plus';
 import { computed, reactive, ref, watch } from 'vue';
 import { useAssetStore } from '../stores/asset';
+import CoverImagePicker from './CoverImagePicker.vue';
 
 const props = withDefaults(
   defineProps<{
@@ -33,6 +33,7 @@ const store = useAssetStore();
 const submitting = ref(false);
 const sourceFile = ref<File | null>(null);
 const coverFile = ref<File | null>(null);
+const coverRemoved = ref(false);
 const createdAssetId = ref<string | null>(null);
 const uploadedSourceFile = ref<File | null>(null);
 const createdMetadataSnapshot = ref<string | null>(null);
@@ -63,16 +64,10 @@ const sourceName = computed(() => {
     ? '未选择新文件，将保留当前源文件'
     : '请选择 GLB / GLTF / FBX 等源文件';
 });
-const coverName = computed(() => {
-  if (coverFile.value) return coverFile.value.name;
-  return isEdit.value
-    ? '未选择新封面，将保留当前封面'
-    : '未设置，将使用解析缩略图';
-});
-
 function resetForm(asset: Asset | null): void {
   sourceFile.value = null;
   coverFile.value = null;
+  coverRemoved.value = false;
   createdAssetId.value = null;
   uploadedSourceFile.value = null;
   createdMetadataSnapshot.value = null;
@@ -105,8 +100,9 @@ function onSourceChange(file: UploadFile): void {
   }
 }
 
-function onCoverChange(file: UploadFile): void {
-  coverFile.value = file.raw ?? null;
+function onCoverChange(file: File | null): void {
+  coverFile.value = file;
+  coverRemoved.value = file === null;
 }
 
 function close(): void {
@@ -148,7 +144,10 @@ async function submit(): Promise<void> {
   }
   submitting.value = true;
   try {
-    const metadata = metadataInput();
+    const metadata = {
+      ...metadataInput(),
+      ...(isEdit.value && coverRemoved.value ? { coverAssetId: null } : {}),
+    };
     const metadataSnapshot = JSON.stringify(metadata);
     const selectedSource = sourceFile.value;
     const selectedCover = coverFile.value;
@@ -266,25 +265,13 @@ async function submit(): Promise<void> {
           <span class="asset-file-hint">{{ sourceName }}</span>
         </ElFormItem>
         <ElFormItem label="自定义封面（可选）">
-          <div class="cover-upload-row">
-            <ElUpload
-              :auto-upload="false"
-              :show-file-list="false"
-              accept=".png,.jpg,.jpeg,.webp"
-              :on-change="onCoverChange"
-            >
-              <ElButton>{{ isEdit ? '选择新封面' : '选择封面' }}</ElButton>
-            </ElUpload>
-            <ElTag v-if="coverFile" type="success">{{ coverName }}</ElTag>
-            <span v-else class="asset-file-hint">{{ coverName }}</span>
-          </div>
-          <small class="asset-form-help">
-            {{
-              isEdit
-                ? '不选择新封面则保留当前封面。'
-                : '未上传封面时，系统会使用解析器生成的模型缩略图。'
-            }}
-          </small>
+          <CoverImagePicker
+            v-model="coverFile"
+            :src="coverRemoved ? '' : (asset?.customCoverUrl ?? '')"
+            :fallback="form.name.slice(0, 1) || '模'"
+            :disabled="submitting"
+            @change="onCoverChange"
+          />
         </ElFormItem>
       </div>
     </ElForm>

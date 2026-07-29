@@ -1,5 +1,6 @@
 import { createDefaultSceneDocument } from '@digital-twin/scene-schema';
 import { describe, expect, it, vi } from 'vitest';
+import type { MinioService } from '../src/infrastructure/minio.service.js';
 import type { PrismaService } from '../src/infrastructure/prisma.service.js';
 import { ProjectService } from '../src/projects/project.service.js';
 
@@ -32,7 +33,7 @@ describe('ProjectService', () => {
           callback(transaction),
       ),
     } as unknown as PrismaService;
-    const service = new ProjectService(prisma);
+    const service = new ProjectService(prisma, {} as MinioService);
 
     const result = await service.create({
       name: '化工厂',
@@ -71,10 +72,58 @@ describe('ProjectService', () => {
         ]),
       },
     } as unknown as PrismaService;
-    const service = new ProjectService(prisma);
+    const service = new ProjectService(prisma, {} as MinioService);
 
     await expect(service.list({ keyword: '厂' })).resolves.toEqual([
       expect.objectContaining({ id: 'project-1', sceneCount: 2 }),
     ]);
+  });
+
+  it('读取项目和场景时将稳定封面对象键转换为访问地址', async () => {
+    const prisma = {
+      project: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: 'project-1',
+          name: '厂区',
+          description: '',
+          coverKey: 'covers/projects/project.png',
+          createdAt: now,
+          updatedAt: now,
+          scenes: [
+            {
+              id: 'scene-1',
+              projectId: 'project-1',
+              name: '主厂房',
+              description: '',
+              sortOrder: 0,
+              revision: 0,
+              contentHash: '',
+              document: {},
+              coverKey: 'covers/scenes/scene.png',
+              createdAt: now,
+              updatedAt: now,
+            },
+          ],
+          publication: null,
+          _count: { scenes: 1 },
+        }),
+      },
+    } as unknown as PrismaService;
+    const minio = {
+      presignGet: vi
+        .fn()
+        .mockImplementation((key: string) =>
+          Promise.resolve(`https://assets.test/${key}`),
+        ),
+    } as unknown as MinioService;
+
+    const result = await new ProjectService(prisma, minio).get('project-1');
+
+    expect(result.coverKey).toBe(
+      'https://assets.test/covers/projects/project.png',
+    );
+    expect(result.scenes[0]?.coverKey).toBe(
+      'https://assets.test/covers/scenes/scene.png',
+    );
   });
 });

@@ -237,6 +237,60 @@ describe('AssetService', () => {
     expect(minio.presignGet).toHaveBeenCalledWith(thumbnail.objectKey);
   });
 
+  it('清空自定义封面后不再回退历史封面附件', async () => {
+    const oldCover = {
+      id: 'old-cover-file',
+      assetId: 'asset-1',
+      role: 'cover',
+      objectKey: 'assets/asset-1/cover/old.png',
+      mimeType: 'image/png',
+      size: 100n,
+      checksum: 'b'.repeat(64),
+      createdAt: now,
+    };
+    const thumbnail = {
+      ...oldCover,
+      id: 'thumbnail-file',
+      role: 'thumbnail',
+      objectKey: 'assets/asset-1/thumbnail/model.svg',
+      mimeType: 'image/svg+xml',
+    };
+    const clearedRow = {
+      ...assetRow,
+      coverAssetId: null,
+      activeCoverFileId: null,
+      activeCoverFile: null,
+      files: [oldCover, thumbnail],
+      coverAsset: null,
+    };
+    const prisma = {
+      asset: {
+        findUnique: vi
+          .fn()
+          .mockResolvedValueOnce({ id: 'asset-1' })
+          .mockResolvedValueOnce(clearedRow),
+        update: vi.fn().mockResolvedValue(clearedRow),
+      },
+      scene: { findMany: vi.fn().mockResolvedValue([]) },
+    } as unknown as PrismaService;
+    const minio = {
+      presignGet: vi
+        .fn()
+        .mockResolvedValue('https://assets.test/model-thumbnail.svg'),
+    } as unknown as MinioService;
+
+    const result = await new AssetService(prisma, minio).update('asset-1', {
+      coverAssetId: null,
+    });
+
+    expect(prisma.asset.update).toHaveBeenCalledWith({
+      where: { id: 'asset-1' },
+      data: { coverAssetId: null, activeCoverFileId: null },
+    });
+    expect(result.customCoverUrl).toBeNull();
+    expect(result.coverUrl).toBe('https://assets.test/model-thumbnail.svg');
+  });
+
   it('资源被场景引用时拒绝删除', async () => {
     const transaction = {
       asset: {

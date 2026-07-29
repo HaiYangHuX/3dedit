@@ -17,6 +17,7 @@ import {
   ElCard,
   ElEmpty,
   ElIcon,
+  ElImage,
   ElInput,
   ElMessage,
   ElMessageBox,
@@ -193,10 +194,11 @@ async function deleteProject(id: string, name: string): Promise<void> {
         shadow="hover"
       >
         <RouterLink :to="`/projects/${project.id}`" class="project-card__cover">
-          <img
+          <ElImage
             v-if="project.coverKey?.startsWith('http')"
             :src="project.coverKey"
-            :alt="project.name"
+            fit="cover"
+            class="project-card__image"
           />
           <span v-else class="project-card__cover-fallback">{{
             project.name.slice(0, 1)

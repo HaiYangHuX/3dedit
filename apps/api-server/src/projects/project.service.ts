@@ -11,6 +11,7 @@ import { createDefaultSceneDocument } from '@digital-twin/scene-schema';
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma, Project, Scene } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
+import { MinioService } from '../infrastructure/minio.service.js';
 import { PrismaService } from '../infrastructure/prisma.service.js';
 
 type ProjectPublication = { status?: string; publishedAt: Date } | null;
@@ -50,7 +51,18 @@ function extractAssetIds(scenes: { document: unknown }[] = []): Set<string> {
   return ids;
 }
 
-function mapSceneSummary(scene: Scene): SceneSummary {
+async function resolveCoverUrl(
+  minio: MinioService,
+  coverKey: string | null,
+): Promise<string | null> {
+  if (!coverKey || /^https?:\/\//i.test(coverKey)) return coverKey;
+  return minio.presignGet(coverKey);
+}
+
+async function mapSceneSummary(
+  scene: Scene,
+  minio: MinioService,
+): Promise<SceneSummary> {
   return {
     id: scene.id,
     projectId: scene.projectId,
@@ -59,13 +71,16 @@ function mapSceneSummary(scene: Scene): SceneSummary {
     sortOrder: scene.sortOrder,
     revision: scene.revision,
     contentHash: scene.contentHash,
-    coverKey: scene.coverKey,
+    coverKey: await resolveCoverUrl(minio, scene.coverKey),
     createdAt: scene.createdAt.toISOString(),
     updatedAt: scene.updatedAt.toISOString(),
   };
 }
 
-function mapProjectSummary(project: ProjectListRow): ProjectSummary {
+async function mapProjectSummary(
+  project: ProjectListRow,
+  minio: MinioService,
+): Promise<ProjectSummary> {
   const scenes = project.scenes ?? [];
   return {
     id: project.id,
@@ -78,7 +93,7 @@ function mapProjectSummary(project: ProjectListRow): ProjectSummary {
     industry: project.industry ?? '制造业',
     location: project.location ?? '',
     notes: project.notes ?? '',
-    coverKey: project.coverKey ?? null,
+    coverKey: await resolveCoverUrl(minio, project.coverKey ?? null),
     sceneCount: project._count.scenes,
     assetCount: extractAssetIds(scenes).size,
     lastPublishedAt: project.publication?.publishedAt?.toISOString() ?? null,
@@ -87,10 +102,15 @@ function mapProjectSummary(project: ProjectListRow): ProjectSummary {
   };
 }
 
-function mapProjectDetail(project: ProjectDetailRow): ProjectDetail {
+async function mapProjectDetail(
+  project: ProjectDetailRow,
+  minio: MinioService,
+): Promise<ProjectDetail> {
   return {
-    ...mapProjectSummary(project),
-    scenes: project.scenes.map(mapSceneSummary),
+    ...(await mapProjectSummary(project, minio)),
+    scenes: await Promise.all(
+      project.scenes.map((scene) => mapSceneSummary(scene, minio)),
+    ),
     publicationStatus: project.publication?.status ?? null,
   };
 }
@@ -98,7 +118,10 @@ function mapProjectDetail(project: ProjectDetailRow): ProjectDetail {
 /** 项目聚合根：项目的创建、复制和删除必须与其场景保持事务一致。 */
 @Injectable()
 export class ProjectService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(MinioService) private readonly minio: MinioService,
+  ) {}
 
   async list(query: ListProjectsQuery): Promise<ProjectSummary[]> {
     const projects = await this.prisma.project.findMany({
@@ -124,7 +147,9 @@ export class ProjectService {
       },
       orderBy: { updatedAt: 'desc' },
     });
-    return projects.map(mapProjectSummary);
+    return Promise.all(
+      projects.map((project) => mapProjectSummary(project, this.minio)),
+    );
   }
 
   async create(input: CreateProjectInput): Promise<ProjectDetail> {
@@ -151,12 +176,15 @@ export class ProjectService {
       return { project, scene };
     });
 
-    return mapProjectDetail({
-      ...result.project,
-      scenes: [result.scene],
-      publication: null,
-      _count: { scenes: 1 },
-    });
+    return mapProjectDetail(
+      {
+        ...result.project,
+        scenes: [result.scene],
+        publication: null,
+        _count: { scenes: 1 },
+      },
+      this.minio,
+    );
   }
 
   async get(id: string): Promise<ProjectDetail> {
@@ -169,7 +197,7 @@ export class ProjectService {
       },
     });
     if (!project) throw new NotFoundException('项目不存在');
-    return mapProjectDetail(project);
+    return mapProjectDetail(project, this.minio);
   }
 
   async update(id: string, input: UpdateProjectInput): Promise<ProjectDetail> {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AssetDetail } from '@digital-twin/api-contracts';
-import { AssetLoader } from '@digital-twin/three-engine';
+import { alignObjectToGround, AssetLoader } from '@digital-twin/three-engine';
 import {
   ACESFilmicToneMapping,
   AmbientLight,
@@ -123,6 +123,7 @@ async function loadModel(): Promise<void> {
       return;
     }
     model = loaded.root;
+    alignObjectToGround(model, 0);
     scene?.add(model);
     resetView();
   } catch (reason) {

@@ -155,7 +155,11 @@ export class AssetService {
       select: { id: true },
     });
     if (!exists) throw new NotFoundException('资源不存在');
-    await this.prisma.asset.update({ where: { id }, data: input });
+    const clearCover = input.coverAssetId === null;
+    await this.prisma.asset.update({
+      where: { id },
+      data: clearCover ? { ...input, activeCoverFileId: null } : input,
+    });
     return this.get(id);
   }
 
@@ -188,12 +192,6 @@ export class AssetService {
   ): Promise<Asset> {
     const files = asset.files ?? [];
     const thumbnail = files.find((file) => file.role === 'thumbnail');
-    const ownCover = files
-      .filter((file) => file.role === 'cover')
-      .sort(
-        (first, second) =>
-          second.createdAt.getTime() - first.createdAt.getTime(),
-      )[0];
     // 自定义封面优先返回原图源文件；未配置封面时才回退模型解析出的缩略图。
     const coverFiles =
       asset.coverAsset &&
@@ -202,16 +200,16 @@ export class AssetService {
         : undefined;
     const coverThumbnail =
       asset.activeCoverFile ??
-      ownCover ??
       asset.coverAsset?.activeFile ??
       coverFiles?.find((file) => file.role === 'source') ??
       coverFiles?.find((file) => file.role === 'thumbnail');
     const thumbnailUrl = thumbnail
       ? await this.minio.presignGet(thumbnail.objectKey)
       : null;
-    const coverUrl = coverThumbnail
+    const customCoverUrl = coverThumbnail
       ? await this.minio.presignGet(coverThumbnail.objectKey)
-      : thumbnailUrl;
+      : null;
+    const coverUrl = customCoverUrl ?? thumbnailUrl;
     return {
       id: asset.id,
       name: asset.name,
@@ -231,6 +229,7 @@ export class AssetService {
       scale: asset.scale ?? 1,
       visibility: (asset.visibility ?? 'private') as Asset['visibility'],
       coverAssetId: asset.coverAssetId ?? null,
+      customCoverUrl,
       coverUrl,
       sourceHash: asset.sourceHash,
       metadata: assetMetadataSchema.parse(asset.metadata),

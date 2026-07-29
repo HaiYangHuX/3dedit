@@ -1,5 +1,6 @@
 import type { ProjectDetail } from '@digital-twin/api-contracts';
 import { mount } from '@vue/test-utils';
+import { ElImage } from 'element-plus';
 import { createPinia, setActivePinia } from 'pinia';
 import { describe, expect, it, vi } from 'vitest';
 import { useProjectStore } from '../src/stores/project';
@@ -15,7 +16,7 @@ describe('ProjectDetailView', () => {
       id: 'project-1',
       name: '厂区',
       description: '',
-      coverKey: null,
+      coverKey: 'https://assets.test/project-cover.png',
       sceneCount: 1,
       createdAt: '2026-07-16T06:00:00.000Z',
       updatedAt: '2026-07-16T06:00:00.000Z',
@@ -29,7 +30,7 @@ describe('ProjectDetailView', () => {
           sortOrder: 0,
           revision: 0,
           contentHash: '',
-          coverKey: null,
+          coverKey: 'https://assets.test/scene-cover.png',
           createdAt: '2026-07-16T06:00:00.000Z',
           updatedAt: '2026-07-16T06:00:00.000Z',
         },
@@ -64,7 +65,15 @@ describe('ProjectDetailView', () => {
     expect(wrapper.find('.project-detail-page .section-heading').exists()).toBe(
       false,
     );
-    expect(wrapper.find('.scene-card__initial').text()).toBe('主');
+    expect(
+      wrapper
+        .get('.project-detail-hero__cover')
+        .getComponent(ElImage)
+        .props('src'),
+    ).toBe('https://assets.test/project-cover.png');
+    expect(
+      wrapper.get('.scene-card__cover').getComponent(ElImage).props('src'),
+    ).toBe('https://assets.test/scene-cover.png');
     expect(wrapper.find('button[title="场景设置"]').exists()).toBe(false);
     expect(wrapper.find('button[title="编辑场景"]').exists()).toBe(true);
     expect(wrapper.findAllComponents(SceneFormDialog)).toHaveLength(1);

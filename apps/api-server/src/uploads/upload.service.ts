@@ -74,7 +74,9 @@ function buildAssetMetadataSnapshot(
   };
 }
 
-function assetDataFromSnapshot(value: unknown): Prisma.AssetUpdateInput {
+function assetDataFromSnapshot(
+  value: unknown,
+): Prisma.AssetUncheckedUpdateInput {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   const snapshot = value as Record<string, unknown>;
   const allowed = [
@@ -94,11 +96,13 @@ function assetDataFromSnapshot(value: unknown): Prisma.AssetUpdateInput {
     'visibility',
     'coverAssetId',
   ] as const;
-  return Object.fromEntries(
+  const data = Object.fromEntries(
     allowed
       .filter((key) => snapshot[key] !== undefined)
       .map((key) => [key, snapshot[key]]),
-  ) as Prisma.AssetUpdateInput;
+  ) as Prisma.AssetUncheckedUpdateInput;
+  if (snapshot.coverAssetId === null) data.activeCoverFileId = null;
+  return data;
 }
 
 function validateParts(
@@ -135,14 +139,20 @@ export class UploadService {
 
   async create(input: CreateUploadInput): Promise<UploadSession> {
     const isCover = input.purpose === 'cover';
+    const isStandaloneCover =
+      input.purpose === 'project-cover' || input.purpose === 'scene-cover';
     const isReplacement = Boolean(input.assetId);
-    let asset: {
-      id: string;
-      version?: string;
-      activeFile?: { objectKey: string } | null;
-    };
+    let asset:
+      | {
+          id: string;
+          version?: string;
+          activeFile?: { objectKey: string } | null;
+        }
+      | undefined;
 
-    if (input.assetId) {
+    if (isStandaloneCover) {
+      asset = undefined;
+    } else if (input.assetId) {
       const existing = await this.prisma.asset.findUnique({
         where: { id: input.assetId },
         include: { activeFile: true },
@@ -186,12 +196,16 @@ export class UploadService {
 
     const safeName = sanitizeFileName(input.fileName);
     // 替换上传不能覆盖仍在使用的源对象；仅同名冲突时追加时间戳形成候选文件。
-    const storedName = isCover
-      ? `${randomUUID()}-${safeName}`
-      : asset.activeFile?.objectKey === `assets/${asset.id}/source/${safeName}`
-        ? `${this.now().getTime()}-${safeName}`
-        : safeName;
-    const objectKey = `assets/${asset.id}/${isCover ? 'cover' : 'source'}/${storedName}`;
+    const storedName =
+      isCover || isStandaloneCover
+        ? `${randomUUID()}-${safeName}`
+        : asset?.activeFile?.objectKey ===
+            `assets/${asset?.id}/source/${safeName}`
+          ? `${this.now().getTime()}-${safeName}`
+          : safeName;
+    const objectKey = isStandaloneCover
+      ? `covers/${input.purpose === 'project-cover' ? 'projects' : 'scenes'}/${storedName}`
+      : `assets/${asset?.id}/${isCover ? 'cover' : 'source'}/${storedName}`;
     const partSize = calculatePartSize(input.size);
     const partCount = Math.ceil(input.size / partSize);
     const expiresAt = new Date(this.now().getTime() + SESSION_TTL_MS);
@@ -205,19 +219,20 @@ export class UploadService {
       );
       const session = await this.prisma.uploadSession.create({
         data: {
-          assetId: asset.id,
+          assetId: asset?.id ?? null,
           fileName: input.fileName,
           mimeType: input.mimeType,
           size: BigInt(input.size),
           sha256: input.sha256,
           format: input.format,
           purpose: input.purpose,
-          metadata: isCover
-            ? {}
-            : buildAssetMetadataSnapshot(
-                input,
-                isReplacement ? (asset.version ?? '1.0.0') : '1.0.0',
-              ),
+          metadata:
+            isCover || isStandaloneCover
+              ? {}
+              : buildAssetMetadataSnapshot(
+                  input,
+                  isReplacement ? (asset?.version ?? '1.0.0') : '1.0.0',
+                ),
           objectKey,
           uploadId,
           partSize,
@@ -226,7 +241,7 @@ export class UploadService {
         },
       });
       sessionId = session.id;
-      if (isReplacement && !isCover) {
+      if (isReplacement && !isCover && asset) {
         await this.prisma.asset.update({
           where: { id: asset.id },
           data: { status: 'uploading', error: null },
@@ -244,7 +259,7 @@ export class UploadService {
       );
       return {
         id: session.id,
-        assetId: asset.id,
+        assetId: asset?.id ?? null,
         objectKey,
         partSize,
         partCount,
@@ -262,7 +277,7 @@ export class UploadService {
           .deleteMany({ where: { id: sessionId, status: 'uploading' } })
           .catch(() => undefined);
       }
-      if (!isReplacement) {
+      if (!isReplacement && asset) {
         // 新资源尚未被场景引用，初始化失败时删除占位行，避免模型库长期出现幽灵记录。
         await this.prisma.asset
           .delete({ where: { id: asset.id } })
@@ -405,6 +420,8 @@ export class UploadService {
     }
 
     if (claim.session.purpose === 'cover') {
+      const assetId = claim.session.assetId;
+      if (!assetId) throw new ConflictException('封面上传缺少资源编号');
       const completion = await this.prisma.$transaction(async (transaction) => {
         const acquired = await transaction.uploadSession.updateMany({
           where: { id, status: 'uploaded' },
@@ -413,7 +430,7 @@ export class UploadService {
         if (acquired.count !== 1) return null;
         const file = await transaction.assetFile.create({
           data: {
-            assetId: claim.session.assetId,
+            assetId,
             role: 'cover',
             objectKey: claim.session.objectKey,
             mimeType: claim.session.mimeType,
@@ -422,7 +439,7 @@ export class UploadService {
           },
         });
         await transaction.asset.update({
-          where: { id: claim.session.assetId },
+          where: { id: assetId },
           data: {
             activeCoverFileId: file.id,
             coverAssetId: null,
@@ -439,11 +456,30 @@ export class UploadService {
       });
       if (!completion) return this.resumeFinalizationRace(id);
       return {
-        assetId: claim.session.assetId,
+        assetId,
         fileId: completion.file.id,
         status: 'ready',
       };
     }
+
+    if (
+      claim.session.purpose === 'project-cover' ||
+      claim.session.purpose === 'scene-cover'
+    ) {
+      const completed = await this.prisma.uploadSession.updateMany({
+        where: { id, status: 'uploaded' },
+        data: { status: 'completed' },
+      });
+      if (completed.count !== 1) return this.resumeFinalizationRace(id);
+      return {
+        objectKey: claim.session.objectKey,
+        url: await this.minio.presignGet(claim.session.objectKey),
+        status: 'stored',
+      };
+    }
+
+    const assetId = claim.session.assetId;
+    if (!assetId) throw new ConflictException('资源上传缺少资源编号');
 
     const completion = await this.prisma.$transaction(async (transaction) => {
       const acquired = await transaction.uploadSession.updateMany({
@@ -453,7 +489,7 @@ export class UploadService {
       if (acquired.count !== 1) return null;
       const file = await transaction.assetFile.create({
         data: {
-          assetId: claim.session.assetId,
+          assetId,
           role: 'source',
           objectKey: claim.session.objectKey,
           mimeType: claim.session.mimeType,
@@ -462,7 +498,7 @@ export class UploadService {
         },
       });
       await transaction.asset.update({
-        where: { id: claim.session.assetId },
+        where: { id: assetId },
         data: {
           status: 'queued',
           error: null,
@@ -470,14 +506,14 @@ export class UploadService {
         },
       });
       const jobData: AnalyzeAssetJobData = {
-        assetId: claim.session.assetId,
+        assetId,
         fileId: file.id,
         objectKey: claim.session.objectKey,
         expectedSha256: claim.session.sha256,
       };
       const job = await transaction.processingJob.create({
         data: {
-          assetId: claim.session.assetId,
+          assetId,
           type: 'analyze-asset',
           status: 'queued',
           payload: { ...jobData, uploadSessionId: id },
@@ -496,12 +532,12 @@ export class UploadService {
     if (!completion) return this.resumeFinalizationRace(id);
 
     await this.enqueueOrMarkFailed(
-      claim.session.assetId,
+      assetId,
       completion.job.id,
       completion.jobData,
     );
     return {
-      assetId: claim.session.assetId,
+      assetId,
       fileId: completion.file.id,
       jobId: completion.job.id,
       status: 'queued',
@@ -569,7 +605,8 @@ export class UploadService {
         },
       });
       if (deleted.count !== 1) return;
-      if (session.purpose === 'cover') return;
+      if (session.purpose !== 'source') return;
+      if (!session.assetId) return;
       const asset = await transaction.asset.findUnique({
         where: { id: session.assetId },
         include: { files: { take: 1 } },
@@ -639,7 +676,20 @@ export class UploadService {
   private async resumeCompleted(
     session: UploadSessionRow,
   ): Promise<UploadCompletion> {
+    if (
+      session.purpose === 'project-cover' ||
+      session.purpose === 'scene-cover'
+    ) {
+      return {
+        objectKey: session.objectKey,
+        url: await this.minio.presignGet(session.objectKey),
+        status: 'stored',
+      };
+    }
     if (session.purpose === 'cover') {
+      if (!session.assetId) {
+        throw new ConflictException('封面上传完成记录缺少资源编号');
+      }
       const file = await this.prisma.assetFile.findUnique({
         where: { objectKey: session.objectKey },
       });
@@ -651,6 +701,9 @@ export class UploadService {
         fileId: file.id,
         status: 'ready',
       };
+    }
+    if (!session.assetId) {
+      throw new ConflictException('资源上传完成记录缺少资源编号');
     }
     const [file, job] = await Promise.all([
       this.prisma.assetFile.findUnique({

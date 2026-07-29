@@ -3162,10 +3162,9 @@ button {
     linear-gradient(140deg, #312e81, #0f766e);
 }
 
-.project-card__cover img {
+.project-card__cover .el-image {
   width: 100%;
   height: 100%;
-  object-fit: cover;
 }
 
 .project-card__cover-fallback {
@@ -3330,46 +3329,61 @@ button {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-/* 项目和场景封面遵循同一套上传预览交互，创建与编辑不再出现字段差异。 */
-.project-cover-picker {
+/* 模型、项目和场景表单共用同一套封面上传与预览交互。 */
+.cover-image-picker {
   display: flex;
   gap: 12px;
   align-items: center;
+  width: 100%;
 }
 
-.project-cover-picker__preview {
+.cover-image-picker__preview {
+  position: relative;
   display: grid;
   flex: 0 0 112px;
   place-items: center;
   width: 112px;
   height: 72px;
   overflow: hidden;
-  color: #dbeafe;
-  font-size: 28px;
-  font-weight: 800;
-  background: linear-gradient(145deg, #312e81, #0f766e);
+  color: #64748b;
+  font-size: 24px;
+  font-weight: 700;
+  background: #f1f5f9;
+  border: 1px solid #dbe3ec;
   border-radius: 7px;
 }
 
-.project-cover-picker__preview img {
+.cover-image-picker__preview .el-image {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  cursor: zoom-in;
 }
 
-.project-cover-picker__controls {
+.cover-image-picker__zoom.el-button {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  z-index: 1;
+  width: 28px;
+  height: 28px;
+  color: #1f2937;
+  background: rgb(255 255 255 / 92%);
+  box-shadow: 0 1px 4px rgb(15 23 42 / 22%);
+}
+
+.cover-image-picker__controls {
   display: grid;
   min-width: 0;
   gap: 6px;
 }
 
-.project-cover-picker__buttons {
+.cover-image-picker__buttons {
   display: flex;
   gap: 7px;
   align-items: center;
 }
 
-.project-cover-picker__hint {
+.cover-image-picker__hint {
   color: #94a3b8;
   font-size: 11px;
 }
@@ -3385,55 +3399,11 @@ button {
   gap: 14px;
 }
 
-.scene-cover-picker {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-
-.scene-cover-picker__preview {
-  display: grid;
-  flex: 0 0 92px;
-  place-items: center;
-  width: 92px;
-  height: 64px;
-  overflow: hidden;
-  color: #dbeafe;
-  font-size: 24px;
-  font-weight: 800;
-  background: linear-gradient(145deg, #172554, #164e63);
-  border-radius: 7px;
-}
-
-.scene-cover-picker__preview img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.scene-cover-picker__controls {
-  display: grid;
-  min-width: 0;
-  gap: 6px;
-}
-
-.scene-cover-picker__buttons {
-  display: flex;
-  gap: 7px;
-  align-items: center;
-}
-
-.scene-cover-picker__hint {
-  color: #94a3b8;
-  font-size: 11px;
-}
-
-.scene-card__cover > img {
+.scene-card__cover > .el-image {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
 }
 
 .scene-card__cover::after {
@@ -3489,10 +3459,9 @@ button {
   border-radius: 11px;
 }
 
-.project-detail-hero__cover img {
+.project-detail-hero__cover .el-image {
   width: 100%;
   height: 100%;
-  object-fit: cover;
   border-radius: inherit;
 }
 
@@ -3699,6 +3668,11 @@ button {
 
 .management-toolbar {
   margin-bottom: 12px;
+}
+
+.management-toolbar,
+.asset-tools {
+  border-radius: 8px;
 }
 
 .asset-library-page .management-header {

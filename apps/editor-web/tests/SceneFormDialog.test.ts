@@ -1,13 +1,13 @@
-import type { AssetDetail, SceneSummary } from '@digital-twin/api-contracts';
+import type { SceneSummary } from '@digital-twin/api-contracts';
 import { flushPromises, mount } from '@vue/test-utils';
-import { ElUpload } from 'element-plus';
+import { ElImage, ElUpload } from 'element-plus';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { assetApi } from '../src/api/assets';
 import SceneFormDialog from '../src/components/SceneFormDialog.vue';
-import { useAssetStore } from '../src/stores/asset';
+import CoverImagePicker from '../src/components/CoverImagePicker.vue';
+import { uploadCoverFile } from '../src/uploads/coverUpload';
 
-vi.mock('../src/api/assets', () => ({ assetApi: { get: vi.fn() } }));
+vi.mock('../src/uploads/coverUpload', () => ({ uploadCoverFile: vi.fn() }));
 
 const scene: SceneSummary = {
   id: 'scene-1',
@@ -42,43 +42,17 @@ describe('SceneFormDialog', () => {
       expect(edit.text()).toContain(label);
     }
     expect(create.text()).not.toContain('项目描述');
-    expect(edit.find('img').attributes('src')).toBe(scene.coverKey);
+    expect(edit.findAllComponents(CoverImagePicker)).toHaveLength(1);
+    expect(edit.getComponent(ElImage).props('src')).toBe(scene.coverKey);
   });
 
   it('上传一张图片后把资源地址随创建场景表单提交', async () => {
     const pinia = createPinia();
     setActivePinia(pinia);
-    const store = useAssetStore();
-    const upload = vi.spyOn(store, 'uploadFile').mockResolvedValue({
-      id: 'upload-1',
-      fileName: 'cover.png',
-      size: 5,
-      progress: 100,
-      status: 'ready',
-      error: '',
-      assetId: 'cover-asset',
-      createdAt: '2026-07-16T06:00:00.000Z',
+    vi.mocked(uploadCoverFile).mockResolvedValue({
+      objectKey: 'covers/scenes/scene-cover.png',
+      url: 'https://assets.test/scene-cover.jpg',
     });
-    vi.mocked(assetApi.get).mockResolvedValue({
-      id: 'cover-asset',
-      name: '场景封面',
-      kind: 'image',
-      format: 'png',
-      status: 'ready',
-      category: '场景封面',
-      tags: [],
-      favorite: false,
-      sourceHash: 'a'.repeat(64),
-      metadata: {},
-      error: null,
-      retryCount: 0,
-      thumbnailUrl: 'https://assets.test/scene-cover.jpg',
-      sourceSize: 5,
-      referenceCount: 0,
-      files: [],
-      createdAt: '2026-07-16T06:00:00.000Z',
-      updatedAt: '2026-07-16T06:00:00.000Z',
-    } satisfies AssetDetail);
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:scene-cover');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
     const wrapper = mount(SceneFormDialog, {
@@ -99,14 +73,14 @@ describe('SceneFormDialog', () => {
     await submitButton?.trigger('click');
     await flushPromises();
 
-    expect(upload).toHaveBeenCalledWith(
+    expect(uploadCoverFile).toHaveBeenCalledWith(
       expect.any(File),
-      expect.objectContaining({ category: '场景封面' }),
+      'scene-cover',
     );
     expect(wrapper.emitted('submit')?.[0]?.[0]).toEqual({
       name: '主厂房',
       description: '',
-      coverKey: 'https://assets.test/scene-cover.jpg',
+      coverKey: 'covers/scenes/scene-cover.png',
     });
   });
 });

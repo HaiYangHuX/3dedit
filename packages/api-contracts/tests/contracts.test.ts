@@ -149,6 +149,32 @@ describe('资源上传 API 契约', () => {
     });
   });
 
+  it('项目和场景封面允许独立上传且不绑定资源', () => {
+    expect(
+      createUploadInputSchema.parse({
+        fileName: 'project-cover.webp',
+        size: 1_024,
+        sha256,
+        mimeType: 'image/webp',
+        purpose: 'project-cover',
+      }),
+    ).toMatchObject({
+      purpose: 'project-cover',
+      format: 'webp',
+      kind: 'image',
+    });
+    expect(() =>
+      createUploadInputSchema.parse({
+        fileName: 'scene-cover.png',
+        size: 1_024,
+        sha256,
+        mimeType: 'image/png',
+        purpose: 'scene-cover',
+        assetId: 'asset-1',
+      }),
+    ).toThrow();
+  });
+
   it('约束上传完成后的任务回执', () => {
     expect(
       uploadCompletionSchema.parse({
@@ -168,6 +194,17 @@ describe('资源上传 API 契约', () => {
       assetId: 'asset-1',
       fileId: 'cover-file-1',
       status: 'ready',
+    });
+    expect(
+      uploadCompletionSchema.parse({
+        objectKey: 'covers/projects/project-cover.png',
+        url: 'https://assets.test/project-cover.png',
+        status: 'stored',
+      }),
+    ).toEqual({
+      objectKey: 'covers/projects/project-cover.png',
+      url: 'https://assets.test/project-cover.png',
+      status: 'stored',
     });
     expect(
       analyzeAssetJobDataSchema.parse({

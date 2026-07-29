@@ -98,8 +98,8 @@ model AssetFile {
 
 model UploadSession {
   id        String   @id @default(cuid())
-  assetId   String
-  asset     Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  assetId   String?
+  asset     Asset?   @relation(fields: [assetId], references: [id], onDelete: Cascade)
   fileName  String
   mimeType  String
   size      BigInt

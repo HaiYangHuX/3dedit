@@ -361,6 +361,123 @@ describe('UploadService', () => {
     expect(prisma.asset.update).not.toHaveBeenCalled();
   });
 
+  it('为项目封面创建不绑定资源的独立上传会话', async () => {
+    const prisma = {
+      asset: {
+        findUnique: vi.fn(),
+        create: vi.fn(),
+      },
+      uploadSession: {
+        create: vi.fn().mockImplementation(({ data }) => ({
+          ...data,
+          id: 'project-cover-upload-1',
+        })),
+      },
+    } as unknown as PrismaService;
+    const minio = {
+      createMultipartUpload: vi.fn().mockResolvedValue('minio-upload-1'),
+      presignUploadPart: vi.fn().mockResolvedValue('https://minio.test/part/1'),
+      abortMultipartUpload: vi.fn(),
+    } as unknown as MinioService;
+    const service = new UploadService(
+      prisma,
+      minio,
+      {} as QueueService,
+      () => now,
+    );
+
+    const result = await service.create({
+      fileName: 'factory-cover.png',
+      size: 1_024,
+      sha256: SHA256,
+      mimeType: 'image/png',
+      name: 'factory-cover',
+      purpose: 'project-cover',
+      category: '未分类',
+      tags: [],
+      format: 'png',
+      kind: 'image',
+    });
+
+    expect(result.assetId).toBeNull();
+    expect(prisma.asset.findUnique).not.toHaveBeenCalled();
+    expect(prisma.asset.create).not.toHaveBeenCalled();
+    expect(minio.createMultipartUpload).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /^covers\/projects\/[0-9a-f-]+-factory-cover\.png$/,
+      ),
+      'image/png',
+    );
+    expect(prisma.uploadSession.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        assetId: null,
+        purpose: 'project-cover',
+      }),
+    });
+  });
+
+  it('完成独立封面上传后只返回对象键且不创建资源记录', async () => {
+    const session = {
+      id: 'project-cover-upload-1',
+      assetId: null,
+      objectKey: 'covers/projects/project-cover.png',
+      uploadId: 'minio-upload-1',
+      fileName: 'project-cover.png',
+      mimeType: 'image/png',
+      size: 1_024n,
+      sha256: SHA256,
+      format: 'png',
+      purpose: 'project-cover',
+      metadata: {},
+      partSize: 5 * 1024 * 1024,
+      partCount: 1,
+      status: 'uploading',
+      expiresAt: new Date('2026-07-17T08:00:00.000Z'),
+      updatedAt: now,
+    };
+    const transaction = {
+      uploadSession: {
+        findUnique: vi.fn().mockResolvedValue(session),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      assetFile: { create: vi.fn() },
+      asset: { update: vi.fn() },
+      processingJob: { create: vi.fn() },
+    };
+    const prisma = {
+      uploadSession: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      $transaction: vi.fn(
+        async (callback: (client: typeof transaction) => Promise<unknown>) =>
+          callback(transaction),
+      ),
+    } as unknown as PrismaService;
+    const minio = {
+      completeMultipartUpload: vi.fn().mockResolvedValue(undefined),
+      presignGet: vi.fn().mockResolvedValue('https://assets.test/project.png'),
+    } as unknown as MinioService;
+    const service = new UploadService(
+      prisma,
+      minio,
+      {} as QueueService,
+      () => now,
+    );
+
+    await expect(
+      service.complete(session.id, {
+        parts: [{ partNumber: 1, etag: 'etag-1' }],
+      }),
+    ).resolves.toEqual({
+      objectKey: session.objectKey,
+      url: 'https://assets.test/project.png',
+      status: 'stored',
+    });
+    expect(transaction.assetFile.create).not.toHaveBeenCalled();
+    expect(transaction.asset.update).not.toHaveBeenCalled();
+    expect(transaction.processingJob.create).not.toHaveBeenCalled();
+  });
+
   it('封面预签名失败时删除客户端不可见的上传会话', async () => {
     const existing = {
       id: 'asset-1',
