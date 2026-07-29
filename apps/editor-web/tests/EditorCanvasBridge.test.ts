@@ -29,6 +29,8 @@ const mocks = vi.hoisted(() => {
     cancelCameraRoamingDrawing: vi.fn(),
     previewCameraRoaming: vi.fn().mockReturnValue(true),
     stopCameraRoaming: vi.fn(),
+    showCameraRoamingPath: vi.fn().mockReturnValue(true),
+    hideCameraRoamingPath: vi.fn(),
     setSelection: vi.fn(),
     selectModelPart: vi.fn().mockReturnValue(true),
     setTransformMode: vi.fn(),
@@ -428,6 +430,8 @@ describe('EditorCanvas bridge', () => {
       cancelCameraRoamingDrawing(): void;
       previewCameraRoaming(pathId: string): boolean;
       stopCameraRoaming(): void;
+      showCameraRoamingPath(pathId: string): boolean;
+      hideCameraRoamingPath(): void;
       selectModelPart(nodeId: string, objectId: string): boolean;
       setTransformMode(mode: 'translate' | 'rotate' | 'scale'): void;
       setTransformSpace(space: 'local' | 'world'): void;
@@ -449,6 +453,8 @@ describe('EditorCanvas bridge', () => {
     bridge.cancelCameraRoamingDrawing();
     expect(bridge.previewCameraRoaming('path-1')).toBe(true);
     bridge.stopCameraRoaming();
+    expect(bridge.showCameraRoamingPath('path-1')).toBe(true);
+    bridge.hideCameraRoamingPath();
     expect(bridge.selectModelPart('node-1', 'object-1')).toBe(true);
     bridge.setTransformMode('rotate');
     bridge.setTransformSpace('local');
@@ -474,6 +480,8 @@ describe('EditorCanvas bridge', () => {
     expect(mocks.engine.cancelCameraRoamingDrawing).toHaveBeenCalled();
     expect(mocks.engine.previewCameraRoaming).toHaveBeenCalledWith('path-1');
     expect(mocks.engine.stopCameraRoaming).toHaveBeenCalled();
+    expect(mocks.engine.showCameraRoamingPath).toHaveBeenCalledWith('path-1');
+    expect(mocks.engine.hideCameraRoamingPath).toHaveBeenCalled();
     expect(mocks.engine.selectModelPart).toHaveBeenCalledWith(
       'node-1',
       'object-1',

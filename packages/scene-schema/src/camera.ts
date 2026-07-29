@@ -41,6 +41,8 @@ export const sceneCameraSchema = sceneCameraBaseSchema.superRefine(
 export const cameraRoamingPathSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
+  // 源站以世界单位/秒保存速度；default 让旧 SceneDocument 无需迁移即可加载。
+  speed: z.number().min(0.1).max(50).default(4),
   pathPoints: z.array(cameraVector3Schema).min(2),
 });
 

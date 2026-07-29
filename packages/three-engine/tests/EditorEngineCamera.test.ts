@@ -39,11 +39,15 @@ describe('EditorEngine Camera bridge', () => {
   it('按稳定路径 ID 播放并在路径列表替换时停止旧漫游', () => {
     const engine = new EditorEngine();
     const preview = vi.fn(() => true);
+    const showHoverPath = vi.fn(() => true);
+    const hideHoverPath = vi.fn();
     const stopPreview = vi.fn();
     const cancelDrawing = vi.fn();
     Object.assign(engine, {
       cameraRoamingSystem: {
         preview,
+        showHoverPath,
+        hideHoverPath,
         stopPreview,
         cancelDrawing,
         getState: vi.fn(() => ({
@@ -63,6 +67,7 @@ describe('EditorEngine Camera bridge', () => {
       {
         id: 'path-1',
         name: '漫游路径 1',
+        speed: 4,
         pathPoints: [
           [0, 0.55, 0],
           [4, 0.55, 4],
@@ -74,9 +79,15 @@ describe('EditorEngine Camera bridge', () => {
     expect(engine.previewCameraRoaming('path-1')).toBe(true);
     expect(preview).toHaveBeenCalledWith(document.cameraRoamingList[0]);
     expect(engine.previewCameraRoaming('missing')).toBe(false);
+    expect(engine.showCameraRoamingPath('path-1')).toBe(true);
+    expect(showHoverPath).toHaveBeenCalledWith(document.cameraRoamingList[0]);
+    expect(engine.showCameraRoamingPath('missing')).toBe(false);
+    engine.hideCameraRoamingPath();
+    expect(hideHoverPath).toHaveBeenCalled();
 
     engine.applyCameraRoamingList([]);
     expect(stopPreview).toHaveBeenCalled();
     expect(cancelDrawing).toHaveBeenCalled();
+    expect(hideHoverPath).toHaveBeenCalledTimes(3);
   });
 });

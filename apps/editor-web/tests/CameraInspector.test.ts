@@ -43,6 +43,7 @@ describe('CameraInspector', () => {
       {
         id: 'path-1',
         name: '漫游路径 1',
+        speed: 4,
         pathPoints: [
           [0, 0.55, 0],
           [4, 0.55, 4],
@@ -81,5 +82,61 @@ describe('CameraInspector', () => {
     });
     await wrapper.get('[aria-label="停止漫游路径 1"]').trigger('click');
     expect(wrapper.emitted('stop')).toHaveLength(1);
+  });
+
+  it('漫游卡片支持悬停显示路径、速度配置和三维点位编辑', async () => {
+    const document = createDefaultSceneDocument('project', 'scene', '场景');
+    document.cameraRoamingList = [
+      {
+        id: 'path-1',
+        name: '漫游路径 1',
+        speed: 4,
+        pathPoints: [
+          [0, 0.55, 0],
+          [4, 0.55, 4],
+        ],
+      },
+    ];
+    const wrapper = mount(CameraInspector, {
+      props: {
+        camera: document.camera,
+        paths: document.cameraRoamingList,
+        roamingState: {
+          mode: 'idle',
+          pointCount: 0,
+          activePathId: null,
+        },
+      },
+      global: { stubs: { Teleport: true } },
+    });
+    await wrapper
+      .findAll('.el-tabs__item')
+      .find((tab) => tab.text() === '相机漫游')!
+      .trigger('click');
+
+    const card = wrapper.get('.cr-item');
+    await card.trigger('mouseenter');
+    await card.trigger('mouseleave');
+    expect(wrapper.emitted('hover')?.at(-1)).toEqual(['path-1']);
+    expect(wrapper.emitted('leave')).toHaveLength(1);
+
+    const speedInput = wrapper.get(
+      '[data-testid="roaming-speed-path-1"] input',
+    );
+    await speedInput.setValue('6.5');
+    await speedInput.trigger('change');
+    expect(wrapper.emitted('update-speed')?.at(-1)).toEqual(['path-1', 6.5]);
+
+    await wrapper.get('[aria-label="编辑漫游路径 1 点位"]').trigger('click');
+    const firstX = wrapper.get('[data-testid="roaming-point-0-x"] input');
+    await firstX.setValue('1.25');
+    await wrapper.get('[aria-label="保存漫游点位"]').trigger('click');
+    expect(wrapper.emitted('update-points')?.at(-1)).toEqual([
+      'path-1',
+      [
+        [1.25, 0.55, 0],
+        [4, 0.55, 4],
+      ],
+    ]);
   });
 });

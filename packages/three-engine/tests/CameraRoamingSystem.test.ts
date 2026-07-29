@@ -1,31 +1,38 @@
 import {
   DoubleSide,
-  Group,
-  InstancedMesh,
-  Matrix4,
   Mesh,
   MeshBasicMaterial,
   PerspectiveCamera,
   PlaneGeometry,
   Scene,
   Vector3,
-  type Object3D,
 } from 'three';
 import type { CameraRoamingPath } from '@digital-twin/scene-schema';
 import { describe, expect, it, vi } from 'vitest';
 import { CameraRoamingSystem } from '../src/camera/CameraRoamingSystem.js';
 
 class CanvasStub extends EventTarget {
-  getBoundingClientRect(): DOMRect {
-    return {
+  constructor(
+    private readonly rect: Pick<
+      DOMRect,
+      'left' | 'top' | 'width' | 'height'
+    > = {
       left: 100,
       top: 50,
       width: 400,
       height: 200,
-      right: 500,
-      bottom: 250,
-      x: 100,
-      y: 50,
+    },
+  ) {
+    super();
+  }
+
+  getBoundingClientRect(): DOMRect {
+    return {
+      ...this.rect,
+      right: this.rect.left + this.rect.width,
+      bottom: this.rect.top + this.rect.height,
+      x: this.rect.left,
+      y: this.rect.top,
       toJSON: () => ({}),
     };
   }
@@ -93,7 +100,7 @@ function createHarness() {
   };
 }
 
-function addHorizontalSurface(parent: Object3D, y: number): Mesh {
+function addHorizontalSurface(parent: Scene, y: number): Mesh {
   const surface = new Mesh(
     new PlaneGeometry(20, 20),
     new MeshBasicMaterial({ side: DoubleSide }),
@@ -104,37 +111,34 @@ function addHorizontalSurface(parent: Object3D, y: number): Mesh {
   return surface;
 }
 
-function createSurfaceHarness() {
+function createProjectionHarness() {
   const scene = new Scene();
-  const root = new Group();
-  scene.add(root);
-  let surfaceRoot: Object3D | undefined = root;
-  const camera = new PerspectiveCamera(60, 2, 0.1, 100);
+  const camera = new PerspectiveCamera(60, 2, 0.1, 1_000);
   camera.position.set(0, 8, 8);
-  camera.lookAt(0, 4, 0);
+  camera.lookAt(0, 0, 0);
   camera.updateProjectionMatrix();
   camera.updateMatrixWorld(true);
   const canvas = new CanvasStub();
   const keyboardTarget = new EventTarget();
   const onPathCreated = vi.fn();
-  const system = new CameraRoamingSystem({
+  // 额外的 getSurfaceRoot 仅用于证明旧实现会偏离；源站算法必须忽略模型表面。
+  const options = {
     scene,
     camera,
     canvas: canvas as unknown as HTMLElement,
     controls: { enabled: true },
     keyboardTarget,
-    getSurfaceRoot: () => surfaceRoot,
+    getSurfaceRoot: () => scene,
     onPathCreated,
     invalidate: vi.fn(),
-  });
+  };
+  const system = new CameraRoamingSystem(options);
 
   return {
     scene,
-    root,
+    camera,
     system,
-    setSurfaceRoot(root: Object3D | undefined) {
-      surfaceRoot = root;
-    },
+    onPathCreated,
     drawCenterPoints(): Array<[number, number, number]> {
       system.startDrawing();
       keyboardTarget.dispatchEvent(keyboardEvent('keydown', 'Control'));
@@ -151,6 +155,7 @@ function createSurfaceHarness() {
 const path: CameraRoamingPath = {
   id: 'path-1',
   name: '漫游路径 1',
+  speed: 4,
   pathPoints: [
     [0, 0.55, 0],
     [4, 0.55, 0],
@@ -159,88 +164,32 @@ const path: CameraRoamingPath = {
 };
 
 describe('CameraRoamingSystem', () => {
-  it('selects the nearest upward surface from the current business root at click time', () => {
-    const harness = createSurfaceHarness();
-    addHorizontalSurface(harness.root, 6);
-    const replacementRoot = new Group();
-    harness.scene.add(replacementRoot);
-    addHorizontalSurface(replacementRoot, 2);
-    addHorizontalSurface(replacementRoot, 4);
-    harness.setSurfaceRoot(replacementRoot);
+  it('按源站投影到世界地面，不被点击位置的高台表面吸附', () => {
+    const harness = createProjectionHarness();
+    addHorizontalSurface(harness.scene, 4);
 
     const points = harness.drawCenterPoints();
 
     expect(points).toHaveLength(2);
     expect(points[0]![0]).toBeCloseTo(0);
-    expect(points[0]![1]).toBeCloseTo(4.55);
+    expect(points[0]![1]).toBeCloseTo(0.55);
     expect(points[0]![2]).toBeCloseTo(0);
     harness.system.dispose();
   });
 
-  it('skips hidden and editor-helper surfaces', () => {
-    const harness = createSurfaceHarness();
-    const hidden = new Group();
-    hidden.visible = false;
-    addHorizontalSurface(hidden, 6);
-    harness.root.add(hidden);
-    const helper = new Group();
-    helper.userData.editorHelper = true;
-    addHorizontalSurface(helper, 5);
-    harness.root.add(helper);
-    addHorizontalSurface(harness.root, 3);
+  it('射线与地面平行时使用相机前方回退点，不丢弃用户点击', () => {
+    const harness = createProjectionHarness();
+    harness.camera.position.set(0, 2, 8);
+    harness.camera.lookAt(0, 2, -100);
+    harness.camera.updateProjectionMatrix();
+    harness.camera.updateMatrixWorld(true);
 
     const points = harness.drawCenterPoints();
 
-    expect(points[0]![1]).toBeCloseTo(3.55);
+    expect(points).toHaveLength(2);
+    expect(points[0]!.every(Number.isFinite)).toBe(true);
+    expect(points[0]![1]).toBeGreaterThanOrEqual(0.55);
     harness.system.dispose();
-  });
-
-  it('falls back to the world ground when no qualifying business surface exists', () => {
-    const harness = createSurfaceHarness();
-    const wall = new Mesh(
-      new PlaneGeometry(20, 20),
-      new MeshBasicMaterial({ side: DoubleSide }),
-    );
-    wall.position.y = 4;
-    harness.root.add(wall);
-
-    const points = harness.drawCenterPoints();
-
-    expect(points[0]![1]).toBeCloseTo(0.55);
-    harness.system.dispose();
-  });
-
-  it('uses an InstancedMesh transform to classify upward and vertical surfaces', () => {
-    const upwardHarness = createSurfaceHarness();
-    const upwardSurface = new InstancedMesh(
-      new PlaneGeometry(20, 20),
-      new MeshBasicMaterial({ side: DoubleSide }),
-      1,
-    );
-    upwardSurface.setMatrixAt(
-      0,
-      new Matrix4().makeRotationX(-Math.PI / 2).setPosition(0, 4, 0),
-    );
-    upwardHarness.root.add(upwardSurface);
-
-    const upwardPoints = upwardHarness.drawCenterPoints();
-
-    expect(upwardPoints[0]![1]).toBeCloseTo(4.55);
-    upwardHarness.system.dispose();
-
-    const wallHarness = createSurfaceHarness();
-    const verticalSurface = new InstancedMesh(
-      new PlaneGeometry(20, 20),
-      new MeshBasicMaterial({ side: DoubleSide }),
-      1,
-    );
-    verticalSurface.setMatrixAt(0, new Matrix4().makeTranslation(0, 4, 0));
-    wallHarness.root.add(verticalSurface);
-
-    const wallPoints = wallHarness.drawCenterPoints();
-
-    expect(wallPoints[0]![1]).toBeCloseTo(0.55);
-    wallHarness.system.dispose();
   });
 
   it('Ctrl/Command + 250ms/5px 点击定点，松开修饰键后提交至少两点路径', () => {
@@ -286,12 +235,14 @@ describe('CameraRoamingSystem', () => {
     expect(harness.system.getState().mode).toBe('idle');
   });
 
-  it('以速度 4、眼高 2 和最短 400ms 播放，并在完成后恢复 Orbit', () => {
+  it('以速度 4、源站 1.4 高度偏移和最短 400ms 播放，并在完成后恢复 Orbit', () => {
     const harness = createHarness();
 
     expect(harness.system.preview(path)).toBe(true);
     expect(harness.controls.enabled).toBe(false);
-    expect(harness.camera.position.toArray()).toEqual([0, 2, 0]);
+    expect(harness.camera.position.x).toBeCloseTo(0);
+    expect(harness.camera.position.y).toBeCloseTo(1.95);
+    expect(harness.camera.position.z).toBeCloseTo(0);
     const initialQuaternion = harness.camera.quaternion.clone();
 
     harness.system.update(0.5);
@@ -301,13 +252,34 @@ describe('CameraRoamingSystem', () => {
     harness.system.update(0.1);
     harness.system.update(1);
 
-    expect(harness.camera.position.toArray()).toEqual([4, 2, 4]);
+    expect(harness.camera.position.x).toBeCloseTo(4);
+    expect(harness.camera.position.y).toBeCloseTo(1.95);
+    expect(harness.camera.position.z).toBeCloseTo(4);
     expect(harness.controls.enabled).toBe(true);
     expect(harness.system.getState().mode).toBe('idle');
     expect(harness.scene.children).toHaveLength(0);
   });
 
-  it('按路径点高度增加 1.45 播放高台路径', () => {
+  it('按每条路径的速度计算分段进度', () => {
+    const harness = createHarness();
+    const slowPath: CameraRoamingPath = {
+      ...path,
+      id: 'slow-path',
+      speed: 2,
+      pathPoints: [
+        [0, 0.55, 0],
+        [4, 0.55, 0],
+      ],
+    };
+
+    expect(harness.system.preview(slowPath)).toBe(true);
+    harness.system.update(0.5);
+
+    expect(harness.camera.position.x).toBeCloseTo(1);
+    harness.system.dispose();
+  });
+
+  it('按路径点高度增加 1.4 播放高台路径', () => {
     const harness = createHarness();
     const elevatedPath: CameraRoamingPath = {
       ...path,
@@ -319,9 +291,13 @@ describe('CameraRoamingSystem', () => {
     };
 
     expect(harness.system.preview(elevatedPath)).toBe(true);
-    expect(harness.camera.position.toArray()).toEqual([0, 6, 0]);
+    expect(harness.camera.position.x).toBeCloseTo(0);
+    expect(harness.camera.position.y).toBeCloseTo(5.95);
+    expect(harness.camera.position.z).toBeCloseTo(0);
     harness.system.update(2);
-    expect(harness.camera.position.toArray()).toEqual([4, 6, 0]);
+    expect(harness.camera.position.x).toBeCloseTo(4);
+    expect(harness.camera.position.y).toBeCloseTo(5.95);
+    expect(harness.camera.position.z).toBeCloseTo(0);
     harness.system.dispose();
   });
 
@@ -345,5 +321,38 @@ describe('CameraRoamingSystem', () => {
     harness.system.dispose();
     expect(harness.system.getState().mode).toBe('idle');
     expect(harness.scene.children).toHaveLength(0);
+  });
+
+  it('鼠标经过时独立显示路径，并按首末索引派生起点和终点', () => {
+    const harness = createHarness();
+
+    expect(harness.system.showHoverPath(path)).toBe(true);
+    const hoverGroup = harness.scene.children.find(
+      (child) => child.userData.cameraRoamingVisualKind === 'hover',
+    );
+    const roles: string[] = [];
+    hoverGroup?.traverse((object) => {
+      if (typeof object.userData.cameraRoamingRole === 'string') {
+        roles.push(object.userData.cameraRoamingRole);
+      }
+    });
+
+    expect(roles).toEqual(['start', 'waypoint', 'end']);
+    expect(
+      hoverGroup?.getObjectByName('camera-roaming-marker-0')?.userData
+        .cameraRoamingLabel,
+    ).toBe('S');
+    expect(
+      hoverGroup?.getObjectByName('camera-roaming-marker-2')?.userData
+        .cameraRoamingLabel,
+    ).toBe('E');
+
+    harness.system.hideHoverPath();
+    expect(
+      harness.scene.children.some(
+        (child) => child.userData.cameraRoamingVisualKind === 'hover',
+      ),
+    ).toBe(false);
+    harness.system.dispose();
   });
 });

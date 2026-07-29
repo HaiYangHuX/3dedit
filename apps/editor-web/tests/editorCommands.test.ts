@@ -485,6 +485,8 @@ describe('editor commands', () => {
       applyNodeUpdated: vi.fn(),
       applyCamera: vi.fn(),
       applyCameraRoamingList: vi.fn(),
+      showCameraRoamingPath: vi.fn(() => true),
+      hideCameraRoamingPath: vi.fn(),
       loadDocument: vi.fn().mockResolvedValue(undefined),
       setSelection: vi.fn(),
       setTransformMode: vi.fn(),
@@ -495,6 +497,7 @@ describe('editor commands', () => {
       {
         id: 'path-1',
         name: '漫游路径 1',
+        speed: 4,
         pathPoints: [
           [0, 0.55, 0],
           [4, 0.55, 4],
@@ -509,6 +512,10 @@ describe('editor commands', () => {
     expect(bridge.applyCamera).toHaveBeenCalledWith(store.document.camera);
     expect(store.document.cameraRoamingList).toEqual(paths);
     expect(bridge.applyCameraRoamingList).toHaveBeenCalledWith(paths);
+    expect(commands.showCameraRoamingPath('path-1')).toBe(true);
+    commands.hideCameraRoamingPath();
+    expect(bridge.showCameraRoamingPath).toHaveBeenCalledWith('path-1');
+    expect(bridge.hideCameraRoamingPath).toHaveBeenCalled();
   });
 
   it('OrbitControls 鼠标移动只更新保存快照，不占用模型操作的撤销步骤', async () => {

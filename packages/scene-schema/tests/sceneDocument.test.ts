@@ -107,7 +107,7 @@ describe('SceneDocument', () => {
     });
   });
 
-  it('为旧文档补齐 Camera，并保留漫游路径 round-trip', () => {
+  it('为旧文档补齐 Camera 和漫游速度，并保留漫游路径 round-trip', () => {
     const document = createDefaultSceneDocument(
       'project-1',
       'scene-1',
@@ -121,12 +121,31 @@ describe('SceneDocument', () => {
     expect(parsedLegacy.camera.target).toEqual([0, 0.5, 0]);
     expect(parsedLegacy.cameraRoamingList).toEqual([]);
 
+    // 使用原始对象模拟 speed 字段上线前已保存的场景文档。
+    const legacyRoaming = {
+      ...structuredClone(document),
+      cameraRoamingList: [
+        {
+          id: 'legacy-roaming',
+          name: '旧漫游路径',
+          pathPoints: [
+            [0, 0.55, 0],
+            [2, 0.55, 2],
+          ],
+        },
+      ],
+    };
+    expect(
+      sceneDocumentSchema.parse(legacyRoaming).cameraRoamingList[0]?.speed,
+    ).toBe(4);
+
     document.camera.position = [1, 2, 3];
     document.camera.target = [4, 0.5, 6];
     document.cameraRoamingList = [
       {
         id: 'roaming-1',
         name: '漫游路径 1',
+        speed: 6,
         pathPoints: [
           [0, 0.55, 0],
           [5, 0.55, 8],
@@ -174,6 +193,22 @@ describe('SceneDocument', () => {
             pathPoints: [
               [2, 0.55, 2],
               [3, 0.55, 3],
+            ],
+          },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      sceneDocumentSchema.safeParse({
+        ...document,
+        cameraRoamingList: [
+          {
+            id: 'invalid-speed',
+            name: '非法速度',
+            speed: 0,
+            pathPoints: [
+              [0, 0.55, 0],
+              [1, 0.55, 1],
             ],
           },
         ],

@@ -53,6 +53,8 @@ export interface EditorCanvasBridge {
   cancelCameraRoamingDrawing?(): void;
   previewCameraRoaming?(pathId: string): boolean;
   stopCameraRoaming?(): void;
+  showCameraRoamingPath?(pathId: string): boolean;
+  hideCameraRoamingPath?(): void;
   setSelection(ids: Iterable<string>, primaryId?: string | null): void;
   selectModelPart?(nodeId: string, objectId: string): boolean;
   setTransformMode(mode: 'translate' | 'rotate' | 'scale'): void;
@@ -295,6 +297,14 @@ export function useEditorCommands(
 
   function stopCameraRoaming(): void {
     canvas.value?.stopCameraRoaming?.();
+  }
+
+  function showCameraRoamingPath(pathId: string): boolean {
+    return canvas.value?.showCameraRoamingPath?.(pathId) ?? false;
+  }
+
+  function hideCameraRoamingPath(): void {
+    canvas.value?.hideCameraRoamingPath?.();
   }
 
   async function updateRuntimeConfig(patch: RuntimeConfigPatch): Promise<void> {
@@ -540,6 +550,8 @@ export function useEditorCommands(
     cancelCameraRoamingDrawing,
     previewCameraRoaming,
     stopCameraRoaming,
+    showCameraRoamingPath,
+    hideCameraRoamingPath,
     updateRuntimeConfig,
     commitTransform,
     resetScene,

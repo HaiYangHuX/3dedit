@@ -30,6 +30,8 @@ const commandMocks = vi.hoisted(() => {
     cancelCameraRoamingDrawing: vi.fn(),
     previewCameraRoaming: vi.fn(() => true),
     stopCameraRoaming: vi.fn(),
+    showCameraRoamingPath: vi.fn(() => true),
+    hideCameraRoamingPath: vi.fn(),
     syncCameraFromCanvas: operation(),
     setCameraView: vi.fn(),
     setMeasurementEnabled: vi.fn(() => false),
@@ -474,9 +476,22 @@ describe('EditorWorkspace', () => {
       action: 'confirm',
       value: '',
     } as never);
+    const pinia = createTestingPinia({ createSpy: vi.fn });
+    const store = useDocumentStore(pinia);
+    store.document.cameraRoamingList = [
+      {
+        id: 'path-1',
+        name: '漫游路径 1',
+        speed: 4,
+        pathPoints: [
+          [0, 0.55, 0],
+          [4, 0.55, 4],
+        ],
+      },
+    ];
     const wrapper = mount(EditorWorkspace, {
       global: {
-        plugins: [createTestingPinia({ createSpy: vi.fn })],
+        plugins: [pinia],
         stubs: {
           EditorCanvas: {
             name: 'EditorCanvas',
@@ -501,11 +516,32 @@ describe('EditorWorkspace', () => {
     inspector.vm.$emit('start-drawing');
     inspector.vm.$emit('preview', 'path-1');
     inspector.vm.$emit('stop');
+    inspector.vm.$emit('hover', 'path-1');
+    inspector.vm.$emit('leave');
+    inspector.vm.$emit('update-speed', 'path-1', 6.5);
+    inspector.vm.$emit('update-points', 'path-1', [
+      [1, 0.55, 0],
+      [4, 0.55, 4],
+    ]);
     await flushPromises();
     expect(commandMocks.updateCamera).toHaveBeenCalledWith({ fov: 60 });
     expect(commandMocks.startCameraRoamingDrawing).toHaveBeenCalled();
     expect(commandMocks.previewCameraRoaming).toHaveBeenCalledWith('path-1');
     expect(commandMocks.stopCameraRoaming).toHaveBeenCalled();
+    expect(commandMocks.showCameraRoamingPath).toHaveBeenCalledWith('path-1');
+    expect(commandMocks.hideCameraRoamingPath).toHaveBeenCalled();
+    expect(commandMocks.replaceCameraRoamingList).toHaveBeenCalledWith([
+      expect.objectContaining({ id: 'path-1', speed: 6.5 }),
+    ]);
+    expect(commandMocks.replaceCameraRoamingList).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: 'path-1',
+        pathPoints: [
+          [1, 0.55, 0],
+          [4, 0.55, 4],
+        ],
+      }),
+    ]);
 
     wrapper
       .findComponent({ name: 'EditorCanvas' })
@@ -514,15 +550,18 @@ describe('EditorWorkspace', () => {
         [4, 0.55, 4],
       ]);
     await flushPromises();
-    expect(commandMocks.replaceCameraRoamingList).toHaveBeenCalledWith([
-      expect.objectContaining({
-        name: '漫游路径 1',
-        pathPoints: [
-          [0, 0.55, 0],
-          [4, 0.55, 4],
-        ],
-      }),
-    ]);
+    expect(commandMocks.replaceCameraRoamingList).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: '漫游路径 2',
+          speed: 4,
+          pathPoints: [
+            [0, 0.55, 0],
+            [4, 0.55, 4],
+          ],
+        }),
+      ]),
+    );
 
     inspector.vm.$emit('remove', 'path-1');
     await flushPromises();

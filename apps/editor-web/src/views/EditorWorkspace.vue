@@ -430,6 +430,7 @@ function createCameraRoamingPath(
       {
         id: createUuid(),
         name: `漫游路径 ${paths.length + 1}`,
+        speed: 4,
         pathPoints,
       },
     ]),
@@ -446,6 +447,42 @@ function previewCameraRoaming(pathId: string): void {
   if (!commands.previewCameraRoaming(pathId)) {
     ElMessage.warning('漫游路径不可用');
   }
+}
+
+function updateCameraRoamingSpeed(pathId: string, speed: number): void {
+  if (!Number.isFinite(speed) || speed < 0.1 || speed > 50) return;
+  const paths = document.value.cameraRoamingList;
+  const target = paths.find((path) => path.id === pathId);
+  if (!target || target.speed === speed) return;
+  runCommand(
+    commands.replaceCameraRoamingList(
+      paths.map((path) => (path.id === pathId ? { ...path, speed } : path)),
+    ),
+  );
+}
+
+function updateCameraRoamingPoints(
+  pathId: string,
+  pathPoints: Array<[number, number, number]>,
+): void {
+  if (
+    pathPoints.length < 2 ||
+    pathPoints.some((point) => !point.every(Number.isFinite))
+  ) {
+    return;
+  }
+  const paths = document.value.cameraRoamingList;
+  if (!paths.some((path) => path.id === pathId)) return;
+  // 点位编辑作为一次列表替换命令入历史，撤销时会整体恢复编辑前路径。
+  runCommand(
+    commands.replaceCameraRoamingList(
+      paths.map((path) =>
+        path.id === pathId
+          ? { ...path, pathPoints: structuredClone(pathPoints) }
+          : path,
+      ),
+    ),
+  );
 }
 
 async function removeCameraRoamingPath(pathId: string): Promise<void> {
@@ -799,6 +836,10 @@ async function copyText(value: string): Promise<void> {
           @preview="previewCameraRoaming"
           @stop="commands.stopCameraRoaming"
           @remove="removeCameraRoamingPath"
+          @hover="commands.showCameraRoamingPath"
+          @leave="commands.hideCameraRoamingPath"
+          @update-speed="updateCameraRoamingSpeed"
+          @update-points="updateCameraRoamingPoints"
         />
         <NodeInspector
           v-else-if="selectedNode"

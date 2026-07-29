@@ -24,6 +24,7 @@ const fixtures = vi.hoisted(() => {
       {
         id: 'path-1',
         name: '漫游路径 1',
+        speed: 4,
         pathPoints: [
           [0, 0.55, 0],
           [4, 0.55, 4],

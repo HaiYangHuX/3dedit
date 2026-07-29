@@ -23,6 +23,13 @@ const emit = defineEmits<{
   preview: [pathId: string];
   stop: [];
   remove: [pathId: string];
+  hover: [pathId: string];
+  leave: [];
+  'update-speed': [pathId: string, speed: number];
+  'update-points': [
+    pathId: string,
+    pathPoints: Array<[number, number, number]>,
+  ];
 }>();
 
 const activeTab = ref<'properties' | 'roaming'>('properties');
@@ -190,6 +197,12 @@ function updateName(event: Event): void {
           @preview="emit('preview', $event)"
           @stop="emit('stop')"
           @remove="emit('remove', $event)"
+          @hover="emit('hover', $event)"
+          @leave="emit('leave')"
+          @update-speed="(pathId, speed) => emit('update-speed', pathId, speed)"
+          @update-points="
+            (pathId, pathPoints) => emit('update-points', pathId, pathPoints)
+          "
         />
       </ElTabPane>
     </ElTabs>

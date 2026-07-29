@@ -263,7 +263,6 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
       camera: this.camera,
       canvas: renderer.domElement,
       controls: this.controls,
-      getSurfaceRoot: () => this.documentSystem?.root,
       invalidate: this.invalidate,
       onStateChange: (state) => {
         this.selectionSystem?.setEnabled(
@@ -548,6 +547,7 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
   applyCameraRoamingList(paths: readonly CameraRoamingPath[]): void {
     this.cameraRoamingSystem?.stopPreview();
     this.cameraRoamingSystem?.cancelDrawing();
+    this.cameraRoamingSystem?.hideHoverPath();
     this.cameraRoamingList = paths.map((path) => structuredClone(path));
   }
 
@@ -581,6 +581,17 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.selectionSystem?.setSelection([]);
     this.transformSystem?.setSelection(null);
     return this.cameraRoamingSystem.preview(path);
+  }
+
+  /** 面板只传稳定路径 ID，Three Engine 负责读取快照并创建悬停视觉。 */
+  showCameraRoamingPath(pathId: string): boolean {
+    const path = this.cameraRoamingList.find((item) => item.id === pathId);
+    if (!path || !this.cameraRoamingSystem) return false;
+    return this.cameraRoamingSystem.showHoverPath(path);
+  }
+
+  hideCameraRoamingPath(): void {
+    this.cameraRoamingSystem?.hideHoverPath();
   }
 
   stopCameraRoaming(): void {

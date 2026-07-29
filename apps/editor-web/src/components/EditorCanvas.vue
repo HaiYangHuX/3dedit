@@ -234,6 +234,14 @@ function stopCameraRoaming(): void {
   engine.stopCameraRoaming();
 }
 
+function showCameraRoamingPath(pathId: string): boolean {
+  return engine.showCameraRoamingPath(pathId);
+}
+
+function hideCameraRoamingPath(): void {
+  engine.hideCameraRoamingPath();
+}
+
 function setSelection(ids: Iterable<string>, primaryId?: string | null): void {
   engine.setSelection(ids, primaryId);
 }
@@ -368,6 +376,8 @@ defineExpose({
   cancelCameraRoamingDrawing,
   previewCameraRoaming,
   stopCameraRoaming,
+  showCameraRoamingPath,
+  hideCameraRoamingPath,
   setSelection,
   selectModelPart,
   setTransformMode,
