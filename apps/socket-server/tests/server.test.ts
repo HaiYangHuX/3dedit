@@ -85,8 +85,11 @@ describe('SocketServer', () => {
 
     client.close();
     await once(client, 'close');
-    const disconnected = await fetch(url('/health'));
-    expect(await disconnected.json()).toMatchObject({ clientCount: 0 });
+    // 客户端 close 事件可能早于服务端移除连接，按真实服务端状态轮询可避免竞态假失败。
+    await viWaitFor(async () => {
+      const disconnected = await fetch(url('/health'));
+      expect(await disconnected.json()).toMatchObject({ clientCount: 0 });
+    });
   });
 
   it('broadcasts a single message to every connected client', async () => {
@@ -229,11 +232,11 @@ describe('SocketServer', () => {
   });
 });
 
-async function viWaitFor(assertion: () => void): Promise<void> {
+async function viWaitFor(assertion: () => void | Promise<void>): Promise<void> {
   const deadline = Date.now() + 2_000;
   while (true) {
     try {
-      assertion();
+      await assertion();
       return;
     } catch (error) {
       if (Date.now() >= deadline) throw error;
