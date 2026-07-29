@@ -86,7 +86,7 @@ interface ScreenshotRequest {
 function snapshotTransform(object: Object3D): Transform {
   return {
     position: object.position.toArray() as Transform['position'],
-    rotation: object.rotation.toArray() as Transform['rotation'],
+    rotation: object.rotation.toArray().slice(0, 3) as Transform['rotation'],
     scale: object.scale.toArray() as Transform['scale'],
   };
 }
