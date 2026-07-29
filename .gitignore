@@ -9,3 +9,7 @@ node_modules/
 playwright-report/
 test-results/
 *.log
+
+# macOS one-click development scripts runtime state
+.dev-pids/
+.mac-launch-agents/
