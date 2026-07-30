@@ -63,3 +63,10 @@ export {
   socketTaskTypeSchema,
   type SocketTaskType,
 } from './socketTaskTypes.js';
+export {
+  SHADER_METHODS,
+  shaderComponentSchema,
+  shaderMethodSchema,
+  type ShaderComponent,
+  type ShaderMethod,
+} from './shader.js';

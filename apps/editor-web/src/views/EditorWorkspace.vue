@@ -12,7 +12,7 @@ import {
   type SelectionState,
   type TransformCommit,
 } from '@digital-twin/three-engine';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessage, ElMessageBox, ElTooltip } from 'element-plus';
 import { storeToRefs } from 'pinia';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
@@ -40,6 +40,7 @@ import {
   type ScenePaletteDragPayload,
   type ScenePaletteDropPayload,
 } from '../editor/scenePaletteDrag';
+import { SHADER_PALETTE_ITEMS } from '../editor/shaderPalette';
 import { useDocumentStore, type SaveState } from '../stores/document';
 import { useAssetStore } from '../stores/asset';
 import { useSelectionStore } from '../stores/selection';
@@ -262,6 +263,13 @@ function dropSceneItem(payload: ScenePaletteDropPayload): void {
       },
       payload.position,
     ).catch((reason) => showEditorError(reason, '添加模型失败'));
+    return;
+  }
+
+  if (payload.kind === 'shader') {
+    void commands
+      .addShader(payload.shaderMethod, payload.position)
+      .catch((reason) => showEditorError(reason, '添加着色器失败'));
     return;
   }
 
@@ -697,13 +705,46 @@ async function copyText(value: string): Promise<void> {
           {{ item[1] }}
         </button>
       </div>
+      <div
+        v-else-if="assetCategory === 'shader'"
+        class="element-palette shader-palette"
+      >
+        <ElTooltip
+          v-for="item in SHADER_PALETTE_ITEMS"
+          :key="item.shaderMethod"
+          :content="`${item.name}（点击添加，或拖入视口）`"
+          placement="right"
+          :show-after="350"
+        >
+          <button
+            type="button"
+            draggable="true"
+            :data-shader-method="item.shaderMethod"
+            @dragstart="
+              beginPaletteDrag($event, {
+                kind: 'shader',
+                shaderMethod: item.shaderMethod,
+              })
+            "
+            @click="runCommand(commands.addShader(item.shaderMethod))"
+          >
+            <span class="element-palette-icon">
+              <component
+                :is="item.icon"
+                class="shader-palette-icon"
+                aria-hidden="true"
+              />
+            </span>
+            {{ item.name }}
+          </button>
+        </ElTooltip>
+      </div>
       <div v-else class="empty-panel">
         {{
           {
             chart: '图表组件将在低代码组件阶段接入',
             text: '文本与标注组件将在低代码组件阶段接入',
             video: '视频组件将在媒体资源阶段接入',
-            shader: 'Shader 组件将在特效阶段接入',
           }[assetCategory]
         }}
       </div>

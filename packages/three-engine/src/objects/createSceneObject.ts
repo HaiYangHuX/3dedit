@@ -17,6 +17,7 @@ import {
   type Object3D,
 } from 'three';
 import type { AssetInstanceProvider } from '../types.js';
+import { createShaderObject } from '../shaders/createShaderObject.js';
 
 export function createPrimitiveGeometry(
   primitive: 'box' | 'sphere' | 'plane' | 'cylinder',
@@ -100,6 +101,9 @@ export async function createSceneObject(
     (component) => component.kind === 'geometry',
   );
   const light = node.components.find((component) => component.kind === 'light');
+  const shader = node.components.find(
+    (component) => component.kind === 'shader',
+  );
   let root: Object3D;
   if (model?.kind === 'model') {
     root = await assets.instantiate(model.assetId, generation);
@@ -108,7 +112,9 @@ export async function createSceneObject(
       root = geometryObject(geometry.primitive);
       root.userData.geometryPrimitive = geometry.primitive;
     } else if (light?.kind === 'light') root = lightObject(light);
-    else root = new Group();
+    else if (shader?.kind === 'shader') {
+      root = createShaderObject(shader.shaderMethod);
+    } else root = new Group();
   }
   applySceneNode(root, node);
   root.userData.componentKinds = node.components.map(({ kind }) => kind);
@@ -118,7 +124,12 @@ export async function createSceneObject(
       ? 'geometry'
       : light
         ? 'light'
-        : (node.components[0]?.kind ?? 'group');
+        : shader
+          ? 'shader'
+          : (node.components[0]?.kind ?? 'group');
   if (light?.kind === 'light') root.userData.lightType = light.lightType;
+  if (shader?.kind === 'shader') {
+    root.userData.shaderMethod = shader.shaderMethod;
+  }
   return root;
 }

@@ -12,6 +12,7 @@ const commandMocks = vi.hoisted(() => {
     addAssetNode: operation(),
     addGeometry: operation(),
     addLight: operation(),
+    addShader: operation(),
     alignModelsToGround: operation(),
     captureScreenshot: vi.fn().mockResolvedValue(new Blob(['png'])),
     duplicateNode: operation(),
@@ -162,6 +163,24 @@ describe('EditorWorkspace', () => {
       'application/x-digital-twin-scene-palette',
       JSON.stringify({ kind: 'light', lightType: 'point' }),
     );
+    await wrapper.get('[data-asset-category="shader"]').trigger('click');
+    expect(wrapper.findAll('[data-shader-method]')).toHaveLength(12);
+    expect(
+      wrapper.get('[data-shader-method="CreateRadarShader"]').text(),
+    ).toContain('扫描雷达');
+    const shaderSetData = vi.fn();
+    await wrapper
+      .get('[data-shader-method="CreateRadarShader"]')
+      .trigger('dragstart', {
+        dataTransfer: { setData: shaderSetData, effectAllowed: 'none' },
+      });
+    expect(shaderSetData).toHaveBeenCalledWith(
+      'application/x-digital-twin-scene-palette',
+      JSON.stringify({
+        kind: 'shader',
+        shaderMethod: 'CreateRadarShader',
+      }),
+    );
     expect(wrapper.get('[data-testid="inspector-panel"]').text()).toContain(
       '场景内容',
     );
@@ -255,7 +274,7 @@ describe('EditorWorkspace', () => {
     openSpy.mockRestore();
   });
 
-  it('按统一 scene-drop 类型分派现有命令并抬高几何体与灯光', async () => {
+  it('按统一 scene-drop 分派命令，几何/灯光抬高而 Shader 保留原站落点', async () => {
     const wrapper = mount(EditorWorkspace, {
       global: {
         plugins: [createTestingPinia({ createSpy: vi.fn })],
@@ -282,6 +301,11 @@ describe('EditorWorkspace', () => {
       lightType: 'point',
       position: [-2, 0.25, 3],
     });
+    canvas.vm.$emit('scene-drop', {
+      kind: 'shader',
+      shaderMethod: 'CreateElectronicFence',
+      position: [3, 0, -4],
+    });
     await wrapper.vm.$nextTick();
     expect(canvas.attributes('data-model-loading')).toBe('false');
     canvas.vm.$emit('scene-drop', {
@@ -295,6 +319,10 @@ describe('EditorWorkspace', () => {
 
     expect(commandMocks.addGeometry).toHaveBeenCalledWith('box', [4, 0.5, 6]);
     expect(commandMocks.addLight).toHaveBeenCalledWith('point', [-2, 0.5, 3]);
+    expect(commandMocks.addShader).toHaveBeenCalledWith(
+      'CreateElectronicFence',
+      [3, 0, -4],
+    );
     expect(commandMocks.addAssetNode).toHaveBeenCalledWith(
       { id: 'asset-1', name: '水泵', format: 'glb' },
       [1, 0, 2],

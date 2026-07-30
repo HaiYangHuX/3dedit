@@ -5,6 +5,7 @@ import {
   sceneCameraSchema,
 } from './camera.js';
 import { materialComponentSchema } from './material.js';
+import { shaderComponentSchema } from './shader.js';
 import { socketTaskTypeSchema } from './socketTaskTypes.js';
 
 const identifierSchema = z.string().min(1);
@@ -42,6 +43,7 @@ const componentSchema = z.discriminatedUnion('kind', [
     castShadow: z.boolean(),
   }),
   materialComponentSchema,
+  shaderComponentSchema,
   z.object({
     kind: z.enum([
       'camera',
@@ -50,7 +52,6 @@ const componentSchema = z.discriminatedUnion('kind', [
       'image',
       'video',
       'chart',
-      'shader',
       'effect',
     ]),
     data: z.record(z.string(), z.json()),

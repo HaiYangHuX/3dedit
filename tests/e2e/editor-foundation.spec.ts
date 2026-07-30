@@ -64,15 +64,29 @@ test('编辑器工作台创建真实 WebGL Canvas', async ({ page }) => {
   );
   expect(Number(await page.getByLabel('位置 Y').inputValue())).toBe(0.5);
 
+  await page.locator('[data-asset-category="shader"]').click();
+  const radarShader = page.locator('[data-shader-method="CreateRadarShader"]');
+  await expect(radarShader).toHaveAttribute('draggable', 'true');
+  await radarShader.dragTo(canvasHost, {
+    targetPosition: { x: 460, y: 400 },
+  });
+  await expect(canvasHost).toHaveAttribute(
+    'data-scene-object-count',
+    String(initialObjectCount + 3),
+  );
+  // Shader 保留网格射线的真实落点，不套用几何体/灯光的 0.5 抬高规则。
+  expect(Number(await page.getByLabel('位置 Y').inputValue())).toBe(0);
+  expect(Number(await page.getByLabel('旋转 X').inputValue())).toBe(90);
+
   await page.keyboard.press('ControlOrMeta+z');
   await expect(canvasHost).toHaveAttribute(
     'data-scene-object-count',
-    String(initialObjectCount + 1),
+    String(initialObjectCount + 2),
   );
   await page.keyboard.press('ControlOrMeta+Shift+z');
   await expect(canvasHost).toHaveAttribute(
     'data-scene-object-count',
-    String(initialObjectCount + 2),
+    String(initialObjectCount + 3),
   );
 
   await page.getByRole('button', { name: '项目配置', exact: true }).click();

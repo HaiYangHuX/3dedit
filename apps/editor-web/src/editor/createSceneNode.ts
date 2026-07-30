@@ -1,10 +1,12 @@
 import type { Asset } from '@digital-twin/api-contracts';
 import {
   createDefaultMaterialComponent,
+  type ShaderMethod,
   type SceneNode,
   type Transform,
 } from '@digital-twin/scene-schema';
 import { createUuid } from '../utils/createUuid';
+import { getShaderDefinition } from './shaderPalette';
 
 type SceneComponent = SceneNode['components'][number];
 export type GeometryPrimitive = Extract<
@@ -20,6 +22,7 @@ export interface CreateSceneNodeOptions {
   id?: string;
   parentId?: string | null;
   position?: Transform['position'];
+  rotation?: Transform['rotation'];
 }
 
 const sourceInstanceSuffix = /_\d{4}$/;
@@ -80,7 +83,7 @@ export function createSceneNode(
     locked: false,
     transform: {
       position: [...(options.position ?? [0, 0, 0])],
-      rotation: [0, 0, 0],
+      rotation: [...(options.rotation ?? [0, 0, 0])],
       scale: [1, 1, 1],
     },
     components: structuredClone(components),
@@ -129,4 +132,15 @@ export function createLightNode(
     ],
     { position },
   );
+}
+
+export function createShaderNode(
+  shaderMethod: ShaderMethod,
+  position: Transform['position'] = [0, 0, 0],
+): SceneNode {
+  const definition = getShaderDefinition(shaderMethod);
+  return createSceneNode(definition.name, [{ kind: 'shader', shaderMethod }], {
+    position,
+    rotation: definition.rotation,
+  });
 }

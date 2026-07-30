@@ -11,6 +11,7 @@ import {
   createAssetNode,
   createGeometryNode,
   createModelInstanceName,
+  createShaderNode,
   MODEL_INSTANCE_NAME_VERSION_KEY,
 } from '../src/editor/createSceneNode';
 import {
@@ -100,6 +101,20 @@ describe('editor commands', () => {
     ]);
   });
 
+  it('Shader 节点保存方法标识与原站初始旋转', () => {
+    const node = createShaderNode('CreateRadarShader', [2, 0, 3]);
+
+    expect(node).toMatchObject({
+      name: '扫描雷达',
+      transform: {
+        position: [2, 0, 3],
+        rotation: [Math.PI / 2, 0, 0],
+        scale: [1, 1, 1],
+      },
+      components: [{ kind: 'shader', shaderMethod: 'CreateRadarShader' }],
+    });
+  });
+
   it('模型实例名不会重复追加扩展名或已有四位后缀', () => {
     const random = vi.spyOn(Math, 'random').mockReturnValue(0.0042);
 
@@ -131,6 +146,29 @@ describe('editor commands', () => {
     expect(store.document.nodes[node.id]).toEqual(node);
     expect(bridge.applyNodeAdded).toHaveBeenCalledWith(node);
     expect(bridge.setSelection).toHaveBeenCalledWith([node.id], node.id);
+  });
+
+  it('Shader 添加进入统一命令链并可撤销', async () => {
+    const store = useDocumentStore();
+    await store.loadScene('scene-1');
+    const bridge: EditorCanvasBridge = {
+      applyNodeAdded: vi.fn().mockResolvedValue(undefined),
+      applyNodeRemoved: vi.fn(),
+      applyNodeUpdated: vi.fn(),
+      loadDocument: vi.fn().mockResolvedValue(undefined),
+      setSelection: vi.fn(),
+      setTransformMode: vi.fn(),
+      focusSelection: vi.fn(),
+    };
+    const commands = useEditorCommands(shallowRef(bridge));
+
+    const node = await commands.addShader('CreateElectronicFence', [4, 0, 5]);
+    expect(store.document.nodes[node.id]).toEqual(node);
+    expect(bridge.applyNodeAdded).toHaveBeenCalledWith(node);
+    expect(bridge.setSelection).toHaveBeenCalledWith([node.id], node.id);
+
+    await commands.undo();
+    expect(store.document.nodes[node.id]).toBeUndefined();
   });
 
   it('删除模型二级部件只写入排除路径并可通过撤销恢复', async () => {

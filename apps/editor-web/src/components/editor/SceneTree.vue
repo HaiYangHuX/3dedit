@@ -16,6 +16,7 @@ import {
   Grid,
   Hide,
   Lock,
+  MagicStick,
   Operation,
   Search,
   Sunny,
@@ -285,6 +286,7 @@ function sceneNodeIcon(item: TreeItem): Component {
   if (kinds.has('model')) return Box;
   if (kinds.has('geometry')) return Grid;
   if (kinds.has('light')) return Sunny;
+  if (kinds.has('shader')) return MagicStick;
   if ((item.node?.components.length ?? 0) === 0) return Collection;
   return Operation;
 }

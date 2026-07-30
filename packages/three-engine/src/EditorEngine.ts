@@ -353,7 +353,12 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     const elapsed = this.timer.getElapsed();
     this.groundSystem?.update(elapsed);
     this.weatherSystem?.update(delta, elapsed);
-    if (this.groundSystem?.isAnimated || this.weatherSystem?.isActive) {
+    const shaderAnimated = this.documentSystem?.updateShaders(elapsed) ?? false;
+    if (
+      shaderAnimated ||
+      this.groundSystem?.isAnimated ||
+      this.weatherSystem?.isActive
+    ) {
       this.invalidated = true;
     }
     const roamingChanged = this.cameraRoamingSystem?.update(delta) ?? false;

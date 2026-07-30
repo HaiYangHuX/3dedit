@@ -92,6 +92,9 @@ export {
   type TextureLoaderLike,
 } from './materials/MaterialSystem';
 export { disposeObject3D, ResourceTracker } from './ResourceTracker';
+export { createShaderObject } from './shaders/createShaderObject';
+export { ShaderSystem } from './shaders/ShaderSystem';
+export type { ShaderMethod } from '@digital-twin/scene-schema';
 export {
   RuntimeHostAdapter,
   type RuntimeCameraControls,

@@ -24,6 +24,7 @@ describe('scenePaletteDrag', () => {
     { kind: 'asset', assetId: 'asset-1', name: '水泵', format: 'glb' },
     { kind: 'geometry', primitive: 'box' },
     { kind: 'light', lightType: 'point' },
+    { kind: 'shader', shaderMethod: 'CreateRadarShader' },
   ])('使用统一 MIME 往返 $kind payload', (payload) => {
     const { transfer } = createDataTransfer();
 
@@ -49,6 +50,7 @@ describe('scenePaletteDrag', () => {
     }),
     JSON.stringify({ kind: 'geometry', primitive: 'torus' }),
     JSON.stringify({ kind: 'light', lightType: 'rect-area' }),
+    JSON.stringify({ kind: 'shader', shaderMethod: 'CreateUnknownShader' }),
     JSON.stringify({ kind: 'unknown' }),
   ])('拒绝非法或未知拖放数据 %#', (raw) => {
     const { transfer, values } = createDataTransfer();

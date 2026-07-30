@@ -5,6 +5,7 @@ import type { SceneNode } from '@digital-twin/scene-schema';
 import { computed, ref, watch } from 'vue';
 import TransformInspector from './TransformInspector.vue';
 import MaterialInspector from './MaterialInspector.vue';
+import { getShaderDefinition } from '../../editor/shaderPalette';
 
 const props = withDefaults(
   defineProps<{
@@ -42,6 +43,7 @@ function componentOf<T extends SceneNode['components'][number]['kind']>(
 const geometry = computed(() => componentOf('geometry'));
 const light = computed(() => componentOf('light'));
 const model = computed(() => componentOf('model'));
+const shader = computed(() => componentOf('shader'));
 const material = computed(() => componentOf('material'));
 
 watch(
@@ -231,6 +233,16 @@ function commitBusinessData(): void {
         />
         投射阴影
       </label>
+    </section>
+
+    <section v-if="shader?.kind === 'shader'" class="component-inspector">
+      <div class="inspector-section-title">着色器</div>
+      <div class="inspector-field">
+        <label>类型</label>
+        <span class="shader-method-name">
+          {{ getShaderDefinition(shader.shaderMethod).name }}
+        </span>
+      </div>
     </section>
 
     <section v-if="model?.kind === 'model'" class="component-inspector">

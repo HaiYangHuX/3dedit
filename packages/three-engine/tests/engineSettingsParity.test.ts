@@ -39,4 +39,11 @@ describe('EditorEngine / RuntimeThreeEngine 项目配置一致性', () => {
       expect(source, file).toMatch(/applyEnvironment\(\s*document\.settings/);
     }
   });
+
+  it('编辑器与运行时都在唯一 RAF 内更新 ShaderSystem', () => {
+    for (const file of ['EditorEngine.ts', 'RuntimeThreeEngine.ts'] as const) {
+      const source = engineSource(file);
+      expect(source, file).toContain('.updateShaders(elapsed)');
+    }
+  });
 });

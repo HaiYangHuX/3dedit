@@ -444,6 +444,7 @@ export class RuntimeThreeEngine {
     this.hostAdapter?.update(delta);
     this.groundSystem?.update(elapsed);
     this.weatherSystem?.update(delta, elapsed);
+    this.documentSystem?.updateShaders(elapsed);
     // 后期管线启用后由 Composer 唯一写入 canvas，避免同一帧重复渲染。
     this.composer?.render(delta);
   };

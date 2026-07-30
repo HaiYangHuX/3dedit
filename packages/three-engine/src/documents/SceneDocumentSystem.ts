@@ -6,6 +6,7 @@ import {
   type MaterialProjectionSystem,
 } from '../materials/MaterialSystem.js';
 import { disposeObject3D } from '../ResourceTracker.js';
+import { ShaderSystem } from '../shaders/ShaderSystem.js';
 import {
   applySceneNode,
   createPrimitiveGeometry,
@@ -23,6 +24,7 @@ import type {
 export class SceneDocumentSystem {
   readonly root = new Group();
   private readonly objects = new Map<string, Object3D>();
+  private readonly shaders = new ShaderSystem();
   private loadVersion = 0;
   private generation = 0;
   private materialGeneration = 0;
@@ -90,6 +92,7 @@ export class SceneDocumentSystem {
     this.objects.clear();
     for (const { node, object } of created) this.objects.set(node.id, object);
     this.attachHierarchy(document);
+    this.syncShaders();
   }
 
   async addNode(node: SceneNode): Promise<Object3D> {
@@ -111,6 +114,7 @@ export class SceneDocumentSystem {
     this.objects.set(node.id, object);
     const parent = node.parentId ? this.objects.get(node.parentId) : this.root;
     (parent ?? this.root).add(object);
+    this.syncShaders();
     return object;
   }
 
@@ -135,6 +139,7 @@ export class SceneDocumentSystem {
       if (!this.assets.release(object)) disposeObject3D(object);
       this.objects.delete(id);
     }
+    this.syncShaders();
   }
 
   async updateNode(node: SceneNode): Promise<void> {
@@ -181,19 +186,27 @@ export class SceneDocumentSystem {
     const light = node.components.find(
       (component) => component.kind === 'light',
     );
+    const shader = node.components.find(
+      (component) => component.kind === 'shader',
+    );
     const nextPrimaryKind = model
       ? 'model'
       : geometry
         ? 'geometry'
         : light
           ? 'light'
-          : (node.components[0]?.kind ?? 'group');
+          : shader
+            ? 'shader'
+            : (node.components[0]?.kind ?? 'group');
     if (object.userData.primaryComponentKind !== nextPrimaryKind) return true;
     if (model?.kind === 'model') {
       return object.userData.assetId !== model.assetId;
     }
     if (light?.kind === 'light') {
       return object.userData.lightType !== light.lightType;
+    }
+    if (shader?.kind === 'shader') {
+      return object.userData.shaderMethod !== shader.shaderMethod;
     }
     return false;
   }
@@ -231,7 +244,13 @@ export class SceneDocumentSystem {
     this.objects.set(node.id, replacement);
     this.materials?.restore(previous);
     if (!this.assets.release(previous)) disposeObject3D(previous);
+    this.syncShaders();
     return replacement;
+  }
+
+  /** 由 Engine 的唯一 RAF 调用；返回值表示编辑器是否需要持续渲染。 */
+  updateShaders(elapsed: number): boolean {
+    return this.shaders.update(elapsed);
   }
 
   getObject(nodeId: string): Object3D | undefined {
@@ -402,6 +421,7 @@ export class SceneDocumentSystem {
     this.disposed = true;
     this.loadVersion += 1;
     this.clearRuntimeNodes();
+    this.shaders.clear();
     this.assets.dispose();
     this.materials?.dispose();
     this.root.removeFromParent();
@@ -433,6 +453,7 @@ export class SceneDocumentSystem {
     }
     this.objects.clear();
     this.root.clear();
+    this.shaders.clear();
   }
 
   private disposeCreated(objects: Object3D[]): void {
@@ -463,6 +484,10 @@ export class SceneDocumentSystem {
       placeholderNodeIds,
       errors,
     };
+  }
+
+  private syncShaders(): void {
+    this.shaders.sync(this.objects.values());
   }
 
   /** 创建失败时立即释放尚未挂入场景的对象，避免贴图异常留下孤立 GPU 资源。 */

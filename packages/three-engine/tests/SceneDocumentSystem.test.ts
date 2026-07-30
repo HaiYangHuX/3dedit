@@ -10,6 +10,7 @@ import {
   Scene,
   SpotLight,
   type Object3D,
+  type ShaderMaterial,
 } from 'three';
 import {
   createDefaultMaterialComponent,
@@ -58,6 +59,56 @@ function modelRoot(): Group {
 }
 
 describe('SceneDocumentSystem', () => {
+  it('加载、更新和删除 Shader 节点时同步原站动画缓存与 GPU 生命周期', async () => {
+    const scene = new Scene();
+    const assets: AssetInstanceProvider = {
+      beginGeneration: vi.fn(() => 1),
+      instantiate: vi.fn(async () => modelRoot()),
+      release: vi.fn(() => false),
+      dispose: vi.fn(),
+    };
+    const system = new SceneDocumentSystem(scene, assets);
+    const document = createDefaultSceneDocument('project-1', 'scene-1', '场景');
+    const shader = node('shader', {
+      kind: 'shader',
+      shaderMethod: 'CreateWarningShader',
+    });
+    shader.transform.rotation = [Math.PI / 2, 0, 0];
+    document.nodes = { shader };
+    document.rootNodeIds = ['shader'];
+
+    await system.loadDocument(document);
+    const warning = system.getObject('shader') as Mesh;
+    expect(warning).toBeInstanceOf(Mesh);
+    expect(warning.userData.primaryComponentKind).toBe('shader');
+    expect(warning.userData.shaderMethod).toBe('CreateWarningShader');
+    expect(system.updateShaders(3.5)).toBe(true);
+    expect((warning.material as ShaderMaterial).uniforms.uTime?.value).toBe(
+      3.5,
+    );
+
+    const geometryDispose = vi.spyOn(warning.geometry, 'dispose');
+    const materialDispose = vi.spyOn(
+      warning.material as ShaderMaterial,
+      'dispose',
+    );
+    await system.updateNode({
+      ...shader,
+      components: [{ kind: 'shader', shaderMethod: 'CreateRadarShader' }],
+    });
+    const radar = system.getObject('shader') as Mesh;
+    expect(radar).not.toBe(warning);
+    expect(radar.userData.shaderMethod).toBe('CreateRadarShader');
+    expect(geometryDispose).toHaveBeenCalledOnce();
+    expect(materialDispose).toHaveBeenCalledOnce();
+    expect(system.updateShaders(4)).toBe(true);
+    expect((radar.material as ShaderMaterial).uniforms.iTime?.value).toBe(0.01);
+
+    system.removeNodes(['shader']);
+    expect(system.updateShaders(5)).toBe(false);
+    system.dispose();
+  });
+
   it('重载文档期间撤销正在加载的新增模型，不允许迟到对象重新挂回画布', async () => {
     const scene = new Scene();
     let resolveInstance!: (object: Object3D) => void;

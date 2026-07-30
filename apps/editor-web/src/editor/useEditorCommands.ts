@@ -20,6 +20,7 @@ import type {
   SceneDocument,
   SceneCamera,
   SceneNode,
+  ShaderMethod,
   Transform,
 } from '@digital-twin/scene-schema';
 import { createUuid } from '../utils/createUuid';
@@ -33,6 +34,7 @@ import {
   createAssetNode,
   createGeometryNode,
   createLightNode,
+  createShaderNode,
   createSceneNode,
   MODEL_INSTANCE_NAME_VERSION_KEY,
   type GeometryPrimitive,
@@ -137,6 +139,13 @@ export function useEditorCommands(
     position: Transform['position'] = [0, 0, 0],
   ): Promise<SceneNode> {
     return addNode(createLightNode(lightType, position));
+  }
+
+  function addShader(
+    shaderMethod: ShaderMethod,
+    position: Transform['position'] = [0, 0, 0],
+  ): Promise<SceneNode> {
+    return addNode(createShaderNode(shaderMethod, position));
   }
 
   async function removeNodes(ids: string[]): Promise<void> {
@@ -534,6 +543,7 @@ export function useEditorCommands(
     addAssetNode,
     addGeometry,
     addLight,
+    addShader,
     removeNodes,
     removeSelection,
     updateNode,

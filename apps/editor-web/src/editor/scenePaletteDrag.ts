@@ -1,4 +1,5 @@
 import type { ModelAssetFormat } from '@digital-twin/three-engine';
+import { SHADER_METHODS, type ShaderMethod } from '@digital-twin/scene-schema';
 import type { GeometryPrimitive, SceneLightType } from './createSceneNode';
 
 export const SCENE_PALETTE_MIME =
@@ -12,7 +13,8 @@ export type ScenePaletteDragPayload =
       format: ModelAssetFormat;
     }
   | { kind: 'geometry'; primitive: GeometryPrimitive }
-  | { kind: 'light'; lightType: SceneLightType };
+  | { kind: 'light'; lightType: SceneLightType }
+  | { kind: 'shader'; shaderMethod: ShaderMethod };
 
 export type ScenePaletteDropPayload = ScenePaletteDragPayload & {
   position: [number, number, number];
@@ -39,6 +41,7 @@ const lightTypes = new Set<SceneLightType>([
   'point',
   'spot',
 ]);
+const shaderMethods = new Set<string>(SHADER_METHODS);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -108,6 +111,19 @@ export function readScenePaletteDrag(
       return {
         kind: 'light',
         lightType: value.lightType as SceneLightType,
+      };
+    }
+
+    if (value.kind === 'shader') {
+      if (
+        typeof value.shaderMethod !== 'string' ||
+        !shaderMethods.has(value.shaderMethod)
+      ) {
+        return undefined;
+      }
+      return {
+        kind: 'shader',
+        shaderMethod: value.shaderMethod as ShaderMethod,
       };
     }
 
