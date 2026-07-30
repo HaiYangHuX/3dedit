@@ -13,6 +13,8 @@ const commandMocks = vi.hoisted(() => {
     addGeometry: operation(),
     addLight: operation(),
     addShader: operation(),
+    addChart: operation(),
+    addText: operation(),
     alignModelsToGround: operation(),
     captureScreenshot: vi.fn().mockResolvedValue(new Blob(['png'])),
     duplicateNode: operation(),
@@ -181,6 +183,14 @@ describe('EditorWorkspace', () => {
         shaderMethod: 'CreateRadarShader',
       }),
     );
+    await wrapper.get('[data-asset-category="chart"]').trigger('click');
+    expect(wrapper.findAll('[data-chart-type]')).toHaveLength(9);
+    await wrapper.get('[data-chart-type="pie"]').trigger('click');
+    expect(commandMocks.addChart).toHaveBeenCalledWith('pie');
+    await wrapper.get('[data-asset-category="text"]').trigger('click');
+    expect(wrapper.findAll('[data-text-method]')).toHaveLength(12);
+    await wrapper.get('[data-text-method="CreateCyberHud"]').trigger('click');
+    expect(commandMocks.addText).toHaveBeenCalledWith('CreateCyberHud');
     expect(wrapper.get('[data-testid="inspector-panel"]').text()).toContain(
       '场景内容',
     );
@@ -306,6 +316,16 @@ describe('EditorWorkspace', () => {
       shaderMethod: 'CreateElectronicFence',
       position: [3, 0, -4],
     });
+    canvas.vm.$emit('scene-drop', {
+      kind: 'chart',
+      chartType: 'gauge',
+      position: [2, 0, -3],
+    });
+    canvas.vm.$emit('scene-drop', {
+      kind: 'text',
+      textMethod: 'CreateFixedCanvas',
+      position: [-1, 0.5, 2],
+    });
     await wrapper.vm.$nextTick();
     expect(canvas.attributes('data-model-loading')).toBe('false');
     canvas.vm.$emit('scene-drop', {
@@ -322,6 +342,11 @@ describe('EditorWorkspace', () => {
     expect(commandMocks.addShader).toHaveBeenCalledWith(
       'CreateElectronicFence',
       [3, 0, -4],
+    );
+    expect(commandMocks.addChart).toHaveBeenCalledWith('gauge', [2, 0, -3]);
+    expect(commandMocks.addText).toHaveBeenCalledWith(
+      'CreateFixedCanvas',
+      [-1, 0.5, 2],
     );
     expect(commandMocks.addAssetNode).toHaveBeenCalledWith(
       { id: 'asset-1', name: '水泵', format: 'glb' },

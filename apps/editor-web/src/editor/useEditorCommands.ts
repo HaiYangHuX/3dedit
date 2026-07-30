@@ -17,10 +17,12 @@ import {
 } from '@digital-twin/editor-core';
 import type {
   CameraRoamingPath,
+  ChartType,
   SceneDocument,
   SceneCamera,
   SceneNode,
   ShaderMethod,
+  TextMethod,
   Transform,
 } from '@digital-twin/scene-schema';
 import { createUuid } from '../utils/createUuid';
@@ -32,9 +34,11 @@ import type {
 import { toRaw, type Ref } from 'vue';
 import {
   createAssetNode,
+  createChartNode,
   createGeometryNode,
   createLightNode,
   createShaderNode,
+  createTextNode,
   createSceneNode,
   MODEL_INSTANCE_NAME_VERSION_KEY,
   type GeometryPrimitive,
@@ -146,6 +150,20 @@ export function useEditorCommands(
     position: Transform['position'] = [0, 0, 0],
   ): Promise<SceneNode> {
     return addNode(createShaderNode(shaderMethod, position));
+  }
+
+  function addChart(
+    chartType: ChartType,
+    position: Transform['position'] = [0, 0, 0],
+  ): Promise<SceneNode> {
+    return addNode(createChartNode(chartType, position));
+  }
+
+  function addText(
+    textMethod: TextMethod,
+    position: Transform['position'] = [0, 0, 0],
+  ): Promise<SceneNode> {
+    return addNode(createTextNode(textMethod, position));
   }
 
   async function removeNodes(ids: string[]): Promise<void> {
@@ -544,6 +562,8 @@ export function useEditorCommands(
     addGeometry,
     addLight,
     addShader,
+    addChart,
+    addText,
     removeNodes,
     removeSelection,
     updateNode,

@@ -25,6 +25,8 @@ describe('scenePaletteDrag', () => {
     { kind: 'geometry', primitive: 'box' },
     { kind: 'light', lightType: 'point' },
     { kind: 'shader', shaderMethod: 'CreateRadarShader' },
+    { kind: 'chart', chartType: 'pie' },
+    { kind: 'text', textMethod: 'CreateCyberHud' },
   ])('使用统一 MIME 往返 $kind payload', (payload) => {
     const { transfer } = createDataTransfer();
 
@@ -51,6 +53,8 @@ describe('scenePaletteDrag', () => {
     JSON.stringify({ kind: 'geometry', primitive: 'torus' }),
     JSON.stringify({ kind: 'light', lightType: 'rect-area' }),
     JSON.stringify({ kind: 'shader', shaderMethod: 'CreateUnknownShader' }),
+    JSON.stringify({ kind: 'chart', chartType: 'candlestick' }),
+    JSON.stringify({ kind: 'text', textMethod: 'CreateUnknownCanvas' }),
     JSON.stringify({ kind: 'unknown' }),
   ])('拒绝非法或未知拖放数据 %#', (raw) => {
     const { transfer, values } = createDataTransfer();

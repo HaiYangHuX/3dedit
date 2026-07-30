@@ -1,11 +1,27 @@
 <script setup lang="ts">
 import type { Asset } from '@digital-twin/api-contracts';
 import type { EditableNodePatch } from '@digital-twin/editor-core';
-import type { SceneNode } from '@digital-twin/scene-schema';
+import {
+  chartOptionSchema,
+  type ChartComponent,
+  type SceneNode,
+  type TextComponent,
+  type TextType,
+} from '@digital-twin/scene-schema';
+import {
+  ElButton,
+  ElColorPicker,
+  ElInput,
+  ElInputNumber,
+  ElRadioButton,
+  ElRadioGroup,
+} from 'element-plus';
 import { computed, ref, watch } from 'vue';
 import TransformInspector from './TransformInspector.vue';
 import MaterialInspector from './MaterialInspector.vue';
 import { getShaderDefinition } from '../../editor/shaderPalette';
+import { getChartDefinition } from '../../editor/chartPalette';
+import { getTextDefinition } from '../../editor/textPalette';
 
 const props = withDefaults(
   defineProps<{
@@ -20,6 +36,9 @@ const emit = defineEmits<{ update: [patch: EditableNodePatch] }>();
 const nameDraft = ref('');
 const businessDataDraft = ref('{}');
 const businessDataError = ref('');
+const textContentDraft = ref('');
+const chartOptionDraft = ref('{}');
+const chartOptionError = ref('');
 function componentOf<T extends SceneNode['components'][number]['kind']>(
   kind: T,
 ): Extract<SceneNode['components'][number], { kind: T }> | undefined {
@@ -44,6 +63,8 @@ const geometry = computed(() => componentOf('geometry'));
 const light = computed(() => componentOf('light'));
 const model = computed(() => componentOf('model'));
 const shader = computed(() => componentOf('shader'));
+const chart = computed(() => componentOf('chart'));
+const text = computed(() => componentOf('text'));
 const material = computed(() => componentOf('material'));
 
 watch(
@@ -52,6 +73,19 @@ watch(
     nameDraft.value = node.name;
     businessDataDraft.value = JSON.stringify(node.businessData, null, 2);
     businessDataError.value = '';
+    const textComponent = node.components.find(
+      (component) => component.kind === 'text',
+    );
+    textContentDraft.value =
+      textComponent?.kind === 'text' ? textComponent.textContent : '';
+    const chartComponent = node.components.find(
+      (component) => component.kind === 'chart',
+    );
+    chartOptionDraft.value =
+      chartComponent?.kind === 'chart'
+        ? JSON.stringify(chartComponent.option, null, 2)
+        : '{}';
+    chartOptionError.value = '';
   },
   { immediate: true, deep: true },
 );
@@ -106,6 +140,47 @@ function restoreMaterial(): void {
   emit('update', {
     components: cloneComponents().filter((item) => item.kind !== 'material'),
   });
+}
+
+function updateText(patch: Partial<Omit<TextComponent, 'kind'>>): void {
+  const components = cloneComponents();
+  const component = components.find((item) => item.kind === 'text');
+  if (component?.kind !== 'text') return;
+  // 连续属性命令可能早于父级文档刷新，始终带上当前草稿可避免旧节点快照覆盖刚输入的文本。
+  Object.assign(component, { textContent: textContentDraft.value }, patch);
+  emit('update', { components });
+}
+
+function updateTextType(value: string | number | boolean | undefined): void {
+  if (value === 'Sprite' || value === 'Mesh') {
+    updateText({ textType: value as TextType });
+  }
+}
+
+function updateChart(patch: Partial<Omit<ChartComponent, 'kind'>>): void {
+  const components = cloneComponents();
+  const component = components.find((item) => item.kind === 'chart');
+  if (component?.kind !== 'chart') return;
+  Object.assign(component, patch);
+  emit('update', { components });
+}
+
+function commitChartOption(): void {
+  try {
+    const parsed = chartOptionSchema.safeParse(
+      JSON.parse(chartOptionDraft.value),
+    );
+    if (!parsed.success) throw new Error('图表配置必须是 JSON 对象');
+    chartOptionError.value = '';
+    updateChart({ option: parsed.data });
+  } catch (error) {
+    chartOptionError.value =
+      error instanceof SyntaxError
+        ? '图表配置不是有效的 JSON'
+        : error instanceof Error
+          ? error.message
+          : '图表配置格式错误';
+  }
 }
 
 function commitBusinessData(): void {
@@ -242,6 +317,144 @@ function commitBusinessData(): void {
         <span class="shader-method-name">
           {{ getShaderDefinition(shader.shaderMethod).name }}
         </span>
+      </div>
+    </section>
+
+    <section v-if="text?.kind === 'text'" class="component-inspector">
+      <div class="inspector-section-title">文本</div>
+      <div class="inspector-field">
+        <label>模板</label>
+        <span class="shader-method-name">
+          {{ getTextDefinition(text.textMethod).name }}
+        </span>
+      </div>
+      <div class="inspector-field">
+        <label>显示类型</label>
+        <ElRadioGroup
+          :model-value="text.textType"
+          :disabled="node.locked"
+          size="small"
+          @change="updateTextType"
+        >
+          <ElRadioButton value="Sprite" data-testid="text-type-sprite">
+            面向屏幕
+          </ElRadioButton>
+          <ElRadioButton value="Mesh" data-testid="text-type-mesh">
+            面向场景
+          </ElRadioButton>
+        </ElRadioGroup>
+      </div>
+      <div class="inspector-field">
+        <label>颜色</label>
+        <ElColorPicker
+          :model-value="text.color"
+          :disabled="node.locked"
+          show-alpha
+          @change="(value) => value && updateText({ color: value })"
+        />
+      </div>
+      <div class="inspector-field">
+        <label>字号</label>
+        <ElInputNumber
+          data-testid="text-font-size"
+          :model-value="text.fontSize"
+          :min="8"
+          :max="24"
+          :step="1"
+          :disabled="node.locked"
+          controls-position="right"
+          @change="
+            (value) => value !== undefined && updateText({ fontSize: value })
+          "
+        />
+      </div>
+      <div class="inspector-field inspector-field--stacked">
+        <label>文本内容</label>
+        <ElInput
+          v-model="textContentDraft"
+          data-testid="text-content"
+          type="textarea"
+          :rows="3"
+          maxlength="100"
+          show-word-limit
+          resize="vertical"
+          :disabled="node.locked"
+          @change="updateText({ textContent: textContentDraft })"
+        />
+      </div>
+    </section>
+
+    <section v-if="chart?.kind === 'chart'" class="component-inspector">
+      <div class="inspector-section-title">图表</div>
+      <div class="inspector-field">
+        <label>模板</label>
+        <span class="shader-method-name">
+          {{ getChartDefinition(chart.chartType).name }}
+        </span>
+      </div>
+      <div class="inspector-field">
+        <label>画布尺寸</label>
+        <div class="axis-inputs chart-size-inputs">
+          <label>
+            <span>宽</span>
+            <ElInputNumber
+              :model-value="chart.width"
+              :min="160"
+              :max="4096"
+              :step="10"
+              :disabled="node.locked"
+              :controls="false"
+              @change="
+                (value) => value !== undefined && updateChart({ width: value })
+              "
+            />
+          </label>
+          <label>
+            <span>高</span>
+            <ElInputNumber
+              :model-value="chart.height"
+              :min="120"
+              :max="4096"
+              :step="10"
+              :disabled="node.locked"
+              :controls="false"
+              @change="
+                (value) => value !== undefined && updateChart({ height: value })
+              "
+            />
+          </label>
+        </div>
+      </div>
+      <div class="inspector-field inspector-field--stacked">
+        <label>图表配置 JSON</label>
+        <ElInput
+          v-model="chartOptionDraft"
+          class="chart-option-editor"
+          data-testid="chart-option"
+          type="textarea"
+          :rows="10"
+          resize="vertical"
+          spellcheck="false"
+          :disabled="node.locked"
+        />
+      </div>
+      <p
+        v-if="chartOptionError"
+        class="field-error"
+        data-testid="chart-option-error"
+      >
+        {{ chartOptionError }}
+      </p>
+      <div class="chart-option-actions">
+        <ElButton
+          type="primary"
+          size="small"
+          data-testid="update-chart-option"
+          :disabled="node.locked"
+          @click="commitChartOption"
+        >
+          更新图表数据
+        </ElButton>
       </div>
     </section>
 

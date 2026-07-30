@@ -11,6 +11,7 @@ import {
   CameraFilled,
   Collection,
   CopyDocument,
+  DataAnalysis,
   Delete,
   EditPen,
   Grid,
@@ -287,6 +288,8 @@ function sceneNodeIcon(item: TreeItem): Component {
   if (kinds.has('geometry')) return Grid;
   if (kinds.has('light')) return Sunny;
   if (kinds.has('shader')) return MagicStick;
+  if (kinds.has('chart')) return DataAnalysis;
+  if (kinds.has('text')) return EditPen;
   if ((item.node?.components.length ?? 0) === 0) return Collection;
   return Operation;
 }

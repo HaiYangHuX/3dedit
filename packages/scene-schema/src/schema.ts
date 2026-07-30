@@ -6,7 +6,9 @@ import {
 } from './camera.js';
 import { materialComponentSchema } from './material.js';
 import { shaderComponentSchema } from './shader.js';
+import { chartComponentSchema } from './chart.js';
 import { socketTaskTypeSchema } from './socketTaskTypes.js';
+import { textComponentSchema } from './text.js';
 
 const identifierSchema = z.string().min(1);
 const vector3Schema = z.tuple([z.number(), z.number(), z.number()]);
@@ -44,16 +46,10 @@ const componentSchema = z.discriminatedUnion('kind', [
   }),
   materialComponentSchema,
   shaderComponentSchema,
+  textComponentSchema,
+  chartComponentSchema,
   z.object({
-    kind: z.enum([
-      'camera',
-      'text',
-      'annotation',
-      'image',
-      'video',
-      'chart',
-      'effect',
-    ]),
+    kind: z.enum(['camera', 'annotation', 'image', 'video', 'effect']),
     data: z.record(z.string(), z.json()),
   }),
 ]);

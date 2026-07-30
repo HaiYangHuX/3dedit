@@ -41,6 +41,8 @@ export interface RuntimeHostAdapterOptions {
     event: RuntimeNodeEvent,
     listener: () => void,
   ): () => void;
+  setText?: (nodeId: string, text: string) => boolean;
+  setChartData?: (nodeId: string, data: unknown) => boolean;
   /** 宿主在 Camera tween 前释放第一人称、漫游等互斥的写入模式。 */
   beforeCameraChange?: () => void;
   invalidate?: () => void;
@@ -296,13 +298,17 @@ export class RuntimeHostAdapter implements RuntimeHost {
   }
 
   setText(nodeId: string, text: string): void {
-    this.runtimeState(this.requireObject(nodeId)).text = text;
+    const object = this.requireObject(nodeId);
+    this.options.setText?.(nodeId, text);
+    // runtimeState 作为动作诊断快照保留，具体组件不存在时也能维持既有降级行为。
+    this.runtimeState(object).text = text;
     this.options.invalidate?.();
   }
 
   setChartData(nodeId: string, data: unknown): void {
-    this.runtimeState(this.requireObject(nodeId)).chartData =
-      structuredClone(data);
+    const object = this.requireObject(nodeId);
+    this.options.setChartData?.(nodeId, data);
+    this.runtimeState(object).chartData = structuredClone(data);
     this.options.invalidate?.();
   }
 

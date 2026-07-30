@@ -17,7 +17,20 @@ import {
   type Object3D,
 } from 'three';
 import type { AssetInstanceProvider } from '../types.js';
+import {
+  createChartObject,
+  type CreateChartObjectOptions,
+} from '../charts/ChartObjectController.js';
 import { createShaderObject } from '../shaders/createShaderObject.js';
+import {
+  createTextObject,
+  type CreateTextObjectOptions,
+} from '../text/TextObjectController.js';
+
+export interface CreateSceneObjectOptions {
+  chart?: CreateChartObjectOptions;
+  text?: CreateTextObjectOptions;
+}
 
 export function createPrimitiveGeometry(
   primitive: 'box' | 'sphere' | 'plane' | 'cylinder',
@@ -95,6 +108,7 @@ export async function createSceneObject(
   node: SceneNode,
   assets: AssetInstanceProvider,
   generation: number,
+  options: CreateSceneObjectOptions = {},
 ): Promise<Object3D> {
   const model = node.components.find((component) => component.kind === 'model');
   const geometry = node.components.find(
@@ -104,6 +118,8 @@ export async function createSceneObject(
   const shader = node.components.find(
     (component) => component.kind === 'shader',
   );
+  const chart = node.components.find((component) => component.kind === 'chart');
+  const text = node.components.find((component) => component.kind === 'text');
   let root: Object3D;
   if (model?.kind === 'model') {
     root = await assets.instantiate(model.assetId, generation);
@@ -114,6 +130,10 @@ export async function createSceneObject(
     } else if (light?.kind === 'light') root = lightObject(light);
     else if (shader?.kind === 'shader') {
       root = createShaderObject(shader.shaderMethod);
+    } else if (chart?.kind === 'chart') {
+      root = createChartObject(chart, node.id, options.chart);
+    } else if (text?.kind === 'text') {
+      root = createTextObject(text, options.text);
     } else root = new Group();
   }
   applySceneNode(root, node);
@@ -126,7 +146,11 @@ export async function createSceneObject(
         ? 'light'
         : shader
           ? 'shader'
-          : (node.components[0]?.kind ?? 'group');
+          : chart
+            ? 'chart'
+            : text
+              ? 'text'
+              : (node.components[0]?.kind ?? 'group');
   if (light?.kind === 'light') root.userData.lightType = light.lightType;
   if (shader?.kind === 'shader') {
     root.userData.shaderMethod = shader.shaderMethod;

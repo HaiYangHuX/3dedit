@@ -911,6 +911,23 @@ button {
   gap: 6px;
 }
 
+.chart-size-inputs {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* Element Plus 的多行输入默认使用亮色主题，这里与属性面板的普通输入保持一致。 */
+.node-inspector .el-textarea__inner {
+  color: #dbeafe;
+  background: #0b1220;
+  border: 1px solid #2a3850;
+  box-shadow: none;
+}
+
+.node-inspector .el-textarea__inner:focus {
+  border-color: #38bdf8;
+  box-shadow: none;
+}
+
 .axis-inputs label {
   display: grid;
   grid-template-columns: 14px minmax(0, 1fr);
@@ -1485,6 +1502,21 @@ button {
 .shader-palette-icon {
   width: 16px;
   height: 16px;
+}
+
+.scene-palette-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.chart-option-editor {
+  width: 100%;
+}
+
+.chart-option-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 7px;
 }
 
 .shader-method-name {

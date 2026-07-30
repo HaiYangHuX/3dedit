@@ -33,6 +33,7 @@ import {
   CameraRoamingSystem,
   type CameraRoamingState,
 } from './camera/CameraRoamingSystem.js';
+import { Css3DOverlaySystem } from './charts/Css3DOverlaySystem.js';
 import { SceneDocumentSystem } from './documents/SceneDocumentSystem.js';
 import {
   SelectionSystem,
@@ -119,6 +120,7 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
   private readonly resources = new ResourceTracker();
   private renderer?: WebGLRenderer;
   private controls?: OrbitControls;
+  private css3dOverlay?: Css3DOverlaySystem;
   private documentSystem?: SceneDocumentSystem;
   private selectionSystem?: SelectionSystem;
   private selectionHighlight?: SelectionBoxSystem;
@@ -242,6 +244,15 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.controls.addEventListener('change', this.emitCameraOrientation);
     this.controls.addEventListener('start', this.cancelCameraAnimation);
     this.controls.addEventListener('end', this.emitCameraState);
+    this.css3dOverlay = new Css3DOverlaySystem({
+      scene: this.scene,
+      camera: this.camera,
+      container,
+      primaryControls: this.controls,
+      invalidate: this.invalidate,
+      onSelect: this.selectFromCss3D,
+      onDoubleClick: this.focusFromCss3D,
+    });
     this.pointerLockSystem = new PointerLockSystem(
       this.camera,
       renderer.domElement,
@@ -341,6 +352,7 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.camera.updateProjectionMatrix();
     this.renderer.setPixelRatio(pixelRatio);
     this.renderer.setSize(width, height, false);
+    this.css3dOverlay?.resize(width, height);
     this.viewportGizmo?.resize();
     this.invalidate();
   }
@@ -387,6 +399,7 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     // 原站直接渲染到默认 framebuffer；经过 Composer 会丢失 Canvas MSAA，
     // 在 cj.glb 这类高密度建筑模型缩放时就会表现为毛边和闪烁。
     this.renderer?.render(this.scene, this.camera);
+    this.css3dOverlay?.render();
     if (this.viewportGizmo?.render()) this.invalidated = true;
     this.flushScreenshotRequests();
   };
@@ -890,6 +903,8 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
     this.fallbackEnvironmentTarget = undefined;
     // Gizmo 订阅 OrbitControls，必须在 controls 前对称释放。
     this.viewportGizmo?.dispose();
+    // 覆盖层订阅主 OrbitControls，必须在主控制器销毁前解除同步监听。
+    this.css3dOverlay?.dispose();
     this.controls?.removeEventListener('change', this.invalidate);
     this.controls?.removeEventListener('change', this.emitCameraOrientation);
     this.controls?.removeEventListener('start', this.cancelCameraAnimation);
@@ -949,6 +964,37 @@ export class EditorEngine extends EventDispatcher<EditorEngineEventMap> {
       });
     }
   }
+
+  /** CSS3D DOM 不经过 WebGL Raycaster，因此在这里复用同一套多选业务语义。 */
+  private readonly selectFromCss3D = (
+    nodeId: string,
+    additive: boolean,
+  ): void => {
+    if (
+      !this.selectionSystem ||
+      this.pointerLockSystem?.isActive ||
+      this.measurementSystem?.active ||
+      this.cameraRoamingSystem?.getState().mode !== 'idle'
+    ) {
+      return;
+    }
+    const current = this.selectionSystem.getSelection();
+    if (!additive) {
+      this.selectionSystem.setSelection([nodeId], nodeId);
+      return;
+    }
+    const next = current.ids.includes(nodeId)
+      ? current.ids.filter((id) => id !== nodeId)
+      : [...current.ids, nodeId];
+    this.selectionSystem.setSelection(next, next.at(-1) ?? null);
+  };
+
+  private readonly focusFromCss3D = (nodeId: string): void => {
+    this.selectFromCss3D(nodeId, false);
+    if (this.selectionSystem?.getSelection().primaryId === nodeId) {
+      this.focusSelection();
+    }
+  };
 
   private emitStats(): void {
     this.dispatchEvent({ type: 'statschange', ...this.getStats() });

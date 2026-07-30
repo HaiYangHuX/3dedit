@@ -41,6 +41,8 @@ import {
   type ScenePaletteDropPayload,
 } from '../editor/scenePaletteDrag';
 import { SHADER_PALETTE_ITEMS } from '../editor/shaderPalette';
+import { CHART_PALETTE_ITEMS } from '../editor/chartPalette';
+import { TEXT_PALETTE_ITEMS } from '../editor/textPalette';
 import { useDocumentStore, type SaveState } from '../stores/document';
 import { useAssetStore } from '../stores/asset';
 import { useSelectionStore } from '../stores/selection';
@@ -270,6 +272,20 @@ function dropSceneItem(payload: ScenePaletteDropPayload): void {
     void commands
       .addShader(payload.shaderMethod, payload.position)
       .catch((reason) => showEditorError(reason, '添加着色器失败'));
+    return;
+  }
+
+  if (payload.kind === 'chart') {
+    void commands
+      .addChart(payload.chartType, payload.position)
+      .catch((reason) => showEditorError(reason, '添加图表失败'));
+    return;
+  }
+
+  if (payload.kind === 'text') {
+    void commands
+      .addText(payload.textMethod, payload.position)
+      .catch((reason) => showEditorError(reason, '添加文本失败'));
     return;
   }
 
@@ -739,11 +755,77 @@ async function copyText(value: string): Promise<void> {
           </button>
         </ElTooltip>
       </div>
+      <div
+        v-else-if="assetCategory === 'chart'"
+        class="element-palette chart-palette"
+      >
+        <ElTooltip
+          v-for="item in CHART_PALETTE_ITEMS"
+          :key="item.chartType"
+          :content="`${item.name}（点击添加，或拖入视口）`"
+          placement="right"
+          :show-after="350"
+        >
+          <button
+            type="button"
+            draggable="true"
+            :data-chart-type="item.chartType"
+            @dragstart="
+              beginPaletteDrag($event, {
+                kind: 'chart',
+                chartType: item.chartType,
+              })
+            "
+            @click="runCommand(commands.addChart(item.chartType))"
+          >
+            <span class="element-palette-icon">
+              <component
+                :is="item.icon"
+                class="scene-palette-icon"
+                aria-hidden="true"
+              />
+            </span>
+            {{ item.name }}
+          </button>
+        </ElTooltip>
+      </div>
+      <div
+        v-else-if="assetCategory === 'text'"
+        class="element-palette text-palette"
+      >
+        <ElTooltip
+          v-for="item in TEXT_PALETTE_ITEMS"
+          :key="item.textMethod"
+          :content="`${item.name}（点击添加，或拖入视口）`"
+          placement="right"
+          :show-after="350"
+        >
+          <button
+            type="button"
+            draggable="true"
+            :data-text-method="item.textMethod"
+            @dragstart="
+              beginPaletteDrag($event, {
+                kind: 'text',
+                textMethod: item.textMethod,
+              })
+            "
+            @click="runCommand(commands.addText(item.textMethod))"
+          >
+            <span class="element-palette-icon">
+              <component
+                :is="item.icon"
+                class="scene-palette-icon"
+                aria-hidden="true"
+              />
+            </span>
+            {{ item.name }}
+          </button>
+        </ElTooltip>
+      </div>
       <div v-else class="empty-panel">
         {{
           {
-            chart: '图表组件将在低代码组件阶段接入',
-            text: '文本与标注组件将在低代码组件阶段接入',
             video: '视频组件将在媒体资源阶段接入',
           }[assetCategory]
         }}

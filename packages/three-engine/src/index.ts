@@ -1,4 +1,20 @@
 export {
+  createChartObject,
+  releaseChartObjectController,
+  setChartObjectOption,
+  subscribeChartObjectEvent,
+  updateChartObject,
+  type CreateChartObjectOptions,
+  type EChartsAdapter,
+  type EChartsInstanceLike,
+} from './charts/ChartObjectController';
+export {
+  Css3DOverlaySystem,
+  type Css3DOverlaySystemOptions,
+  type Css3DRendererLike,
+  type LinkedOrbitControls,
+} from './charts/Css3DOverlaySystem';
+export {
   AssetInstanceSystem,
   StaleAssetLoadError,
 } from './assets/AssetInstanceSystem';
@@ -23,7 +39,10 @@ export type {
   ModelAssetFormat,
   TextureAssetFormat,
 } from './assets/types';
-export { SceneDocumentSystem } from './documents/SceneDocumentSystem';
+export {
+  SceneDocumentSystem,
+  type SceneDocumentSystemOptions,
+} from './documents/SceneDocumentSystem';
 export {
   DEFAULT_EDITOR_ENVIRONMENT_URL,
   EditorEngine,
@@ -92,9 +111,24 @@ export {
   type TextureLoaderLike,
 } from './materials/MaterialSystem';
 export { disposeObject3D, ResourceTracker } from './ResourceTracker';
+export { disposeSceneComponentObject } from './objects/SceneComponentController';
 export { createShaderObject } from './shaders/createShaderObject';
 export { ShaderSystem } from './shaders/ShaderSystem';
 export type { ShaderMethod } from '@digital-twin/scene-schema';
+export {
+  createTextObject,
+  getTextObjectComponent,
+  releaseTextObjectController,
+  setTextObjectContent,
+  updateTextObject,
+  type CreateTextObjectOptions,
+} from './text/TextObjectController';
+export {
+  renderTextCanvas,
+  type CanvasSurface,
+  type CanvasSurfaceFactory,
+  type TextCanvasRenderOptions,
+} from './text/TextCanvasFactory';
 export {
   RuntimeHostAdapter,
   type RuntimeCameraControls,

@@ -1,5 +1,12 @@
 import type { ModelAssetFormat } from '@digital-twin/three-engine';
-import { SHADER_METHODS, type ShaderMethod } from '@digital-twin/scene-schema';
+import {
+  CHART_TYPES,
+  SHADER_METHODS,
+  TEXT_METHODS,
+  type ChartType,
+  type ShaderMethod,
+  type TextMethod,
+} from '@digital-twin/scene-schema';
 import type { GeometryPrimitive, SceneLightType } from './createSceneNode';
 
 export const SCENE_PALETTE_MIME =
@@ -14,7 +21,9 @@ export type ScenePaletteDragPayload =
     }
   | { kind: 'geometry'; primitive: GeometryPrimitive }
   | { kind: 'light'; lightType: SceneLightType }
-  | { kind: 'shader'; shaderMethod: ShaderMethod };
+  | { kind: 'shader'; shaderMethod: ShaderMethod }
+  | { kind: 'chart'; chartType: ChartType }
+  | { kind: 'text'; textMethod: TextMethod };
 
 export type ScenePaletteDropPayload = ScenePaletteDragPayload & {
   position: [number, number, number];
@@ -42,6 +51,8 @@ const lightTypes = new Set<SceneLightType>([
   'spot',
 ]);
 const shaderMethods = new Set<string>(SHADER_METHODS);
+const chartTypes = new Set<string>(CHART_TYPES);
+const textMethods = new Set<string>(TEXT_METHODS);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -125,6 +136,26 @@ export function readScenePaletteDrag(
         kind: 'shader',
         shaderMethod: value.shaderMethod as ShaderMethod,
       };
+    }
+
+    if (value.kind === 'chart') {
+      if (
+        typeof value.chartType !== 'string' ||
+        !chartTypes.has(value.chartType)
+      ) {
+        return undefined;
+      }
+      return { kind: 'chart', chartType: value.chartType as ChartType };
+    }
+
+    if (value.kind === 'text') {
+      if (
+        typeof value.textMethod !== 'string' ||
+        !textMethods.has(value.textMethod)
+      ) {
+        return undefined;
+      }
+      return { kind: 'text', textMethod: value.textMethod as TextMethod };
     }
 
     return undefined;

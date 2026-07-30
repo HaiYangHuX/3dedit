@@ -8,10 +8,21 @@ import {
 import { disposeObject3D } from '../ResourceTracker.js';
 import { ShaderSystem } from '../shaders/ShaderSystem.js';
 import {
+  setChartObjectOption,
+  subscribeChartObjectEvent,
+  updateChartObject,
+} from '../charts/ChartObjectController.js';
+import {
   applySceneNode,
   createPrimitiveGeometry,
   createSceneObject,
 } from '../objects/createSceneObject.js';
+import { disposeSceneComponentObject } from '../objects/SceneComponentController.js';
+import {
+  setTextObjectContent,
+  updateTextObject,
+} from '../text/TextObjectController.js';
+import type { RuntimeNodeEvent } from '@digital-twin/runtime-core';
 import type {
   AssetInstanceProvider,
   LoadReport,
@@ -19,6 +30,11 @@ import type {
   ModelStructureMap,
   SceneStats,
 } from '../types.js';
+
+export interface SceneDocumentSystemOptions {
+  /** 测试或宿主可替换创建端口；生产默认使用共享 SceneObject 工厂。 */
+  createObject?: (node: SceneNode, generation: number) => Promise<Object3D>;
+}
 
 /** 维护 SceneNode ID 与 Three Object3D 的映射及场景切换资源边界。 */
 export class SceneDocumentSystem {
@@ -34,6 +50,7 @@ export class SceneDocumentSystem {
     scene: Scene,
     private readonly assets: AssetInstanceProvider,
     private readonly materials?: MaterialProjectionSystem,
+    private readonly options: SceneDocumentSystemOptions = {},
   ) {
     this.root.name = '__scene_document_root__';
     this.root.userData.isDocumentRoot = true;
@@ -85,10 +102,7 @@ export class SceneDocumentSystem {
   ): void {
     const previous = [...this.objects.values()];
     for (const object of previous) object.removeFromParent();
-    for (const object of previous) {
-      this.materials?.restore(object);
-      if (!this.assets.release(object)) disposeObject3D(object);
-    }
+    for (const object of previous) this.releaseObject(object);
     this.objects.clear();
     for (const { node, object } of created) this.objects.set(node.id, object);
     this.attachHierarchy(document);
@@ -107,8 +121,7 @@ export class SceneDocumentSystem {
       version !== this.loadVersion ||
       generation !== this.generation
     ) {
-      this.materials?.restore(object);
-      if (!this.assets.release(object)) disposeObject3D(object);
+      this.releaseObject(object);
       throw new StaleAssetLoadError();
     }
     this.objects.set(node.id, object);
@@ -135,8 +148,7 @@ export class SceneDocumentSystem {
       );
     for (const { object } of objects) object.removeFromParent();
     for (const { id, object } of objects) {
-      this.materials?.restore(object);
-      if (!this.assets.release(object)) disposeObject3D(object);
+      this.releaseObject(object);
       this.objects.delete(id);
     }
     this.syncShaders();
@@ -172,6 +184,12 @@ export class SceneDocumentSystem {
       object.color.set(light.color);
       if ('castShadow' in object) object.castShadow = light.castShadow;
     }
+    const text = node.components.find((component) => component.kind === 'text');
+    if (text?.kind === 'text') updateTextObject(object, text);
+    const chart = node.components.find(
+      (component) => component.kind === 'chart',
+    );
+    if (chart?.kind === 'chart') updateChartObject(object, chart);
     await this.applyNodeMaterial(object, node);
     this.applyModelPartExclusions(object, node);
   }
@@ -189,6 +207,10 @@ export class SceneDocumentSystem {
     const shader = node.components.find(
       (component) => component.kind === 'shader',
     );
+    const chart = node.components.find(
+      (component) => component.kind === 'chart',
+    );
+    const text = node.components.find((component) => component.kind === 'text');
     const nextPrimaryKind = model
       ? 'model'
       : geometry
@@ -197,7 +219,11 @@ export class SceneDocumentSystem {
           ? 'light'
           : shader
             ? 'shader'
-            : (node.components[0]?.kind ?? 'group');
+            : chart
+              ? 'chart'
+              : text
+                ? 'text'
+                : (node.components[0]?.kind ?? 'group');
     if (object.userData.primaryComponentKind !== nextPrimaryKind) return true;
     if (model?.kind === 'model') {
       return object.userData.assetId !== model.assetId;
@@ -227,8 +253,7 @@ export class SceneDocumentSystem {
       generation !== this.generation ||
       this.objects.get(node.id) !== previous
     ) {
-      this.materials?.restore(replacement);
-      if (!this.assets.release(replacement)) disposeObject3D(replacement);
+      this.releaseObject(replacement);
       throw new StaleAssetLoadError();
     }
 
@@ -242,8 +267,7 @@ export class SceneDocumentSystem {
       parent.children.splice(previousIndex, 0, replacement);
     }
     this.objects.set(node.id, replacement);
-    this.materials?.restore(previous);
-    if (!this.assets.release(previous)) disposeObject3D(previous);
+    this.releaseObject(previous);
     this.syncShaders();
     return replacement;
   }
@@ -255,6 +279,28 @@ export class SceneDocumentSystem {
 
   getObject(nodeId: string): Object3D | undefined {
     return this.objects.get(nodeId);
+  }
+
+  /** 运行时动作只修改当前对象实例，不回写 SceneDocument，也不会触发自动保存。 */
+  setText(nodeId: string, text: string): boolean {
+    const object = this.objects.get(nodeId);
+    return object ? setTextObjectContent(object, text) : false;
+  }
+
+  setChartData(nodeId: string, option: unknown): boolean {
+    const object = this.objects.get(nodeId);
+    return object ? setChartObjectOption(object, option) : false;
+  }
+
+  subscribeNodeEvent(
+    nodeId: string,
+    event: RuntimeNodeEvent,
+    listener: () => void,
+  ): (() => void) | undefined {
+    const object = this.objects.get(nodeId);
+    return object
+      ? subscribeChartObjectEvent(object, event, listener)
+      : undefined;
   }
 
   getNodeId(object: Object3D): string | undefined {
@@ -447,19 +493,14 @@ export class SceneDocumentSystem {
   private clearRuntimeNodes(): void {
     const objects = [...this.objects.values()];
     for (const object of objects) object.removeFromParent();
-    for (const object of objects) {
-      this.materials?.restore(object);
-      if (!this.assets.release(object)) disposeObject3D(object);
-    }
+    for (const object of objects) this.releaseObject(object);
     this.objects.clear();
     this.root.clear();
     this.shaders.clear();
   }
 
   private disposeCreated(objects: Object3D[]): void {
-    for (const object of objects) {
-      if (!this.assets.release(object)) disposeObject3D(object);
-    }
+    for (const object of objects) this.releaseObject(object);
   }
 
   private buildReport(): LoadReport {
@@ -492,16 +533,24 @@ export class SceneDocumentSystem {
 
   /** 创建失败时立即释放尚未挂入场景的对象，避免贴图异常留下孤立 GPU 资源。 */
   private async createNodeObject(node: SceneNode): Promise<Object3D> {
-    const object = await createSceneObject(node, this.assets, this.generation);
+    const object = this.options.createObject
+      ? await this.options.createObject(node, this.generation)
+      : await createSceneObject(node, this.assets, this.generation);
     try {
       this.applyModelPartExclusions(object, node);
       await this.applyNodeMaterial(object, node);
       return object;
     } catch (reason) {
-      this.materials?.restore(object);
-      if (!this.assets.release(object)) disposeObject3D(object);
+      this.releaseObject(object);
       throw reason;
     }
+  }
+
+  /** 组件私有的 DOM/Canvas 控制器必须先释放，再交给通用 Three 资源回收。 */
+  private releaseObject(object: Object3D): void {
+    this.materials?.restore(object);
+    disposeSceneComponentObject(object);
+    if (!this.assets.release(object)) disposeObject3D(object);
   }
 
   private async applyNodeMaterial(

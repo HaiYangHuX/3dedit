@@ -464,7 +464,7 @@ describe('SceneDocumentSystem', () => {
     };
     const system = new SceneDocumentSystem(scene, assets);
     const document = createDefaultSceneDocument('project-1', 'scene-1', '场景');
-    const parent = node('parent', { kind: 'text', data: {} });
+    const parent = node('parent', { kind: 'annotation', data: {} });
     parent.enabled = false;
     parent.childIds = ['child'];
     const child = node(

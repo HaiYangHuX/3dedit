@@ -31,6 +31,7 @@ import { AssetInstanceSystem } from './assets/AssetInstanceSystem.js';
 import { AssetLoader } from './assets/AssetLoader.js';
 import type { AssetResolver } from './assets/types.js';
 import { CameraRoamingSystem } from './camera/CameraRoamingSystem.js';
+import { Css3DOverlaySystem } from './charts/Css3DOverlaySystem.js';
 import { SceneDocumentSystem } from './documents/SceneDocumentSystem.js';
 import { configureOrbitControls } from './interaction/OrbitControlsProfile.js';
 import { PointerLockSystem } from './interaction/PointerLockSystem.js';
@@ -64,6 +65,7 @@ export class RuntimeThreeEngine {
   private readonly timer = new Timer();
   private renderer?: WebGLRenderer;
   private controls?: OrbitControls;
+  private css3dOverlay?: Css3DOverlaySystem;
   private pointerLockSystem?: PointerLockSystem;
   private cameraRoamingSystem?: CameraRoamingSystem;
   private cameraRoamingList: CameraRoamingPath[] = [];
@@ -155,6 +157,12 @@ export class RuntimeThreeEngine {
     configureOrbitControls(controls, { enablePan: true });
     this.controls = controls;
     controls.target.fromArray(this.initialCamera.target);
+    this.css3dOverlay = new Css3DOverlaySystem({
+      scene: this.scene,
+      camera: this.camera,
+      container,
+      primaryControls: controls,
+    });
     this.pointerLockSystem = new PointerLockSystem(
       this.camera,
       renderer.domElement,
@@ -397,6 +405,7 @@ export class RuntimeThreeEngine {
     this.composer.setPixelRatio(pixelRatio);
     this.composer.setSize(width, height);
     this.outline?.setSize(width, height);
+    this.css3dOverlay?.resize(width, height);
   }
 
   dispose(): void {
@@ -409,6 +418,8 @@ export class RuntimeThreeEngine {
     this.pointerSystem?.dispose();
     this.cameraRoamingSystem?.dispose();
     this.pointerLockSystem?.dispose();
+    // 覆盖层会监听主控制器 change，销毁顺序必须早于 OrbitControls。
+    this.css3dOverlay?.dispose();
     this.controls?.dispose();
     this.documentSystem?.dispose();
     this.weatherSystem?.dispose();
@@ -447,6 +458,7 @@ export class RuntimeThreeEngine {
     this.documentSystem?.updateShaders(elapsed);
     // 后期管线启用后由 Composer 唯一写入 canvas，避免同一帧重复渲染。
     this.composer?.render(delta);
+    this.css3dOverlay?.render();
   };
 
   private ensureRuntimePort(): void {
@@ -484,7 +496,12 @@ export class RuntimeThreeEngine {
         this.controls!.enabled = true;
       },
       subscribeNodeEvent: (nodeId, event, listener) =>
+        this.documentSystem?.subscribeNodeEvent(nodeId, event, listener) ??
         this.pointerSystem!.subscribe(nodeId, event, listener),
+      setText: (nodeId, text) =>
+        this.documentSystem?.setText(nodeId, text) ?? false,
+      setChartData: (nodeId, data) =>
+        this.documentSystem?.setChartData(nodeId, data) ?? false,
     });
   }
 

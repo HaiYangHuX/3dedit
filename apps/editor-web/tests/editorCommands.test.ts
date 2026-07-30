@@ -9,9 +9,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { projectApi } from '../src/api/projects';
 import {
   createAssetNode,
+  createChartNode,
   createGeometryNode,
   createModelInstanceName,
   createShaderNode,
+  createTextNode,
   MODEL_INSTANCE_NAME_VERSION_KEY,
 } from '../src/editor/createSceneNode';
 import {
@@ -115,6 +117,19 @@ describe('editor commands', () => {
     });
   });
 
+  it('图表与文本节点保存强类型组件和指定落点', () => {
+    expect(createChartNode('gauge', [2, 1, 3])).toMatchObject({
+      name: '仪表盘',
+      transform: { position: [2, 1, 3] },
+      components: [{ kind: 'chart', chartType: 'gauge' }],
+    });
+    expect(createTextNode('CreateCyberHud', [-2, 0.5, 4])).toMatchObject({
+      name: '赛博 HUD',
+      transform: { position: [-2, 0.5, 4] },
+      components: [{ kind: 'text', textMethod: 'CreateCyberHud' }],
+    });
+  });
+
   it('模型实例名不会重复追加扩展名或已有四位后缀', () => {
     const random = vi.spyOn(Math, 'random').mockReturnValue(0.0042);
 
@@ -169,6 +184,32 @@ describe('editor commands', () => {
 
     await commands.undo();
     expect(store.document.nodes[node.id]).toBeUndefined();
+  });
+
+  it('图表和文本添加进入统一命令历史并可逐步撤销', async () => {
+    const store = useDocumentStore();
+    await store.loadScene('scene-1');
+    const bridge: EditorCanvasBridge = {
+      applyNodeAdded: vi.fn().mockResolvedValue(undefined),
+      applyNodeRemoved: vi.fn(),
+      applyNodeUpdated: vi.fn(),
+      loadDocument: vi.fn().mockResolvedValue(undefined),
+      setSelection: vi.fn(),
+      setTransformMode: vi.fn(),
+      focusSelection: vi.fn(),
+    };
+    const commands = useEditorCommands(shallowRef(bridge));
+
+    const chart = await commands.addChart('pie', [1, 0, 2]);
+    const text = await commands.addText('CreateFixedCanvas', [3, 0.5, 4]);
+    expect(store.document.nodes[chart.id]).toEqual(chart);
+    expect(store.document.nodes[text.id]).toEqual(text);
+
+    await commands.undo();
+    expect(store.document.nodes[text.id]).toBeUndefined();
+    expect(store.document.nodes[chart.id]).toBeDefined();
+    await commands.undo();
+    expect(store.document.nodes[chart.id]).toBeUndefined();
   });
 
   it('删除模型二级部件只写入排除路径并可通过撤销恢复', async () => {

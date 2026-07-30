@@ -1,12 +1,18 @@
 import type { Asset } from '@digital-twin/api-contracts';
 import {
+  createDefaultChartComponent,
   createDefaultMaterialComponent,
+  createDefaultTextComponent,
+  type ChartType,
   type ShaderMethod,
   type SceneNode,
+  type TextMethod,
   type Transform,
 } from '@digital-twin/scene-schema';
 import { createUuid } from '../utils/createUuid';
 import { getShaderDefinition } from './shaderPalette';
+import { getChartDefinition } from './chartPalette';
+import { getTextDefinition } from './textPalette';
 
 type SceneComponent = SceneNode['components'][number];
 export type GeometryPrimitive = Extract<
@@ -143,4 +149,26 @@ export function createShaderNode(
     position,
     rotation: definition.rotation,
   });
+}
+
+export function createChartNode(
+  chartType: ChartType,
+  position: Transform['position'] = [0, 0, 0],
+): SceneNode {
+  return createSceneNode(
+    getChartDefinition(chartType).name,
+    [createDefaultChartComponent(chartType)],
+    { position },
+  );
+}
+
+export function createTextNode(
+  textMethod: TextMethod,
+  position: Transform['position'] = [0, 0, 0],
+): SceneNode {
+  return createSceneNode(
+    getTextDefinition(textMethod).name,
+    [createDefaultTextComponent(textMethod)],
+    { position },
+  );
 }

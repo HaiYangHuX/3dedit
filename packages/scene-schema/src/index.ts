@@ -1,5 +1,16 @@
 export { createDefaultSceneDocument } from './defaultDocument.js';
 export {
+  CHART_DEFINITIONS,
+  CHART_TYPES,
+  chartComponentSchema,
+  chartOptionSchema,
+  chartTypeSchema,
+  createDefaultChartComponent,
+  type ChartComponent,
+  type ChartDefinition,
+  type ChartType,
+} from './chart.js';
+export {
   cameraRoamingListSchema,
   cameraRoamingPathSchema,
   cameraVector3Schema,
@@ -70,3 +81,15 @@ export {
   type ShaderComponent,
   type ShaderMethod,
 } from './shader.js';
+export {
+  TEXT_DEFINITIONS,
+  TEXT_METHODS,
+  createDefaultTextComponent,
+  textComponentSchema,
+  textMethodSchema,
+  textTypeSchema,
+  type TextComponent,
+  type TextDefinition,
+  type TextMethod,
+  type TextType,
+} from './text.js';

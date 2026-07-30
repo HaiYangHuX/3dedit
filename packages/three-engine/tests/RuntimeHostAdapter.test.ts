@@ -84,6 +84,32 @@ describe('RuntimeHostAdapter', () => {
     adapter.dispose();
   });
 
+  it('文本和图表动作优先更新真实组件并继续记录运行状态', async () => {
+    const object = new Group();
+    const setText = vi.fn(() => true);
+    const setChartData = vi.fn(() => true);
+    const adapter = new RuntimeHostAdapter({
+      getObject: () => object,
+      camera: new PerspectiveCamera(),
+      outline: { selectedObjects: [] },
+      subscribeNodeEvent: () => () => undefined,
+      setText,
+      setChartData,
+    });
+
+    await adapter.setText('node', '设备告警');
+    await adapter.setChartData('node', { series: [{ data: [1, 2] }] });
+
+    expect(setText).toHaveBeenCalledWith('node', '设备告警');
+    expect(setChartData).toHaveBeenCalledWith('node', {
+      series: [{ data: [1, 2] }],
+    });
+    expect(object.userData.runtimeState).toMatchObject({
+      text: '设备告警',
+      chartData: { series: [{ data: [1, 2] }] },
+    });
+  });
+
   it('聚焦节点写入 Camera 前先通知宿主释放其他导航模式', async () => {
     const object = new Group();
     object.add(new Mesh(new BoxGeometry(), new MeshStandardMaterial()));
